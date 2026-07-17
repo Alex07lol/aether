@@ -1,4 +1,4 @@
 === Aether Module Manager - Last Change ===
-Timestamp: 2026-07-17 07:16:00
-Action:    Added unique client features: Real-time FPS Sparkline Graph HUD element (FpsGraphModule) and Customizable PvP Hit Sounds with particle effects (HitSoundModule)
+Timestamp: 2026-07-17 07:26:00
+Action:    Added GitHub Actions workflow (.github/workflows/build-release.yml) to automatically compile Java 8 & Gradle 7.6.4 settings, build JARs, and publish them to GitHub Releases on push or tag
 ============================================
