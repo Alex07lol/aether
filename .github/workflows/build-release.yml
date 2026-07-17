@@ -31,6 +31,11 @@ jobs:
         with:
           gradle-version: '7.6.4'
 
+      - name: Download Forge 1.8.9 Dependency
+        run: |
+          mkdir -p build/forge189-deps
+          curl -sSL "https://maven.minecraftforge.net/net/minecraftforge/forge/1.8.9-11.15.1.2318-1.8.9/forge-1.8.9-11.15.1.2318-1.8.9-universal.jar" -o build/forge189-deps/forge-1.8.9-11.15.1.2318-1.8.9-universal.jar
+
       - name: Build Aether JAR
         run: |
           export JAVA8_HOME="$JAVA_HOME"

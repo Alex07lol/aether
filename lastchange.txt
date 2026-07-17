@@ -1,4 +1,4 @@
 === Aether Module Manager - Last Change ===
-Timestamp: 2026-07-17 07:26:00
-Action:    Added GitHub Actions workflow (.github/workflows/build-release.yml) to automatically compile Java 8 & Gradle 7.6.4 settings, build JARs, and publish them to GitHub Releases on push or tag
+Timestamp: 2026-07-17 07:28:00
+Action:    Configured automated Forge 1.8.9 dependency resolver/downloader in build.gradle and GitHub Actions workflow (.github/workflows/build-release.yml) to ensure standalone building & release packaging without missing JAR errors
 ============================================

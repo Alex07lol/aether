@@ -6,7 +6,26 @@ version = "0.1.0"
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
-ext.forge189ClasspathJar = file(System.getenv("AETHER_FORGE_189_JAR") ?: "/home/laptop/.gradle/caches/minecraft/net/minecraftforge/forge/1.8.9-11.15.1.2318-1.8.9/stable/22/forgeSrc-1.8.9-11.15.1.2318-1.8.9.jar")
+repositories {
+    mavenCentral()
+    maven { url = "https://maven.minecraftforge.net" }
+}
+
+def defaultForgeJar = file("build/forge189-deps/forge-1.8.9-11.15.1.2318-1.8.9-universal.jar")
+def localForgeJar = file("/home/laptop/.gradle/caches/minecraft/net/minecraftforge/forge/1.8.9-11.15.1.2318-1.8.9/stable/22/forgeSrc-1.8.9-11.15.1.2318-1.8.9.jar")
+
+ext.forge189ClasspathJar = file(System.getenv("AETHER_FORGE_189_JAR") ?: (localForgeJar.isFile() ? localForgeJar : defaultForgeJar))
+
+task downloadForge189Jar {
+    doLast {
+        if (!forge189ClasspathJar.isFile()) {
+            forge189ClasspathJar.parentFile.mkdirs()
+            println "Downloading Forge 1.8.9 dependency JAR to ${forge189ClasspathJar}..."
+            new URL("https://maven.minecraftforge.net/net/minecraftforge/forge/1.8.9-11.15.1.2318-1.8.9/forge-1.8.9-11.15.1.2318-1.8.9-universal.jar")
+                .withInputStream { ins -> forge189ClasspathJar.withOutputStream { outs -> outs << ins } }
+        }
+    }
+}
 
 configurations {
     forge189Libraries {
@@ -36,6 +55,8 @@ dependencies {
     forge189CompileOnly files(forge189ClasspathJar)
     forge189Libraries files(forge189ClasspathJar)
 }
+
+compileForge189Java.dependsOn downloadForge189Jar
 
 compileForge189Java {
     doFirst {
