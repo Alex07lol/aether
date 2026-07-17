@@ -1,0 +1,7 @@
+build/
+out/
+.gradle/
+.gradle-home/
+.gradle-home-java8/
+*.class
+*.log

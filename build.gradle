@@ -1,0 +1,82 @@
+apply plugin: "java"
+
+group = "dev.aether"
+version = "0.1.0"
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+ext.forge189ClasspathJar = file(System.getenv("AETHER_FORGE_189_JAR") ?: "/home/laptop/.gradle/caches/minecraft/net/minecraftforge/forge/1.8.9-11.15.1.2318-1.8.9/stable/22/forgeSrc-1.8.9-11.15.1.2318-1.8.9.jar")
+
+configurations {
+    forge189Libraries {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
+sourceSets {
+    forge189 {
+        java.srcDirs = ["src/forge189/java"]
+        resources.srcDirs = ["src/forge189/resources"]
+        compileClasspath += sourceSets.main.output + configurations.forge189Libraries
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = "UTF-8"
+}
+
+tasks.withType(ProcessResources) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+dependencies {
+    forge189CompileOnly files(forge189ClasspathJar)
+    forge189Libraries files(forge189ClasspathJar)
+}
+
+compileForge189Java {
+    doFirst {
+        if (!forge189ClasspathJar.isFile()) {
+            throw new GradleException("Forge 1.8.9 classpath jar not found: ${forge189ClasspathJar}. Set AETHER_FORGE_189_JAR to a Forge 1.8.9 dev/deobf jar.")
+        }
+    }
+}
+
+test {
+    enabled = false
+}
+
+task smokeTest(dependsOn: testClasses) {
+    def smokeTests = [
+        "dev.aether.event.EventBusTest",
+        "dev.aether.module.ModuleRegistryTest",
+        "dev.aether.config.JsonConfigStoreTest",
+        "dev.aether.hud.HudLayoutTest",
+        "dev.aether.runtime.PlatformDetectorTest",
+        "dev.aether.cosmetic.CosmeticLibraryTest"
+    ]
+
+    doLast {
+        smokeTests.each { className ->
+            javaexec {
+                main = className
+                classpath = sourceSets.main.runtimeClasspath + sourceSets.test.runtimeClasspath
+            }
+        }
+    }
+}
+
+check.dependsOn smokeTest
+check.dependsOn compileForge189Java
+
+task forge189Jar(type: Jar, dependsOn: [classes, forge189Classes]) {
+    archiveClassifier = "forge189"
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from sourceSets.main.output
+    from sourceSets.forge189.output
+}
+
+assemble.dependsOn forge189Jar
