@@ -8,24 +8,12 @@ targetCompatibility = 1.8
 
 repositories {
     mavenCentral()
-    maven { url = "https://maven.minecraftforge.net" }
 }
 
 def defaultForgeJar = file("build/forge189-deps/forge-1.8.9-11.15.1.2318-1.8.9-universal.jar")
 def localForgeJar = file("/home/laptop/.gradle/caches/minecraft/net/minecraftforge/forge/1.8.9-11.15.1.2318-1.8.9/stable/22/forgeSrc-1.8.9-11.15.1.2318-1.8.9.jar")
 
 ext.forge189ClasspathJar = file(System.getenv("AETHER_FORGE_189_JAR") ?: (localForgeJar.isFile() ? localForgeJar : defaultForgeJar))
-
-task downloadForge189Jar {
-    doLast {
-        if (!forge189ClasspathJar.isFile()) {
-            forge189ClasspathJar.parentFile.mkdirs()
-            println "Downloading Forge 1.8.9 dependency JAR to ${forge189ClasspathJar}..."
-            new URL("https://maven.minecraftforge.net/net/minecraftforge/forge/1.8.9-11.15.1.2318-1.8.9/forge-1.8.9-11.15.1.2318-1.8.9-universal.jar")
-                .withInputStream { ins -> forge189ClasspathJar.withOutputStream { outs -> outs << ins } }
-        }
-    }
-}
 
 configurations {
     forge189Libraries {
@@ -35,10 +23,13 @@ configurations {
 }
 
 sourceSets {
+    forge189Stubs {
+        java.srcDirs = ["src/forge189Stubs/java"]
+    }
     forge189 {
         java.srcDirs = ["src/forge189/java"]
         resources.srcDirs = ["src/forge189/resources"]
-        compileClasspath += sourceSets.main.output + configurations.forge189Libraries
+        compileClasspath += sourceSets.main.output + sourceSets.forge189Stubs.output + configurations.forge189Libraries
         runtimeClasspath += output + compileClasspath
     }
 }
@@ -52,19 +43,13 @@ tasks.withType(ProcessResources) {
 }
 
 dependencies {
-    forge189CompileOnly files(forge189ClasspathJar)
-    forge189Libraries files(forge189ClasspathJar)
-}
-
-compileForge189Java.dependsOn downloadForge189Jar
-
-compileForge189Java {
-    doFirst {
-        if (!forge189ClasspathJar.isFile()) {
-            throw new GradleException("Forge 1.8.9 classpath jar not found: ${forge189ClasspathJar}. Set AETHER_FORGE_189_JAR to a Forge 1.8.9 dev/deobf jar.")
-        }
+    if (forge189ClasspathJar.isFile()) {
+        forge189CompileOnly files(forge189ClasspathJar)
+        forge189Libraries files(forge189ClasspathJar)
     }
 }
+
+compileForge189Java.dependsOn compileForge189StubsJava
 
 test {
     enabled = false

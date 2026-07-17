@@ -1,4 +1,4 @@
 === Aether Module Manager - Last Change ===
-Timestamp: 2026-07-17 07:28:00
-Action:    Configured automated Forge 1.8.9 dependency resolver/downloader in build.gradle and GitHub Actions workflow (.github/workflows/build-release.yml) to ensure standalone building & release packaging without missing JAR errors
+Timestamp: 2026-07-17 07:34:00
+Action:    Added lightweight Forge 1.8.9 compile-time stubs (src/forge189Stubs) so GitHub Actions and headless CI builds can compile the forge189Jar target 100% standalone with zero external dependencies
 ============================================
