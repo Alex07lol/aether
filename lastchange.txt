@@ -1,4 +1,4 @@
 === Aether Module Manager - Last Change ===
-Timestamp: 2026-07-17 07:34:00
-Action:    Added lightweight Forge 1.8.9 compile-time stubs (src/forge189Stubs) so GitHub Actions and headless CI builds can compile the forge189Jar target 100% standalone with zero external dependencies
+Timestamp: 2026-07-17 07:38:00
+Action:    Eliminated classpath conflicts between obfuscated universal jars and deobfuscated compile stubs to ensure clean standalone CI builds on GitHub Actions
 ============================================

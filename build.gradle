@@ -10,10 +10,10 @@ repositories {
     mavenCentral()
 }
 
-def defaultForgeJar = file("build/forge189-deps/forge-1.8.9-11.15.1.2318-1.8.9-universal.jar")
+def userForgeJar = System.getenv("AETHER_FORGE_189_JAR") ? file(System.getenv("AETHER_FORGE_189_JAR")) : null
 def localForgeJar = file("/home/laptop/.gradle/caches/minecraft/net/minecraftforge/forge/1.8.9-11.15.1.2318-1.8.9/stable/22/forgeSrc-1.8.9-11.15.1.2318-1.8.9.jar")
 
-ext.forge189ClasspathJar = file(System.getenv("AETHER_FORGE_189_JAR") ?: (localForgeJar.isFile() ? localForgeJar : defaultForgeJar))
+ext.forge189ClasspathJar = (userForgeJar != null && userForgeJar.isFile()) ? userForgeJar : (localForgeJar.isFile() ? localForgeJar : null)
 
 configurations {
     forge189Libraries {
@@ -43,7 +43,7 @@ tasks.withType(ProcessResources) {
 }
 
 dependencies {
-    if (forge189ClasspathJar.isFile()) {
+    if (forge189ClasspathJar != null) {
         forge189CompileOnly files(forge189ClasspathJar)
         forge189Libraries files(forge189ClasspathJar)
     }
