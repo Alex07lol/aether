@@ -51,6 +51,10 @@ public final class HudLayout {
         get(id).setLayer(layer);
     }
 
+    public java.util.Collection<HudElement> elements() {
+        return Collections.unmodifiableCollection(elements.values());
+    }
+
     public List<HudElement> renderOrder() {
         List<HudElement> ordered = new ArrayList<HudElement>(elements.values());
         Collections.sort(ordered, new Comparator<HudElement>() {

@@ -535,12 +535,42 @@ final class ForgeHudRenderer {
     }
 
     private static void draw(Object font, String text, HudElement element, int color) {
-        Mc189Compat.drawStringWithShadow(font, text, element.x(), element.y(), color);
+        float scale = element.scale();
+        float opacity = element.opacity();
+        int alpha = Math.round(((color >> 24) & 0xFF) * opacity);
+        if (alpha <= 0) alpha = Math.round(255 * opacity);
+        int finalColor = (alpha << 24) | (color & 0x00FFFFFF);
+
+        if (Math.abs(scale - 1.0F) > 0.001F) {
+            Mc189Compat.pushMatrix();
+            Mc189Compat.scale(scale, scale, 1.0F);
+            float unscaledX = element.x() / scale;
+            float unscaledY = element.y() / scale;
+            Mc189Compat.drawStringWithShadow(font, text, unscaledX, unscaledY, finalColor);
+            Mc189Compat.popMatrix();
+        } else {
+            Mc189Compat.drawStringWithShadow(font, text, element.x(), element.y(), finalColor);
+        }
     }
 
     private static void drawBackground(Object font, String text, HudElement element, int color) {
+        float scale = element.scale();
+        float opacity = element.opacity();
+        int alpha = Math.round(((color >> 24) & 0xFF) * opacity);
+        if (alpha <= 0) alpha = Math.round(111 * opacity);
+        int finalColor = (alpha << 24) | (color & 0x00FFFFFF);
+
         int width = Mc189Compat.stringWidth(font, text) + 6;
-        Mc189Compat.drawRect(element.x() - 3, element.y() - 3, element.x() + width, element.y() + 11, color);
+        if (Math.abs(scale - 1.0F) > 0.001F) {
+            Mc189Compat.pushMatrix();
+            Mc189Compat.scale(scale, scale, 1.0F);
+            int unscaledX = Math.round(element.x() / scale);
+            int unscaledY = Math.round(element.y() / scale);
+            Mc189Compat.drawRect(unscaledX - 3, unscaledY - 3, unscaledX + width, unscaledY + 11, finalColor);
+            Mc189Compat.popMatrix();
+        } else {
+            Mc189Compat.drawRect(element.x() - 3, element.y() - 3, element.x() + width, element.y() + 11, finalColor);
+        }
     }
 
     private static void trimClicks(List<Long> clicks, long now) {

@@ -1,4 +1,4 @@
 === Aether Module Manager - Last Change ===
-Timestamp: 2026-07-17 06:09:00
-Action:    Fully wired up event bridge and HUD renderer hooks for all imported CloudClient mods (DayCounter, Ping, ReachDisplay, SpeedIndicator, ServerAddress, ToggleSneak, Snaplook)
+Timestamp: 2026-07-17 06:49:00
+Action:    Implemented direct-manipulation HUD Editor milestone with real-time drag, magnetic screen edge & element snapping, mouse scroll & hotkey scaling (0.5x-2.5x), shift-scroll opacity control (10%-100%), floating inspector control bar, and live alignment guide lines
 ============================================

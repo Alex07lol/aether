@@ -494,6 +494,27 @@ final class Mc189Compat {
             Integer.valueOf(width), Integer.valueOf(height), Float.valueOf(width), Float.valueOf(height));
     }
 
+    static void pushMatrix() {
+        invokeStatic(glStateManagerClass(), new String[] {"pushMatrix", "func_179094_E"});
+    }
+
+    static void popMatrix() {
+        invokeStatic(glStateManagerClass(), new String[] {"popMatrix", "func_179121_F"});
+    }
+
+    static void scale(float x, float y, float z) {
+        invokeStatic(glStateManagerClass(), new String[] {"scale", "func_179152_a"},
+            new Class<?>[] {Float.TYPE, Float.TYPE, Float.TYPE}, Float.valueOf(x), Float.valueOf(y), Float.valueOf(z));
+    }
+
+    private static Class<?> glStateManagerClass() {
+        try {
+            return Class.forName("net.minecraft.client.renderer.GlStateManager");
+        } catch (ClassNotFoundException e) {
+            return null;
+        }
+    }
+
     static void enableScissor() {
         invokeStatic(gl11Class(), new String[]{"glEnable"}, new Class<?>[]{Integer.TYPE}, Integer.valueOf(3089)); // GL_SCISSOR_TEST
     }
