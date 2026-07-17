@@ -328,6 +328,9 @@ public final class AetherModMenuScreen extends GuiScreen {
         List<ClientModule> result = new ArrayList<ClientModule>();
         String needle = searchQuery.toLowerCase(Locale.ENGLISH);
         for (ClientModule module : client.modules().all()) {
+            if ("cosmetics.manager".equals(module.metadata().id()) || "interface.hud_editor".equals(module.metadata().id())) {
+                continue;
+            }
             if (!selectedCategory.matches(module) && needle.isEmpty()) continue;
             if (!needle.isEmpty() && !matchesSearch(module, needle)) continue;
             result.add(module);

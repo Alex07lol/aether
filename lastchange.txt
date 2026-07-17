@@ -1,4 +1,4 @@
 === Aether Module Manager - Last Change ===
-Timestamp: 2026-07-17 06:49:00
-Action:    Implemented direct-manipulation HUD Editor milestone with real-time drag, magnetic screen edge & element snapping, mouse scroll & hotkey scaling (0.5x-2.5x), shift-scroll opacity control (10%-100%), floating inspector control bar, and live alignment guide lines
+Timestamp: 2026-07-17 07:04:00
+Action:    Added 3-button Quick Navigation Overlay (AetherQuickNavScreen) on Right-Shift with transparent background (Left: Cosmetics Management, Center: Mod menu, Right: HUD Editor) and removed Cosmetics Manager and HUD Editor from the main Mod Menu card list
 ============================================

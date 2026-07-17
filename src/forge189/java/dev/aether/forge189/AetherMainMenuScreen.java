@@ -43,7 +43,7 @@ public final class AetherMainMenuScreen extends GuiScreen {
             return;
         }
         if (typedChar == 'm' || typedChar == 'M') {
-            Mc189Compat.displayGuiScreen(new AetherModMenuScreen(client, this));
+            Mc189Compat.displayGuiScreen(new AetherQuickNavScreen(client, this));
         }
     }
 

@@ -195,7 +195,7 @@ final class ForgeClientEventBridge {
         }
         if (Mc189Compat.keyPressed(keyBindings.modMenu())) {
             client.eventBus().publish(new KeyInputEvent("mod_menu", Mc189Compat.keyCode(keyBindings.modMenu())));
-            Mc189Compat.displayGuiScreen(new AetherModMenuScreen(client));
+            Mc189Compat.displayGuiScreen(new AetherQuickNavScreen(client));
         }
     }
 
