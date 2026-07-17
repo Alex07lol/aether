@@ -33,5 +33,11 @@ public final class BuiltInModules {
         hudLayout.add("hud.block_info", 8, 160);
         hudLayout.add("hud.armor", 8, 172);
         hudLayout.add("hud.potions", 260, 8);
+        hudLayout.add("hud.day_counter", 8, 184);
+        hudLayout.add("hud.ping", 8, 196);
+        hudLayout.add("hud.reach_display", 8, 208);
+        hudLayout.add("hud.speed_indicator", 8, 220);
+        hudLayout.add("hud.server_address", 8, 232);
+        hudLayout.add("pvp.toggle_sneak", 8, 244);
     }
 }

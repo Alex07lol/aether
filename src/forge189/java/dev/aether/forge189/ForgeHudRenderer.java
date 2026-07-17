@@ -62,6 +62,12 @@ final class ForgeHudRenderer {
         renderArmorStatus(fontRenderer, minecraft);
         renderPotionStatus(fontRenderer, minecraft);
         renderCustomCrosshair(fontRenderer, minecraft);
+        renderDayCounter(fontRenderer, minecraft);
+        renderPing(fontRenderer, minecraft);
+        renderReachDisplay(fontRenderer);
+        renderSpeedIndicator(fontRenderer, minecraft);
+        renderServerAddress(fontRenderer, minecraft);
+        renderToggleSneak(fontRenderer, gameSettings);
     }
 
     private void renderFps(Object fontRenderer) {
@@ -374,6 +380,88 @@ final class ForgeHudRenderer {
 
         if (showDot) {
             drawCrosshairDot(centerX, centerY, thickness, color);
+        }
+    }
+
+    private void renderDayCounter(Object fontRenderer, Object minecraft) {
+        if (!enabled("hud.day_counter")) {
+            return;
+        }
+        Object world = Mc189Compat.world(minecraft);
+        if (world == null) return;
+        HudElement element = client.hudLayout().get("hud.day_counter");
+        long totalTime = Mc189Compat.worldTime(world);
+        long day = totalTime / 24000L;
+        String text = "Day " + day;
+        if (settingBool("hud.day_counter", "show_background", true)) {
+            drawBackground(fontRenderer, text, element, settingColor("hud.day_counter", "background_color", 0x6F000000));
+        }
+        draw(fontRenderer, text, element, settingColor("hud.day_counter", "text_color", ACCENT_COLOR));
+    }
+
+    private void renderPing(Object fontRenderer, Object minecraft) {
+        if (!enabled("hud.ping")) {
+            return;
+        }
+        HudElement element = client.hudLayout().get("hud.ping");
+        int ping = Mc189Compat.playerPing(minecraft);
+        String text = "Ping " + (ping < 0 ? 0 : ping) + "ms";
+        if (settingBool("hud.ping", "show_background", true)) {
+            drawBackground(fontRenderer, text, element, settingColor("hud.ping", "background_color", 0x6F000000));
+        }
+        draw(fontRenderer, text, element, settingColor("hud.ping", "text_color", ACCENT_COLOR));
+    }
+
+    private void renderReachDisplay(Object fontRenderer) {
+        if (!enabled("hud.reach_display")) {
+            return;
+        }
+        HudElement element = client.hudLayout().get("hud.reach_display");
+        String text = String.format(Locale.ENGLISH, "Reach %.2fm", Mc189Compat.lastReach());
+        if (settingBool("hud.reach_display", "show_background", true)) {
+            drawBackground(fontRenderer, text, element, settingColor("hud.reach_display", "background_color", 0x6F000000));
+        }
+        draw(fontRenderer, text, element, settingColor("hud.reach_display", "text_color", ACCENT_COLOR));
+    }
+
+    private void renderSpeedIndicator(Object fontRenderer, Object minecraft) {
+        if (!enabled("hud.speed_indicator")) {
+            return;
+        }
+        HudElement element = client.hudLayout().get("hud.speed_indicator");
+        double bps = Mc189Compat.playerBps(minecraft);
+        String text = String.format(Locale.ENGLISH, "Speed %.2f BPS", bps);
+        if (settingBool("hud.speed_indicator", "show_background", true)) {
+            drawBackground(fontRenderer, text, element, settingColor("hud.speed_indicator", "background_color", 0x6F000000));
+        }
+        draw(fontRenderer, text, element, settingColor("hud.speed_indicator", "text_color", ACCENT_COLOR));
+    }
+
+    private void renderServerAddress(Object fontRenderer, Object minecraft) {
+        if (!enabled("hud.server_address")) {
+            return;
+        }
+        HudElement element = client.hudLayout().get("hud.server_address");
+        String server = Mc189Compat.serverAddress(minecraft);
+        String text = server == null || server.isEmpty() ? "Singleplayer" : server;
+        if (settingBool("hud.server_address", "show_background", true)) {
+            drawBackground(fontRenderer, text, element, settingColor("hud.server_address", "background_color", 0x6F000000));
+        }
+        draw(fontRenderer, text, element, settingColor("hud.server_address", "text_color", ACCENT_COLOR));
+    }
+
+    private void renderToggleSneak(Object fontRenderer, Object gameSettings) {
+        if (!enabled("pvp.toggle_sneak")) {
+            return;
+        }
+        HudElement element = client.hudLayout().get("pvp.toggle_sneak");
+        Object keySneak = Mc189Compat.keyBindSneak(gameSettings);
+        if (keySneak != null && Mc189Compat.keyDown(keySneak)) {
+            String text = "[Sneaking (Toggled)]";
+            if (settingBool("pvp.toggle_sneak", "show_background", true)) {
+                drawBackground(fontRenderer, text, element, settingColor("pvp.toggle_sneak", "background_color", 0x6F000000));
+            }
+            draw(fontRenderer, text, element, settingColor("pvp.toggle_sneak", "text_color", ACCENT_COLOR));
         }
     }
 

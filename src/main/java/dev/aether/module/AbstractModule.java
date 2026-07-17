@@ -47,6 +47,42 @@ public abstract class AbstractModule implements ClientModule {
         settings.add(setting);
     }
 
+    protected final Setting<Boolean> addBool(String id, String label, boolean defaultValue) {
+        Setting<Boolean> s = new Setting<Boolean>(id, label, Setting.SettingType.BOOLEAN, Boolean.valueOf(defaultValue));
+        addSetting(s);
+        return s;
+    }
+
+    protected final Setting<Integer> addNumber(String id, String label, int defaultValue) {
+        Setting<Integer> s = new Setting<Integer>(id, label, Setting.SettingType.NUMBER, Integer.valueOf(defaultValue));
+        addSetting(s);
+        return s;
+    }
+
+    protected final Setting<String> addText(String id, String label, String defaultValue) {
+        Setting<String> s = new Setting<String>(id, label, Setting.SettingType.TEXT, defaultValue);
+        addSetting(s);
+        return s;
+    }
+
+    protected final Setting<String> addChoice(String id, String label, String defaultValue) {
+        Setting<String> s = new Setting<String>(id, label, Setting.SettingType.CHOICE, defaultValue);
+        addSetting(s);
+        return s;
+    }
+
+    protected final Setting<Integer> addColor(String id, String label, int defaultValue) {
+        Setting<Integer> s = new Setting<Integer>(id, label, Setting.SettingType.COLOR, Integer.valueOf(defaultValue));
+        addSetting(s);
+        return s;
+    }
+
+    protected final Setting<Integer> addKeybind(String id, String label, int defaultValue) {
+        Setting<Integer> s = new Setting<Integer>(id, label, Setting.SettingType.KEYBIND, Integer.valueOf(defaultValue));
+        addSetting(s);
+        return s;
+    }
+
     protected void onEnable() {
     }
 

@@ -57,6 +57,8 @@ final class ForgeClientEventBridge {
         }
         client.eventBus().publish(new ClientTickEvent(Mc189Compat.tickTimeMillis()));
         applyToggleSprint();
+        applyToggleSneak();
+        applySnaplook();
         applyClientEffects();
     }
 
@@ -221,6 +223,55 @@ final class ForgeClientEventBridge {
         Mc189Compat.setKeyBindState(Mc189Compat.keySprint(gameSettings), this.toggleSprintActive);
         if (this.toggleSprintActive && Mc189Compat.keyDown(Mc189Compat.keyForward(gameSettings)) && !Mc189Compat.sneaking(player)) {
             Mc189Compat.setSprinting(player, true);
+        }
+    }
+
+    private boolean toggleSneakActive;
+    private boolean toggleSneakKeyDown;
+
+    private void applyToggleSneak() {
+        Object minecraft = Mc189Compat.minecraft();
+        Object gameSettings = Mc189Compat.gameSettings(minecraft);
+        if (!enabled("pvp.toggle_sneak")) {
+            this.toggleSneakActive = false;
+            this.toggleSneakKeyDown = false;
+            if (gameSettings != null) {
+                Mc189Compat.setKeyBindState(Mc189Compat.keyBindSneak(gameSettings), false);
+            }
+            return;
+        }
+        boolean keyDown = Mc189Compat.keyboardKeyDown(settingInt("pvp.toggle_sneak", "keybind", 42));
+        if (keyDown && !this.toggleSneakKeyDown) {
+            this.toggleSneakActive = !this.toggleSneakActive;
+        }
+        this.toggleSneakKeyDown = keyDown;
+
+        Object player = Mc189Compat.player(minecraft);
+        if (player == null || gameSettings == null) {
+            return;
+        }
+        Mc189Compat.setKeyBindState(Mc189Compat.keyBindSneak(gameSettings), this.toggleSneakActive);
+    }
+
+    private boolean snaplookActive;
+
+    private void applySnaplook() {
+        Object minecraft = Mc189Compat.minecraft();
+        Object gameSettings = Mc189Compat.gameSettings(minecraft);
+        if (!enabled("pvp.snaplook") || gameSettings == null) {
+            if (this.snaplookActive) {
+                Mc189Compat.setThirdPersonView(gameSettings, 0);
+                this.snaplookActive = false;
+            }
+            return;
+        }
+        boolean keyDown = Mc189Compat.keyboardKeyDown(settingInt("pvp.snaplook", "keybind", 33));
+        if (keyDown && !this.snaplookActive) {
+            this.snaplookActive = true;
+            Mc189Compat.setThirdPersonView(gameSettings, 1);
+        } else if (!keyDown && this.snaplookActive) {
+            this.snaplookActive = false;
+            Mc189Compat.setThirdPersonView(gameSettings, 0);
         }
     }
 

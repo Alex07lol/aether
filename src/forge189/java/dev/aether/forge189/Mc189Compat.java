@@ -209,6 +209,67 @@ final class Mc189Compat {
         return getField(gameSettings, new String[] {"keyBindSprint", "field_151444_V"});
     }
 
+    static Object keyBindSneak(Object gameSettings) {
+        return getField(gameSettings, new String[] {"keyBindSneak", "field_74311_E"});
+    }
+
+    static long worldTime(Object world) {
+        Object value = invoke(world, new String[] {"getWorldTime", "func_72820_D"});
+        return value instanceof Number ? ((Number) value).longValue() : 0L;
+    }
+
+    static int playerPing(Object minecraft) {
+        Object player = player(minecraft);
+        Object connection = invoke(minecraft, new String[] {"getNetHandler", "func_147114_u"});
+        if (connection != null && player != null) {
+            Object id = invoke(player, new String[] {"getUniqueID", "func_110124_au"});
+            if (id != null) {
+                Object info = invoke(connection, new String[] {"getPlayerInfo", "func_175102_a"}, new Class<?>[] {java.util.UUID.class}, id);
+                if (info != null) {
+                    Object ping = invoke(info, new String[] {"getResponseTime", "func_178853_c"});
+                    if (ping instanceof Integer) {
+                        return ((Integer) ping).intValue();
+                    }
+                }
+            }
+        }
+        return 0;
+    }
+
+    static String serverAddress(Object minecraft) {
+        Object serverData = invoke(minecraft, new String[] {"getCurrentServerData", "func_147104_D"});
+        if (serverData != null) {
+            Object ip = getField(serverData, new String[] {"serverIP", "field_78845_b"});
+            return ip instanceof String ? (String) ip : null;
+        }
+        return null;
+    }
+
+    private static double lastReachDistance = 0.0D;
+    static double lastReach() {
+        return lastReachDistance;
+    }
+
+    static void setLastReach(double distance) {
+        lastReachDistance = distance;
+    }
+
+    static double playerBps(Object minecraft) {
+        Object player = player(minecraft);
+        if (player == null) return 0.0D;
+        double dx = posX(player) - lastTickPosX(player);
+        double dz = posZ(player) - lastTickPosZ(player);
+        return Math.sqrt(dx * dx + dz * dz) * 20.0D;
+    }
+
+    static double lastTickPosX(Object entity) {
+        return doubleField(entity, new String[] {"lastTickPosX", "field_70142_S"});
+    }
+
+    static double lastTickPosZ(Object entity) {
+        return doubleField(entity, new String[] {"lastTickPosZ", "field_70136_U"});
+    }
+
     static void setKeyBindState(Object keyBinding, boolean pressed) {
         int keyCode = keyCode(keyBinding);
         if (keyCode != 0) {
