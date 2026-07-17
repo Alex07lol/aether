@@ -9,6 +9,7 @@ import dev.aether.module.impl.hud.CoordinatesModule;
 import dev.aether.module.impl.hud.CpsModule;
 import dev.aether.module.impl.hud.DayCounterModule;
 import dev.aether.module.impl.hud.DirectionModule;
+import dev.aether.module.impl.hud.FpsGraphModule;
 import dev.aether.module.impl.hud.FpsModule;
 import dev.aether.module.impl.hud.KeystrokesModule;
 import dev.aether.module.impl.hud.MemoryModule;
@@ -25,6 +26,7 @@ final class HudModules {
 
     static void register(ModuleRegistry modules) {
         modules.register(new FpsModule());
+        modules.register(new FpsGraphModule());
         modules.register(new CoordinatesModule());
         modules.register(new KeystrokesModule());
         modules.register(new CpsModule());

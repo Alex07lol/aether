@@ -39,5 +39,6 @@ public final class BuiltInModules {
         hudLayout.add("hud.speed_indicator", 8, 220);
         hudLayout.add("hud.server_address", 8, 232);
         hudLayout.add("pvp.toggle_sneak", 8, 244);
+        hudLayout.add("hud.fps_graph", 8, 256);
     }
 }

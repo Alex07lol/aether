@@ -114,6 +114,7 @@ final class ForgeClientEventBridge {
     @SubscribeEvent
     public void onAttackEntity(AttackEntityEvent event) {
         applyAttackParticles(event.target);
+        applyHitSound(event.target);
     }
 
     @SubscribeEvent
@@ -610,6 +611,33 @@ final class ForgeClientEventBridge {
             && !Mc189Compat.onLadder(player)
             && !Mc189Compat.inWater(player)
             && !Mc189Compat.riding(player);
+    }
+
+    private void applyHitSound(Object target) {
+        if (!enabled("pvp.hit_sound") || target == null) return;
+        Object mc = Mc189Compat.minecraft();
+        Object player = Mc189Compat.player(mc);
+        if (player == null) return;
+
+        String soundType = settingString("pvp.hit_sound", "sound_type", "Ding");
+        int pitchSetting = settingInt("pvp.hit_sound", "pitch", 100);
+        int volumeSetting = settingInt("pvp.hit_sound", "volume", 100);
+
+        float pitch = pitchSetting / 100.0F;
+        float volume = volumeSetting / 100.0F;
+
+        String soundName = "random.orb";
+        if ("Ding".equalsIgnoreCase(soundType)) soundName = "random.orb";
+        else if ("Anvil".equalsIgnoreCase(soundType)) soundName = "random.anvil_land";
+        else if ("Pop".equalsIgnoreCase(soundType)) soundName = "random.pop";
+        else if ("Orb".equalsIgnoreCase(soundType)) soundName = "random.orb";
+        else if ("Subtle Click".equalsIgnoreCase(soundType)) soundName = "gui.button.press";
+
+        Mc189Compat.playSound(mc, soundName, volume, pitch);
+
+        if (settingBool("pvp.hit_sound", "spawn_particles", true)) {
+            Mc189Compat.onCriticalHit(player, target);
+        }
     }
 
     private boolean enabled(String id) {

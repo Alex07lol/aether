@@ -197,6 +197,23 @@ final class Mc189Compat {
         setField(gameSettings, new String[] {"ambientOcclusion", "field_74348_k"}, Integer.valueOf(value));
     }
 
+    static void playSound(Object minecraft, String name, float volume, float pitch) {
+        Object soundHandler = invoke(minecraft, new String[] {"getSoundHandler", "func_147118_V"});
+        if (soundHandler != null && name != null) {
+            try {
+                Class<?> recordClass = Class.forName("net.minecraft.client.audio.PositionedSoundRecord");
+                Class<?> soundClass = Class.forName("net.minecraft.client.audio.ISound");
+                Object sound = invokeStatic(recordClass, new String[] {"create", "func_147674_a"},
+                    new Class<?>[] {ResourceLocation.class, Float.TYPE}, new ResourceLocation(name), Float.valueOf(pitch));
+                if (sound != null) {
+                    invoke(soundHandler, new String[] {"playSound", "func_147682_a"},
+                        new Class<?>[] {soundClass}, sound);
+                }
+            } catch (ClassNotFoundException ignored) {
+            }
+        }
+    }
+
     static void saveOptions(Object gameSettings) {
         invoke(gameSettings, new String[] {"saveOptions", "func_74303_b"});
     }

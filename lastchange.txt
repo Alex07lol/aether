@@ -1,4 +1,4 @@
 === Aether Module Manager - Last Change ===
-Timestamp: 2026-07-17 07:09:00
-Action:    Added advanced Minecraft performance optimizations (disable entity shadows, disable volumetric clouds, fast smooth lighting, smart periodic memory garbage collection)
+Timestamp: 2026-07-17 07:16:00
+Action:    Added unique client features: Real-time FPS Sparkline Graph HUD element (FpsGraphModule) and Customizable PvP Hit Sounds with particle effects (HitSoundModule)
 ============================================

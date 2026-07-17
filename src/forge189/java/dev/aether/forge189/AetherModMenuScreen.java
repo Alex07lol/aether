@@ -135,6 +135,8 @@ public final class AetherModMenuScreen extends GuiScreen {
         CHOICE_OPTIONS.put("hud.reach_display.mode",              new String[]{"Modern", "Legacy"});
         CHOICE_OPTIONS.put("hud.speed_indicator.mode",            new String[]{"Modern", "Legacy"});
         CHOICE_OPTIONS.put("hud.server_address.mode",             new String[]{"Modern", "Legacy"});
+        CHOICE_OPTIONS.put("hud.fps_graph.graph_mode",            new String[]{"Sparkline", "Bar Chart"});
+        CHOICE_OPTIONS.put("pvp.hit_sound.sound_type",            new String[]{"Ding", "Anvil", "Pop", "Orb", "Subtle Click"});
     }
 
     /* ------------------------------------------------------------------ */

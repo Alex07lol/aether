@@ -3,6 +3,7 @@ package dev.aether.module.builtin;
 import dev.aether.module.ModuleRegistry;
 import dev.aether.module.impl.pvp.BlockOverlayModule;
 import dev.aether.module.impl.pvp.FreelookModule;
+import dev.aether.module.impl.pvp.HitSoundModule;
 import dev.aether.module.impl.pvp.SnaplookModule;
 import dev.aether.module.impl.pvp.ToggleSneakModule;
 import dev.aether.module.impl.pvp.ToggleSprintModule;
@@ -19,5 +20,6 @@ final class PvpModules {
         modules.register(new SnaplookModule());
         modules.register(new ZoomModule());
         modules.register(new BlockOverlayModule());
+        modules.register(new HitSoundModule());
     }
 }

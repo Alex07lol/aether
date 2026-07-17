@@ -68,6 +68,7 @@ final class ForgeHudRenderer {
         renderSpeedIndicator(fontRenderer, minecraft);
         renderServerAddress(fontRenderer, minecraft);
         renderToggleSneak(fontRenderer, gameSettings);
+        renderFpsGraph(fontRenderer);
     }
 
     private void renderFps(Object fontRenderer) {
@@ -465,6 +466,50 @@ final class ForgeHudRenderer {
         }
     }
 
+    private final List<Integer> fpsHistory = new ArrayList<Integer>();
+
+    private void renderFpsGraph(Object fontRenderer) {
+        if (!enabled("hud.fps_graph")) {
+            return;
+        }
+        HudElement element = client.hudLayout().get("hud.fps_graph");
+        int fps = Mc189Compat.debugFps();
+
+        fpsHistory.add(Integer.valueOf(fps));
+        while (fpsHistory.size() > 60) {
+            fpsHistory.remove(0);
+        }
+
+        int width = clamp(settingInt("hud.fps_graph", "graph_width", 80), 40, 200);
+        int height = clamp(settingInt("hud.fps_graph", "graph_height", 24), 16, 80);
+        int lineColor = settingColor("hud.fps_graph", "line_color", ACCENT_COLOR);
+        int bgColor = settingColor("hud.fps_graph", "background_color", 0x6F000000);
+
+        if (settingBool("hud.fps_graph", "show_background", true)) {
+            Mc189Compat.drawRect(element.x() - 3, element.y() - 3, element.x() + width + 3, element.y() + height + 3, bgColor);
+        }
+
+        if (fpsHistory.size() < 2) return;
+
+        int maxFps = 60;
+        for (Integer f : fpsHistory) {
+            if (f.intValue() > maxFps) maxFps = f.intValue();
+        }
+
+        float stepX = (float) width / (float) (fpsHistory.size() - 1);
+        for (int i = 0; i < fpsHistory.size() - 1; i++) {
+            int currentFps = fpsHistory.get(i).intValue();
+            int nextFps = fpsHistory.get(i + 1).intValue();
+
+            int x1 = Math.round(element.x() + (i * stepX));
+            int y1 = Math.round(element.y() + height - ((float) currentFps / maxFps * height));
+            int x2 = Math.round(element.x() + ((i + 1) * stepX));
+            int y2 = Math.round(element.y() + height - ((float) nextFps / maxFps * height));
+
+            Mc189Compat.drawRect(x1, y1, x2 + 1, y1 + 1, lineColor);
+        }
+    }
+
     private void drawCrosshairDot(int centerX, int centerY, int thickness, int color) {
             int dotHalf = thickness / 2;
             int dotRem = thickness % 2;
@@ -593,6 +638,11 @@ final class ForgeHudRenderer {
         Object player = Mc189Compat.player(minecraft);
 
         switch (id) {
+            case "hud.fps_graph": {
+                width = clamp(settingInt("hud.fps_graph", "graph_width", 80), 40, 200) + 6;
+                height = clamp(settingInt("hud.fps_graph", "graph_height", 24), 16, 80) + 6;
+                break;
+            }
             case "hud.fps": {
                 String text = "FPS " + Mc189Compat.debugFps();
                 width = Mc189Compat.stringWidth(fontRenderer, text);
