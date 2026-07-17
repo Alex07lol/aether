@@ -12,7 +12,12 @@ FORGE_189_JAR=${AETHER_FORGE_189_JAR:-/home/laptop/.gradle/caches/minecraft/net/
 
 javac -source 1.8 -target 1.8 -d build/classes @build/main-sources.txt
 javac -source 1.8 -target 1.8 -cp build/classes -d build/test-classes @build/test-sources.txt
-javac -source 1.8 -target 1.8 -cp "build/classes:$FORGE_189_JAR" -d build/forge189-classes @build/forge189-sources.txt
+
+if [ -f "$FORGE_189_JAR" ]; then
+  javac -source 1.8 -target 1.8 -cp "build/classes:$FORGE_189_JAR" -d build/forge189-classes @build/forge189-sources.txt
+else
+  echo "Notice: FORGE_189_JAR not found locally ($FORGE_189_JAR), skipping Forge 1.8.9 compilation."
+fi
 
 for test_class in \
   dev.aether.event.EventBusTest \
