@@ -173,6 +173,30 @@ final class Mc189Compat {
         setField(gameSettings, new String[] {"limitFramerate", "field_74350_i"}, Integer.valueOf(value));
     }
 
+    static boolean entityShadows(Object gameSettings) {
+        return booleanField(gameSettings, new String[] {"entityShadows", "field_181155_a"});
+    }
+
+    static void setEntityShadows(Object gameSettings, boolean value) {
+        setField(gameSettings, new String[] {"entityShadows", "field_181155_a"}, Boolean.valueOf(value));
+    }
+
+    static int clouds(Object gameSettings) {
+        return intField(gameSettings, new String[] {"clouds", "field_181154_b"});
+    }
+
+    static void setClouds(Object gameSettings, int value) {
+        setField(gameSettings, new String[] {"clouds", "field_181154_b"}, Integer.valueOf(value));
+    }
+
+    static int ambientOcclusion(Object gameSettings) {
+        return intField(gameSettings, new String[] {"ambientOcclusion", "field_74348_k"});
+    }
+
+    static void setAmbientOcclusion(Object gameSettings, int value) {
+        setField(gameSettings, new String[] {"ambientOcclusion", "field_74348_k"}, Integer.valueOf(value));
+    }
+
     static void saveOptions(Object gameSettings) {
         invoke(gameSettings, new String[] {"saveOptions", "func_74303_b"});
     }

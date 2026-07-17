@@ -346,13 +346,40 @@ final class ForgeClientEventBridge {
                 restoreRenderDistance(gameSettings);
             }
 
+            if (settingBool("performance.fps_optimizer", "disable_entity_shadows", true)) {
+                if (this.originalEntityShadows == null) {
+                    this.originalEntityShadows = Boolean.valueOf(Mc189Compat.entityShadows(gameSettings));
+                }
+                Mc189Compat.setEntityShadows(gameSettings, false);
+            } else {
+                restoreEntityShadows(gameSettings);
+            }
+
+            if (settingBool("performance.fps_optimizer", "disable_clouds", true)) {
+                if (this.originalClouds == null) {
+                    this.originalClouds = Integer.valueOf(Mc189Compat.clouds(gameSettings));
+                }
+                Mc189Compat.setClouds(gameSettings, 0);
+            } else {
+                restoreClouds(gameSettings);
+            }
+
+            if (settingBool("performance.fps_optimizer", "fast_lighting", true)) {
+                if (this.originalAmbientOcclusion == null) {
+                    this.originalAmbientOcclusion = Integer.valueOf(Mc189Compat.ambientOcclusion(gameSettings));
+                }
+                Mc189Compat.setAmbientOcclusion(gameSettings, 0);
+            } else {
+                restoreAmbientOcclusion(gameSettings);
+            }
+
             if (settingBool("performance.fps_optimizer", "memory_cleanup", true)) {
                 long now = System.currentTimeMillis();
                 if (now >= this.nextMemoryCleanupMillis) {
                     this.nextMemoryCleanupMillis = now + 45000L;
                     Runtime runtime = Runtime.getRuntime();
                     long used = runtime.totalMemory() - runtime.freeMemory();
-                    long threshold = clamp(settingInt("performance.fps_optimizer", "memory_threshold", 72), 1, 95);
+                    long threshold = clamp(settingInt("performance.fps_optimizer", "memory_threshold", 70), 1, 95);
                     if (used > runtime.totalMemory() * threshold / 100L) {
                         System.gc();
                     }
@@ -366,6 +393,34 @@ final class ForgeClientEventBridge {
         restoreUseVbo(gameSettings);
         restoreLimitFramerate(gameSettings);
         restoreRenderDistance(gameSettings);
+        restoreEntityShadows(gameSettings);
+        restoreClouds(gameSettings);
+        restoreAmbientOcclusion(gameSettings);
+    }
+
+    private Boolean originalEntityShadows;
+    private Integer originalClouds;
+    private Integer originalAmbientOcclusion;
+
+    private void restoreEntityShadows(Object gameSettings) {
+        if (this.originalEntityShadows != null) {
+            Mc189Compat.setEntityShadows(gameSettings, this.originalEntityShadows.booleanValue());
+            this.originalEntityShadows = null;
+        }
+    }
+
+    private void restoreClouds(Object gameSettings) {
+        if (this.originalClouds != null) {
+            Mc189Compat.setClouds(gameSettings, this.originalClouds.intValue());
+            this.originalClouds = null;
+        }
+    }
+
+    private void restoreAmbientOcclusion(Object gameSettings) {
+        if (this.originalAmbientOcclusion != null) {
+            Mc189Compat.setAmbientOcclusion(gameSettings, this.originalAmbientOcclusion.intValue());
+            this.originalAmbientOcclusion = null;
+        }
     }
 
     private void restoreParticles(Object gameSettings) {

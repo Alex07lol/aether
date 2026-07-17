@@ -8,15 +8,18 @@ public class FpsOptimizerModule extends AbstractModule {
     public FpsOptimizerModule() {
         super(ModuleMetadata.builder("performance.fps_optimizer", "FPS Optimizer")
             .category(ModuleCategory.PERFORMANCE)
-            .description("Applies conservative local video settings while enabled.")
+            .description("Applies aggressive performance optimizations and video settings for maximum FPS.")
             .favoriteByDefault(true)
             .build());
 
         addBool("limit_particles", "Limit Particles", true);
         addBool("fast_graphics", "Fast Graphics", true);
         addBool("use_vbo", "Use VBO", true);
-        addBool("memory_cleanup", "Memory Cleanup", false);
-        addNumber("memory_threshold", "Memory Threshold", 72);
+        addBool("disable_entity_shadows", "Disable Entity Shadows", true);
+        addBool("disable_clouds", "Disable Clouds", true);
+        addBool("fast_lighting", "Fast Smooth Lighting", true);
+        addBool("memory_cleanup", "Memory Cleanup", true);
+        addNumber("memory_threshold", "Memory Threshold", 70);
         addNumber("max_render_distance", "Max Render Distance", 8);
         addNumber("fps_limit", "FPS Limit", 260);
     }
