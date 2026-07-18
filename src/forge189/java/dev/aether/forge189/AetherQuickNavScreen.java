@@ -68,7 +68,7 @@ public final class AetherQuickNavScreen extends GuiScreen {
         Mc189Compat.drawRect(x, y, x + w, y + 1, borderColor);
         Mc189Compat.drawRect(x, y + h - 1, x + w, y + h, borderColor);
         Mc189Compat.drawRect(x, y, x + 1, y + h, borderColor);
-        Mc189Compat.drawRect(x + w - 1, x + w, y, y + h, borderColor);
+        Mc189Compat.drawRect(x + w - 1, y, x + w, y + h, borderColor);
 
         // Accent top bar on hover or primary
         if (hover || isPrimary) {
@@ -120,7 +120,7 @@ public final class AetherQuickNavScreen extends GuiScreen {
 
     @Override
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
-        if (keyCode == KEY_ESCAPE) {
+        if (keyCode == KEY_ESCAPE || keyCode == 54) { // 54 = KEY_RIGHT_SHIFT
             Mc189Compat.displayGuiScreen(parent);
         }
     }

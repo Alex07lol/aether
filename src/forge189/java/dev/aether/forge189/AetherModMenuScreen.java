@@ -310,6 +310,8 @@ public final class AetherModMenuScreen extends GuiScreen {
             propertyPanel.scrollBy(delta);
         } else if (moduleGridPanel != null && moduleGridPanel.isHovered(mouseX, mouseY)) {
             moduleGridPanel.scrollBy(delta);
+        } else if (sidebarPanel != null && sidebarPanel.isHovered(mouseX, mouseY)) {
+            sidebarPanel.scrollBy(delta);
         }
     }
 
@@ -424,56 +426,103 @@ public final class AetherModMenuScreen extends GuiScreen {
     /* ================================================================== */
 
     private class SidebarPanel extends BasePanel {
+        float scrollOffset = 0;
+        private float maxScroll = 0;
+
         SidebarPanel(int x, int y, int w, int h) { super(x, y, w, h); }
+
+        void scrollBy(float amount) {
+            scrollOffset = clamp(scrollOffset + amount, 0f, maxScroll);
+        }
+
+        private void recalcMaxScroll() {
+            int headerH = 44;
+            int btnH = 24;
+            int gap = 6;
+            int totalH = Category.values().length * (btnH + gap);
+            maxScroll = Math.max(0, totalH - (height - headerH - 8));
+        }
 
         @Override
         void draw(Object font, int mouseX, int mouseY, float dt) {
+            recalcMaxScroll();
             Mc189Compat.drawRect(x, y, x + width, y + height, AetherUi.COLOR_PANEL);
             Mc189Compat.drawRect(x, y, x + 3, y + height, AetherUi.MODERN_UI_ACCENT);
             Mc189Compat.drawRect(x + 3, y, x + width, y + 1, AetherUi.COLOR_BORDER);
 
-            AetherUi.centered(font, "AETHER", x + 3, y + 18, width - 3, AetherUi.COLOR_TEXT_PRIMARY);
-            AetherUi.centered(font, "MODS", x + 3, y + 32, width - 3, AetherUi.COLOR_TEXT_SECONDARY);
+            AetherUi.centered(font, "AETHER", x + 3, y + 14, width - 3, AetherUi.COLOR_TEXT_PRIMARY);
+            AetherUi.centered(font, "MODS", x + 3, y + 26, width - 3, AetherUi.COLOR_TEXT_SECONDARY);
+
+            int headerH = 44;
+            int listY = y + headerH;
+            int listH = height - headerH - 4;
+
+            int screenHeight = Mc189Compat.screenHeight(AetherModMenuScreen.this);
+            int scale = Mc189Compat.scaleFactor(new net.minecraft.client.gui.ScaledResolution(
+                    (net.minecraft.client.Minecraft) Mc189Compat.minecraft()));
+            Mc189Compat.enableScissor();
+            Mc189Compat.scissor(x * scale, (screenHeight - (listY + listH)) * scale, width * scale, listH * scale);
 
             int btnH = 24;
             int gap = 6;
-            int btnX = x + 8;
-            int btnW = width - 16;
-            int btnY = y + 56;
+            int btnX = x + 6;
+            int btnW = width - 12;
+            int btnY = listY + 4 - (int) scrollOffset;
 
             for (Category cat : Category.values()) {
-                boolean sel = selectedCategory == cat;
-                boolean hover = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                if (btnY + btnH >= listY && btnY <= listY + listH) {
+                    boolean sel = selectedCategory == cat;
+                    boolean hover = mouseX >= btnX && mouseX <= btnX + btnW
+                            && mouseY >= btnY && mouseY <= btnY + btnH
+                            && mouseY >= listY && mouseY <= listY + listH;
 
-                if (sel) {
-                    Mc189Compat.drawRect(btnX, btnY, btnX + btnW, btnY + btnH, AetherUi.COLOR_CARD_HOVER);
-                    Mc189Compat.drawRect(btnX, btnY, btnX + 3, btnY + btnH, AetherUi.MODERN_UI_ACCENT);
-                } else if (hover) {
-                    Mc189Compat.drawRect(btnX, btnY, btnX + btnW, btnY + btnH, 0xFF1A1F2A);
-                } else {
-                    Mc189Compat.drawRect(btnX, btnY, btnX + btnW, btnY + btnH, AetherUi.COLOR_CARD);
+                    if (sel) {
+                        Mc189Compat.drawRect(btnX, btnY, btnX + btnW, btnY + btnH, AetherUi.COLOR_CARD_HOVER);
+                        Mc189Compat.drawRect(btnX, btnY, btnX + 3, btnY + btnH, AetherUi.MODERN_UI_ACCENT);
+                    } else if (hover) {
+                        Mc189Compat.drawRect(btnX, btnY, btnX + btnW, btnY + btnH, 0xFF1A1F2A);
+                    } else {
+                        Mc189Compat.drawRect(btnX, btnY, btnX + btnW, btnY + btnH, AetherUi.COLOR_CARD);
+                    }
+
+                    // Draw category icon placeholder (small coloured square)
+                    int iconSize = 8;
+                    int iconX = btnX + 6;
+                    int iconY = btnY + (btnH - iconSize) / 2;
+                    int iconColor = sel ? AetherUi.MODERN_UI_ACCENT : AetherUi.COLOR_TEXT_DISABLED;
+                    Mc189Compat.drawRect(iconX, iconY, iconX + iconSize, iconY + iconSize, iconColor);
+
+                    int textColor = sel ? AetherUi.COLOR_TEXT_PRIMARY : AetherUi.COLOR_TEXT_SECONDARY;
+                    String trimmedLabel = AetherUi.trim(font, cat.label, btnW - 22);
+                    AetherUi.text(font, trimmedLabel, btnX + 18, btnY + (btnH - 8) / 2, textColor);
                 }
 
-                // Draw category icon placeholder (small coloured square)
-                int iconSize = 8;
-                int iconX = btnX + 6;
-                int iconY = btnY + (btnH - iconSize) / 2;
-                int iconColor = sel ? AetherUi.MODERN_UI_ACCENT : AetherUi.COLOR_TEXT_DISABLED;
-                Mc189Compat.drawRect(iconX, iconY, iconX + iconSize, iconY + iconSize, iconColor);
-
-                int textColor = sel ? AetherUi.COLOR_TEXT_PRIMARY : AetherUi.COLOR_TEXT_SECONDARY;
-                AetherUi.text(font, cat.label, btnX + 18, btnY + (btnH - 8) / 2, textColor);
-
                 btnY += btnH + gap;
+            }
+
+            Mc189Compat.disableScissor();
+
+            // Scrollbar
+            if (maxScroll > 0) {
+                int barH = listH;
+                int thumbH = Math.max(16, (int) ((barH / (barH + maxScroll)) * barH));
+                int thumbY = listY + (int) ((scrollOffset / maxScroll) * (barH - thumbH));
+                Mc189Compat.drawRect(x + width - 3, listY, x + width, listY + barH, 0x22FFFFFF);
+                Mc189Compat.drawRect(x + width - 3, thumbY, x + width, thumbY + thumbH, AetherUi.MODERN_UI_ACCENT);
             }
         }
 
         @Override
         void mouseClicked(int mouseX, int mouseY, int button) {
             if (button != 0) return;
+            int headerH = 44;
+            int listY = y + headerH;
+            int listH = height - headerH - 4;
+            if (mouseY < listY || mouseY > listY + listH) return;
+
             int btnH = 24;
             int gap = 6;
-            int btnY = y + 56;
+            int btnY = listY + 4 - (int) scrollOffset;
             for (Category cat : Category.values()) {
                 if (mouseX >= x && mouseX <= x + width && mouseY >= btnY && mouseY <= btnY + btnH) {
                     selectedCategory = cat;
@@ -496,12 +545,6 @@ public final class AetherModMenuScreen extends GuiScreen {
         private float maxScroll = 0;
         private boolean searchFocused = false;
 
-        // Card dimensions
-        private static final int CARD_W = 100;
-        private static final int CARD_H = 100;
-        private static final int CARD_GAP = 8;
-        private static final int ICON_SIZE = 32;
-
         ModuleGridPanel(int x, int y, int w, int h) { super(x, y, w, h); }
 
         void setModules(List<ClientModule> modules) {
@@ -516,14 +559,18 @@ public final class AetherModMenuScreen extends GuiScreen {
         }
 
         private void recalcMaxScroll() {
-            int cols = Math.max(1, (width - CARD_GAP) / (CARD_W + CARD_GAP));
+            int gap = 8;
+            int minCardW = 90;
+            int cols = Math.max(1, (width - gap) / (minCardW + gap));
+            int cardH = 96;
             int rows = (modules.size() + cols - 1) / cols;
-            int totalH = rows * (CARD_H + CARD_GAP);
-            maxScroll = Math.max(0, totalH - (height - 56));
+            int totalH = rows * (cardH + gap);
+            maxScroll = Math.max(0, totalH - (height - 52));
         }
 
         @Override
         void draw(Object font, int mouseX, int mouseY, float dt) {
+            recalcMaxScroll();
             // Search bar
             int searchH = 36;
             int searchBg = searchFocused ? AetherUi.COLOR_SEARCH_FOCUS : AetherUi.COLOR_SEARCH;
@@ -531,20 +578,22 @@ public final class AetherModMenuScreen extends GuiScreen {
             Mc189Compat.drawRect(x, y, x + width, y + 1, AetherUi.COLOR_BORDER);
 
             if (searchQuery.isEmpty() && !searchFocused) {
-                AetherUi.text(font, "Search modules...", x + 12, y + 14, AetherUi.COLOR_TEXT_DISABLED);
+                AetherUi.text(font, AetherUi.trim(font, "Search modules...", width - 80), x + 12, y + 14, AetherUi.COLOR_TEXT_DISABLED);
             } else {
                 String cursor = searchFocused && System.currentTimeMillis() % 1000 > 500 ? "_" : "";
-                AetherUi.text(font, searchQuery + cursor, x + 12, y + 14, AetherUi.COLOR_TEXT_PRIMARY);
+                AetherUi.text(font, AetherUi.trim(font, searchQuery + cursor, width - 80), x + 12, y + 14, AetherUi.COLOR_TEXT_PRIMARY);
             }
 
             // Module count
             String countStr = modules.size() + " module" + (modules.size() != 1 ? "s" : "");
             int countW = Mc189Compat.stringWidth(font, countStr);
-            AetherUi.text(font, countStr, x + width - countW - 8, y + 14, AetherUi.COLOR_TEXT_DISABLED);
+            if (width - countW - 12 > 100) {
+                AetherUi.text(font, countStr, x + width - countW - 8, y + 14, AetherUi.COLOR_TEXT_DISABLED);
+            }
 
             // Grid area with scissor
-            int gridY = y + searchH + 8;
-            int gridH = height - searchH - 8;
+            int gridY = y + searchH + 6;
+            int gridH = height - searchH - 6;
 
             int screenHeight = Mc189Compat.screenHeight(AetherModMenuScreen.this);
             int scale = Mc189Compat.scaleFactor(new net.minecraft.client.gui.ScaledResolution(
@@ -552,67 +601,72 @@ public final class AetherModMenuScreen extends GuiScreen {
             Mc189Compat.enableScissor();
             Mc189Compat.scissor(x * scale, (screenHeight - (gridY + gridH)) * scale, width * scale, gridH * scale);
 
-            int cols = Math.max(1, (width - CARD_GAP) / (CARD_W + CARD_GAP));
-            int gridStartX = x + (width - cols * (CARD_W + CARD_GAP) + CARD_GAP) / 2;
+            int gap = 8;
+            int minCardW = 90;
+            int cols = Math.max(1, (width - gap) / (minCardW + gap));
+            int cardW = Math.max(76, (width - gap - (cols * gap)) / cols);
+            int cardH = 96;
+            int gridStartX = x + (width - (cols * cardW + (cols - 1) * gap)) / 2;
 
             for (int i = 0; i < modules.size(); i++) {
                 ClientModule mod = modules.get(i);
                 int col = i % cols;
                 int row = i / cols;
-                int cx = gridStartX + col * (CARD_W + CARD_GAP);
-                int cy = gridY + row * (CARD_H + CARD_GAP) - (int) scrollOffset;
+                int cx = gridStartX + col * (cardW + gap);
+                int cy = gridY + row * (cardH + gap) - (int) scrollOffset;
 
                 // Skip off-screen cards
-                if (cy + CARD_H < gridY - 20 || cy > gridY + gridH + 20) continue;
+                if (cy + cardH < gridY - 20 || cy > gridY + gridH + 20) continue;
 
                 boolean isSelected = mod == selectedModule;
                 boolean isEnabled = mod.state() == ModuleState.ENABLED;
-                boolean hover = mouseX >= cx && mouseX <= cx + CARD_W
-                        && mouseY >= cy && mouseY <= cy + CARD_H
-                        && mouseY >= gridY;
+                boolean hover = mouseX >= cx && mouseX <= cx + cardW
+                        && mouseY >= cy && mouseY <= cy + cardH
+                        && mouseY >= gridY && mouseY <= gridY + gridH;
 
                 // Card background
                 int cardBg = isSelected ? AetherUi.COLOR_CARD_HOVER : AetherUi.COLOR_CARD;
                 if (hover && !isSelected) cardBg = 0xFF1A1F2A;
-                Mc189Compat.drawRect(cx, cy, cx + CARD_W, cy + CARD_H, cardBg);
+                Mc189Compat.drawRect(cx, cy, cx + cardW, cy + cardH, cardBg);
 
                 // Accent bar at top when enabled
                 if (isEnabled) {
-                    Mc189Compat.drawRect(cx, cy, cx + CARD_W, cy + 3, AetherUi.MODERN_UI_ACCENT);
+                    Mc189Compat.drawRect(cx, cy, cx + cardW, cy + 3, AetherUi.MODERN_UI_ACCENT);
                 }
 
                 // Selection indicator
                 if (isSelected) {
-                    Mc189Compat.drawRect(cx, cy, cx + 2, cy + CARD_H, AetherUi.MODERN_UI_ACCENT);
+                    Mc189Compat.drawRect(cx, cy, cx + 2, cy + cardH, AetherUi.MODERN_UI_ACCENT);
                 }
 
                 // ---- IMAGE PLACEHOLDER ----
-                int iconX = cx + (CARD_W - ICON_SIZE) / 2;
-                int iconY = cy + 14;
-                drawModuleIconPlaceholder(font, mod, iconX, iconY, ICON_SIZE);
+                int iconSize = Math.min(30, cardW - 20);
+                int iconX = cx + (cardW - iconSize) / 2;
+                int iconY = cy + 12;
+                drawModuleIconPlaceholder(font, mod, iconX, iconY, iconSize);
 
                 // Module name (centred below icon)
                 String name = mod.metadata().name();
-                String trimmedName = AetherUi.trim(font, name, CARD_W - 8);
-                AetherUi.centered(font, trimmedName, cx, iconY + ICON_SIZE + 6, CARD_W, AetherUi.COLOR_TEXT_PRIMARY);
+                String trimmedName = AetherUi.trim(font, name, cardW - 8);
+                AetherUi.centered(font, trimmedName, cx, iconY + iconSize + 6, cardW, AetherUi.COLOR_TEXT_PRIMARY);
 
                 // Enabled/Disabled label
                 String status = isEnabled ? "Enabled" : "Disabled";
                 int statusColor = isEnabled ? 0xFF55FF88 : AetherUi.COLOR_TEXT_DISABLED;
-                AetherUi.centered(font, status, cx, iconY + ICON_SIZE + 18, CARD_W, statusColor);
+                AetherUi.centered(font, status, cx, iconY + iconSize + 18, cardW, statusColor);
 
                 // Settings gear indicator (top-right)
                 if (!mod.settings().isEmpty()) {
-                    AetherUi.text(font, "\u2699", cx + CARD_W - 12, cy + 5, AetherUi.COLOR_TEXT_DISABLED);
+                    AetherUi.text(font, "\u2699", cx + cardW - 12, cy + 5, AetherUi.COLOR_TEXT_DISABLED);
                 }
 
                 // Subtle hover border
                 if (hover) {
                     int bc = 0x44FFFFFF;
-                    Mc189Compat.drawRect(cx, cy, cx + CARD_W, cy + 1, bc);
-                    Mc189Compat.drawRect(cx, cy + CARD_H - 1, cx + CARD_W, cy + CARD_H, bc);
-                    Mc189Compat.drawRect(cx, cy, cx + 1, cy + CARD_H, bc);
-                    Mc189Compat.drawRect(cx + CARD_W - 1, cy, cx + CARD_W, cy + CARD_H, bc);
+                    Mc189Compat.drawRect(cx, cy, cx + cardW, cy + 1, bc);
+                    Mc189Compat.drawRect(cx, cy + cardH - 1, cx + cardW, cy + cardH, bc);
+                    Mc189Compat.drawRect(cx, cy, cx + 1, cy + cardH, bc);
+                    Mc189Compat.drawRect(cx + cardW - 1, cy, cx + cardW, cy + cardH, bc);
                 }
             }
 
@@ -666,20 +720,24 @@ public final class AetherModMenuScreen extends GuiScreen {
                 searchFocused = mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + 36;
 
                 // Module cards
-                int gridY = y + 44;
-                int gridH = height - 44;
+                int gridY = y + 42;
+                int gridH = height - 42;
                 if (mouseX >= x && mouseX <= x + width && mouseY >= gridY && mouseY <= gridY + gridH) {
-                    int cols = Math.max(1, (width - CARD_GAP) / (CARD_W + CARD_GAP));
-                    int gridStartX = x + (width - cols * (CARD_W + CARD_GAP) + CARD_GAP) / 2;
+                    int gap = 8;
+                    int minCardW = 90;
+                    int cols = Math.max(1, (width - gap) / (minCardW + gap));
+                    int cardW = Math.max(76, (width - gap - (cols * gap)) / cols);
+                    int cardH = 96;
+                    int gridStartX = x + (width - (cols * cardW + (cols - 1) * gap)) / 2;
 
                     for (int i = 0; i < modules.size(); i++) {
                         ClientModule mod = modules.get(i);
                         int col = i % cols;
                         int row = i / cols;
-                        int cx = gridStartX + col * (CARD_W + CARD_GAP);
-                        int cy = gridY + row * (CARD_H + CARD_GAP) - (int) scrollOffset;
+                        int cx = gridStartX + col * (cardW + gap);
+                        int cy = gridY + row * (cardH + gap) - (int) scrollOffset;
 
-                        if (mouseX >= cx && mouseX <= cx + CARD_W && mouseY >= cy && mouseY <= cy + CARD_H) {
+                        if (mouseX >= cx && mouseX <= cx + cardW && mouseY >= cy && mouseY <= cy + cardH) {
                             selectedModule = mod;
                             propertyPanel.setModule(mod);
                             writeLastChange("Selected module '" + mod.metadata().name() + "'");
@@ -759,7 +817,8 @@ public final class AetherModMenuScreen extends GuiScreen {
             settingControllers.put(SettingType.NUMBER, new SettingController() {
                 @Override public void draw(Object font, Setting<?> setting, int y, int mouseX) {
                     int value = ((Number) setting.value()).intValue();
-                    int sliderW = 80;
+                    int sliderW = Math.min(80, PropertyPanel.this.width - 120);
+                    if (sliderW < 30) sliderW = 30;
                     int sliderX = PropertyPanel.this.x + PropertyPanel.this.width - 15 - sliderW;
                     int min = getNumberMin(setting);
                     int max = getNumberMax(setting);
@@ -778,7 +837,8 @@ public final class AetherModMenuScreen extends GuiScreen {
                     AetherUi.text(font, valStr, textX, y + 4, AetherUi.COLOR_TEXT_SECONDARY);
                 }
                 @Override public void click(Setting<?> setting, int mouseX, int mouseY) {
-                    int sliderW = 80;
+                    int sliderW = Math.min(80, PropertyPanel.this.width - 120);
+                    if (sliderW < 30) sliderW = 30;
                     int sliderX = PropertyPanel.this.x + PropertyPanel.this.width - 15 - sliderW;
                     int rowY = findRowY(setting);
                     if (mouseX >= sliderX && mouseX <= sliderX + sliderW && mouseY >= rowY + 2 && mouseY <= rowY + 12) {
@@ -789,7 +849,8 @@ public final class AetherModMenuScreen extends GuiScreen {
                     }
                 }
                 @Override public void drag(Setting<?> setting, int mouseX) {
-                    int sliderW = 80;
+                    int sliderW = Math.min(80, PropertyPanel.this.width - 120);
+                    if (sliderW < 30) sliderW = 30;
                     int sliderX = PropertyPanel.this.x + PropertyPanel.this.width - 15 - sliderW;
                     float pct = clamp((float) (mouseX - sliderX) / sliderW, 0f, 1f);
                     int min = getNumberMin(setting);
@@ -812,8 +873,9 @@ public final class AetherModMenuScreen extends GuiScreen {
                     String text = setting.type() == SettingType.KEYBIND
                             ? Mc189Compat.keyName(((Number) setting.value()).intValue())
                             : String.valueOf(setting.value());
-                    String trimmed = AetherUi.trim(font, text, 74);
-                    int w = Math.max(34, Mc189Compat.stringWidth(font, trimmed) + 10);
+                    int maxPillW = Math.max(30, PropertyPanel.this.width - 100);
+                    String trimmed = AetherUi.trim(font, text, maxPillW - 10);
+                    int w = Math.min(maxPillW, Math.max(34, Mc189Compat.stringWidth(font, trimmed) + 10));
                     int ctrlX = PropertyPanel.this.x + PropertyPanel.this.width - 15 - w;
                     Mc189Compat.drawRect(ctrlX, y, ctrlX + w, y + 14, AetherUi.COLOR_CARD);
                     AetherUi.centered(font, trimmed, ctrlX, y + 4, w, AetherUi.COLOR_TEXT_SECONDARY);
@@ -823,8 +885,9 @@ public final class AetherModMenuScreen extends GuiScreen {
                     String text = setting.type() == SettingType.KEYBIND
                             ? Mc189Compat.keyName(((Number) setting.value()).intValue())
                             : String.valueOf(setting.value());
-                    String trimmed = AetherUi.trim(font, text, 74);
-                    int w = Math.max(34, Mc189Compat.stringWidth(font, trimmed) + 10);
+                    int maxPillW = Math.max(30, PropertyPanel.this.width - 100);
+                    String trimmed = AetherUi.trim(font, text, maxPillW - 10);
+                    int w = Math.min(maxPillW, Math.max(34, Mc189Compat.stringWidth(font, trimmed) + 10));
                     int ctrlX = PropertyPanel.this.x + PropertyPanel.this.width - 15 - w;
                     int rowY = findRowY(setting);
                     if (mouseX >= ctrlX && mouseX <= ctrlX + w && mouseY >= rowY && mouseY <= rowY + 14) {
@@ -843,14 +906,38 @@ public final class AetherModMenuScreen extends GuiScreen {
             settingControllers.put(SettingType.TEXT, pillController);
         }
 
-        private int findRowY(Setting<?> target) {
-            int sY = y - (int) scrollOffset + 60 + 20 + 25;
-            if (!module.settings().isEmpty()) {
-                sY += 30;
-                for (Setting<?> s : module.settings()) {
-                    if (s == target) return sY;
-                    sY += 22;
+        private int getSettingStartY() {
+            int contentY = y - (int) scrollOffset;
+            int descY = contentY + 34;
+            String desc = module != null ? module.metadata().description() : null;
+            int maxDescW = width - 30;
+            Object font = Mc189Compat.screenFontRenderer(AetherModMenuScreen.this);
+            if (desc != null && !desc.isEmpty()) {
+                String[] words = desc.split(" ");
+                StringBuilder line = new StringBuilder();
+                for (String word : words) {
+                    if (line.length() == 0) {
+                        line.append(word);
+                    } else if (Mc189Compat.stringWidth(font, line + " " + word) <= maxDescW) {
+                        line.append(" ").append(word);
+                    } else {
+                        descY += 11;
+                        line = new StringBuilder(word);
+                    }
                 }
+                if (line.length() > 0) descY += 11;
+            } else {
+                descY += 11;
+            }
+            return descY + 30;
+        }
+
+        private int findRowY(Setting<?> target) {
+            if (module == null || module.settings().isEmpty()) return -1;
+            int sY = getSettingStartY() + 20;
+            for (Setting<?> s : module.settings()) {
+                if (s == target) return sY;
+                sY += 22;
             }
             return -1;
         }
@@ -883,19 +970,43 @@ public final class AetherModMenuScreen extends GuiScreen {
             String letter = module.metadata().name().substring(0, 1).toUpperCase();
             AetherUi.centered(font, letter, headerIconX, headerIconY + (headerIconSize - 8) / 2, headerIconSize, 0xFFFFFFFF);
 
-            AetherUi.text(font, module.metadata().name(), headerIconX + headerIconSize + 8, contentY + 18, AetherUi.COLOR_TEXT_PRIMARY);
+            String titleStr = AetherUi.trim(font, module.metadata().name(), width - (headerIconSize + 28));
+            AetherUi.text(font, titleStr, headerIconX + headerIconSize + 8, contentY + 18, AetherUi.COLOR_TEXT_PRIMARY);
 
-            String desc = AetherUi.trim(font, module.metadata().description(), width - 30);
-            AetherUi.text(font, desc, x + 15, contentY + 36, AetherUi.COLOR_TEXT_SECONDARY);
+            // Description (multiline word-wrap to fit inside box)
+            String desc = module.metadata().description();
+            int maxDescW = width - 30;
+            int descY = contentY + 34;
+            if (desc != null && !desc.isEmpty()) {
+                String[] words = desc.split(" ");
+                StringBuilder line = new StringBuilder();
+                for (String word : words) {
+                    if (line.length() == 0) {
+                        line.append(word);
+                    } else if (Mc189Compat.stringWidth(font, line + " " + word) <= maxDescW) {
+                        line.append(" ").append(word);
+                    } else {
+                        AetherUi.text(font, line.toString(), x + 15, descY, AetherUi.COLOR_TEXT_SECONDARY);
+                        descY += 11;
+                        line = new StringBuilder(word);
+                    }
+                }
+                if (line.length() > 0) {
+                    AetherUi.text(font, AetherUi.trim(font, line.toString(), maxDescW), x + 15, descY, AetherUi.COLOR_TEXT_SECONDARY);
+                    descY += 11;
+                }
+            } else {
+                descY += 11;
+            }
 
-            int settingY = contentY + 60;
+            int settingY = descY + 10;
 
             // General section
             AetherUi.text(font, "GENERAL", x + 15, settingY, AetherUi.COLOR_TEXT_DISABLED);
             settingY += 20;
 
             // Enabled toggle
-            AetherUi.text(font, AetherUi.trim(font, "Enabled", width - 120), x + 15, settingY + 4, AetherUi.COLOR_TEXT_PRIMARY);
+            AetherUi.text(font, AetherUi.trim(font, "Enabled", width - 70), x + 15, settingY + 4, AetherUi.COLOR_TEXT_PRIMARY);
             boolean enabled = module.state() == ModuleState.ENABLED;
             int toggleX = x + width - 45;
             Mc189Compat.drawRect(toggleX, settingY, toggleX + 30, settingY + 14, AetherUi.COLOR_TOGGLE_BG);
@@ -910,7 +1021,7 @@ public final class AetherModMenuScreen extends GuiScreen {
                 settingY += 20;
 
                 for (Setting<?> s : module.settings()) {
-                    AetherUi.text(font, AetherUi.trim(font, s.label(), width - 120), x + 15, settingY + 4, AetherUi.COLOR_TEXT_PRIMARY);
+                    AetherUi.text(font, AetherUi.trim(font, s.label(), width - 110), x + 15, settingY + 4, AetherUi.COLOR_TEXT_PRIMARY);
                     SettingController ctrl = settingControllers.get(s.type());
                     if (ctrl != null) ctrl.draw(font, s, settingY, mouseX);
                     settingY += 22;
@@ -919,6 +1030,15 @@ public final class AetherModMenuScreen extends GuiScreen {
 
             maxScroll = Math.max(0, (settingY + (int) scrollOffset) - (y + height) + 10);
             Mc189Compat.disableScissor();
+
+            // Scrollbar for property panel
+            if (maxScroll > 0) {
+                int barH = height;
+                int thumbH = Math.max(20, (int) ((barH / (barH + maxScroll)) * barH));
+                int thumbY = y + (int) ((scrollOffset / maxScroll) * (barH - thumbH));
+                Mc189Compat.drawRect(x + width - 3, y, x + width, y + barH, 0x22FFFFFF);
+                Mc189Compat.drawRect(x + width - 3, thumbY, x + width, thumbY + thumbH, AetherUi.MODERN_UI_ACCENT);
+            }
         }
 
         @Override
@@ -926,7 +1046,29 @@ public final class AetherModMenuScreen extends GuiScreen {
             if (button != 0 || module == null || !isHovered(mouseX, mouseY)) return;
 
             int contentY = y - (int) scrollOffset;
-            int settingY = contentY + 80;
+            int descY = contentY + 34;
+            String desc = module.metadata().description();
+            int maxDescW = width - 30;
+            Object font = Mc189Compat.screenFontRenderer(AetherModMenuScreen.this);
+            if (desc != null && !desc.isEmpty()) {
+                String[] words = desc.split(" ");
+                StringBuilder line = new StringBuilder();
+                for (String word : words) {
+                    if (line.length() == 0) {
+                        line.append(word);
+                    } else if (Mc189Compat.stringWidth(font, line + " " + word) <= maxDescW) {
+                        line.append(" ").append(word);
+                    } else {
+                        descY += 11;
+                        line = new StringBuilder(word);
+                    }
+                }
+                if (line.length() > 0) descY += 11;
+            } else {
+                descY += 11;
+            }
+
+            int settingY = descY + 30;
 
             // Enabled toggle
             if (mouseY >= settingY && mouseY <= settingY + 14) {
@@ -939,7 +1081,7 @@ public final class AetherModMenuScreen extends GuiScreen {
             settingY += 25;
 
             if (!module.settings().isEmpty()) {
-                settingY += 30;
+                settingY += 20;
                 for (Setting<?> s : module.settings()) {
                     if (mouseY >= settingY && mouseY <= settingY + 22) {
                         SettingController ctrl = settingControllers.get(s.type());
