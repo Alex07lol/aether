@@ -298,6 +298,19 @@ public final class AetherModMenuScreen extends GuiScreen {
 
     public boolean func_73868_f() { return false; }
 
+    @Override
+    public void handleMouseInput() throws IOException {
+        super.handleMouseInput();
+        int dWheel = Mc189Compat.mouseWheelDelta();
+        if (dWheel != 0) {
+            handleWheelScroll(-dWheel / 8);
+        }
+    }
+
+    public void func_146274_d() throws IOException {
+        handleMouseInput();
+    }
+
     public void handleWheelScroll(int delta) {
         ensurePanels();
         int w = Mc189Compat.screenWidth(this);
