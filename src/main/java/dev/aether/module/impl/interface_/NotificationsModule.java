@@ -8,9 +8,11 @@ public class NotificationsModule extends AbstractModule {
     public NotificationsModule() {
         super(ModuleMetadata.builder("interface.notifications", "Notifications")
             .category(ModuleCategory.INTERFACE)
-            .description("Adds a notification center utility slot.")
+            .description("Displays in-game toast notifications for events, messages, and module state changes.")
             .build());
 
         addBool("show_toasts", "Show Toasts", true);
+        addNumber("display_time", "Display Time", 3);
+        addNumber("max_notifications", "Max Notifications", 5);
     }
 }

@@ -8,7 +8,7 @@ public class GuiTweaksModule extends AbstractModule {
     public GuiTweaksModule() {
         super(ModuleMetadata.builder("interface.gui_tweaks", "GUI Tweaks")
             .category(ModuleCategory.INTERFACE)
-            .description("Provides interface and container GUI tweaks.")
+            .description("Improves inventory screens with better organization and usability enhancements.")
             .build());
     }
 }

@@ -8,7 +8,7 @@ public class CrosshairEditorModule extends AbstractModule {
     public CrosshairEditorModule() {
         super(ModuleMetadata.builder("interface.crosshair_editor", "Crosshair Editor")
             .category(ModuleCategory.INTERFACE)
-            .description("Adds a configurable crosshair utility slot.")
+            .description("Opens a full crosshair editing interface for customizing shape, color, and size.")
             .build());
     }
 }

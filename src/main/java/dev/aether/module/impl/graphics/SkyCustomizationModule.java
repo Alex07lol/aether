@@ -8,7 +8,7 @@ public class SkyCustomizationModule extends AbstractModule {
     public SkyCustomizationModule() {
         super(ModuleMetadata.builder("graphics.sky_customization", "Sky Customization")
             .category(ModuleCategory.GRAPHICS)
-            .description("Adds a reserved sky styling slot.")
+            .description("Customizes the sky rendering with configurable colors, fog, and cloud styles.")
             .build());
     }
 }

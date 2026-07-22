@@ -8,7 +8,7 @@ public class ChatCustomizationModule extends AbstractModule {
     public ChatCustomizationModule() {
         super(ModuleMetadata.builder("interface.chat_customization", "Chat Customization")
             .category(ModuleCategory.INTERFACE)
-            .description("Customizes chat readability and presentation.")
+            .description("Improves chat readability with customizable background, colors, and timestamps.")
             .build());
 
         addBool("show_background", "Show Background", true);

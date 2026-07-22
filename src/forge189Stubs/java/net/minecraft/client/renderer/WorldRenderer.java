@@ -6,5 +6,6 @@ public class WorldRenderer {
     public void begin(int mode, VertexFormat format) {}
     public WorldRenderer pos(double x, double y, double z) { return this; }
     public WorldRenderer color(float red, float green, float blue, float alpha) { return this; }
+    public WorldRenderer tex(double u, double v) { return this; }
     public void endVertex() {}
 }

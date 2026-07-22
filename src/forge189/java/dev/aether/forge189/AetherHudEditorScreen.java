@@ -53,11 +53,27 @@ public final class AetherHudEditorScreen extends GuiScreen {
     public void initGui() {
         super.initGui();
         calculateDimensions();
+        try {
+            Mc189Compat.loadBlurShader();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public void func_73866_w_() {
+        initGui();
     }
 
     @Override
     public void onGuiClosed() {
         saveQuietly();
+        try {
+            Mc189Compat.stopShader();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public void func_146281_b() {
+        onGuiClosed();
     }
 
     private void calculateDimensions() {
@@ -65,19 +81,30 @@ public final class AetherHudEditorScreen extends GuiScreen {
         Object font = Mc189Compat.screenFontRenderer(this);
         Object mc = Mc189Compat.minecraft();
         for (HudElement element : client.hudLayout().elements()) {
-            if (renderer.enabled(element.id())) {
-                Dimension dim = renderer.getDimensions(element.id(), font, mc);
-                int scaledWidth = Math.round(dim.width * element.scale());
-                int scaledHeight = Math.round(dim.height * element.scale());
-                elementDimensions.put(element.id(), new Dimension(Math.max(12, scaledWidth), Math.max(8, scaledHeight)));
-            }
+            Dimension dim = renderer.getDimensions(element.id(), font, mc);
+            int scaledWidth = Math.round(dim.width * element.scale());
+            int scaledHeight = Math.round(dim.height * element.scale());
+            elementDimensions.put(element.id(), new Dimension(Math.max(16, scaledWidth), Math.max(10, scaledHeight)));
         }
     }
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        renderScreen(mouseX, mouseY, partialTicks);
+    }
+
+    public void func_73863_a(int mouseX, int mouseY, float partialTicks) {
+        renderScreen(mouseX, mouseY, partialTicks);
+    }
+
+    private void renderScreen(int mouseX, int mouseY, float partialTicks) {
+        int w = Mc189Compat.screenWidth(this);
+        int h = Mc189Compat.screenHeight(this);
+
+        // Background screen dark dim
+        Mc189Compat.drawRectangle(0, 0, w, h, 0x40000000);
         drawGrid();
-        renderer.render();
+        renderer.renderForEditor();
 
         activeVerticalSnapLines.clear();
         activeHorizontalSnapLines.clear();
@@ -89,37 +116,33 @@ public final class AetherHudEditorScreen extends GuiScreen {
 
         // Draw active snap guide lines
         for (int xLine : activeVerticalSnapLines) {
-            Mc189Compat.drawRect(xLine, 0, xLine + 1, height, GUIDE_LINE_COLOR);
+            Mc189Compat.drawGradientRectangle(xLine, 0, 1, h, GUIDE_LINE_COLOR, 0x0052BEEB);
         }
         for (int yLine : activeHorizontalSnapLines) {
-            Mc189Compat.drawRect(0, yLine, width, yLine + 1, GUIDE_LINE_COLOR);
+            Mc189Compat.drawHorizontalGradientRectangle(0, yLine, w, 1, GUIDE_LINE_COLOR, 0x0052BEEB);
         }
 
         // Render element selection bounding boxes and handles
         for (HudElement element : client.hudLayout().elements()) {
-            if (!renderer.enabled(element.id())) {
-                continue;
-            }
             Dimension dim = elementDimensions.get(element.id());
             if (dim == null) continue;
 
+            boolean isEnabled = renderer.enabled(element.id());
             int x1 = element.x() - 2;
             int y1 = element.y() - 2;
             int x2 = element.x() + dim.width + 2;
             int y2 = element.y() + dim.height + 2;
 
-            int boxColor = 0x44FFFFFF;
+            int boxColor = isEnabled ? 0x44FFFFFF : 0x33AAAAAA;
             if (element == selectedElement || element == draggingElement) {
                 boxColor = ACCENT_COLOR;
             } else if (mouseX >= x1 && mouseX <= x2 && mouseY >= y1 && mouseY <= y2) {
-                boxColor = 0x99FFFFFF;
+                boxColor = isEnabled ? 0x99FFFFFF : 0x66AAAAAA;
             }
 
-            // Outline
-            Mc189Compat.drawRect(x1, y1, x2, y1 + 1, boxColor);
-            Mc189Compat.drawRect(x1, y2 - 1, x2, y2, boxColor);
-            Mc189Compat.drawRect(x1, y1, x1 + 1, y2, boxColor);
-            Mc189Compat.drawRect(x2 - 1, y1, x2, y2, boxColor);
+            // Outline & Rounded Box
+            Mc189Compat.drawRoundedRectangle(x1, y1, x2 - x1, y2 - y1, 2, boxColor & 0x30FFFFFF, 0);
+            Mc189Compat.drawOutlinedRectangle(x1, y1, x2 - x1, y2 - y1, 1, boxColor);
 
             // Selection Corner Handles for selected element
             if (element == selectedElement) {
@@ -131,7 +154,7 @@ public final class AetherHudEditorScreen extends GuiScreen {
         }
 
         // Render Floating Control Bar for Selected Element
-        if (selectedElement != null && renderer.enabled(selectedElement.id())) {
+        if (selectedElement != null) {
             drawFloatingControlBar(selectedElement, mouseX, mouseY);
         }
 
@@ -140,7 +163,7 @@ public final class AetherHudEditorScreen extends GuiScreen {
     }
 
     private void drawHandle(int x, int y) {
-        Mc189Compat.drawRect(x - 1, y - 1, x + 4, y + 4, ACCENT_COLOR);
+        Mc189Compat.drawRoundedRectangle(x - 1, y - 1, 5, 5, 1, ACCENT_COLOR, 0);
     }
 
     private void updateDraggingPosition(int mouseX, int mouseY) {
@@ -155,15 +178,17 @@ public final class AetherHudEditorScreen extends GuiScreen {
         int snappedY = targetY;
 
         // 1. Screen Edge Snapping
-        int screenCenterX = width / 2;
-        int screenCenterY = height / 2;
+        int w = Mc189Compat.screenWidth(this);
+        int h = Mc189Compat.screenHeight(this);
+        int screenCenterX = w / 2;
+        int screenCenterY = h / 2;
 
         if (Math.abs(targetX) < SNAP_THRESHOLD) {
             snappedX = 0;
             activeVerticalSnapLines.add(0);
-        } else if (Math.abs((targetX + targetW) - width) < SNAP_THRESHOLD) {
-            snappedX = width - targetW;
-            activeVerticalSnapLines.add(width - 1);
+        } else if (Math.abs((targetX + targetW) - w) < SNAP_THRESHOLD) {
+            snappedX = w - targetW;
+            activeVerticalSnapLines.add(w - 1);
         } else if (Math.abs((targetX + targetW / 2) - screenCenterX) < SNAP_THRESHOLD) {
             snappedX = screenCenterX - targetW / 2;
             activeVerticalSnapLines.add(screenCenterX);
@@ -172,9 +197,9 @@ public final class AetherHudEditorScreen extends GuiScreen {
         if (Math.abs(targetY) < SNAP_THRESHOLD) {
             snappedY = 0;
             activeHorizontalSnapLines.add(0);
-        } else if (Math.abs((targetY + targetH) - height) < SNAP_THRESHOLD) {
-            snappedY = height - targetH;
-            activeHorizontalSnapLines.add(height - 1);
+        } else if (Math.abs((targetY + targetH) - h) < SNAP_THRESHOLD) {
+            snappedY = h - targetH;
+            activeHorizontalSnapLines.add(h - 1);
         } else if (Math.abs((targetY + targetH / 2) - screenCenterY) < SNAP_THRESHOLD) {
             snappedY = screenCenterY - targetH / 2;
             activeHorizontalSnapLines.add(screenCenterY);
@@ -232,17 +257,18 @@ public final class AetherHudEditorScreen extends GuiScreen {
         Dimension dim = elementDimensions.get(element.id());
         int elementW = dim != null ? dim.width : 50;
 
-        int barW = 220;
+        int barW = 270;
         int barH = 26;
-        int barX = Math.max(8, Math.min(width - barW - 8, element.x() + (elementW - barW) / 2));
+        int w = Mc189Compat.screenWidth(this);
+        int barX = Math.max(8, Math.min(w - barW - 8, element.x() + (elementW - barW) / 2));
         int barY = element.y() - barH - 8;
         if (barY < 8) {
             barY = element.y() + (dim != null ? dim.height : 12) + 8;
         }
 
-        // Background card
-        Mc189Compat.drawRect(barX, barY, barX + barW, barY + barH, 0xF010141B);
-        Mc189Compat.drawRect(barX, barY, barX + barW, barY + 1, ACCENT_COLOR);
+        // Background card with rounded corners & top accent line
+        Mc189Compat.drawRoundedRectangle(barX, barY, barW, barH, 4, 0xF010141B, 0);
+        Mc189Compat.drawHorizontalGradientRectangle(barX + 2, barY, barW - 4, 2, ACCENT_COLOR, 0xFF00FFFF);
 
         // Name
         String name = element.id();
@@ -252,32 +278,43 @@ public final class AetherHudEditorScreen extends GuiScreen {
         }
         Mc189Compat.drawStringWithShadow(font, name, barX + 6, barY + 4, 0xFFFFFFFF);
 
+        // Enable / Disable Toggle Button
+        boolean isEnabled = renderer.enabled(element.id());
+        int toggleX = barX + 65;
+        int toggleY = barY + 3;
+        boolean hoverToggle = mouseX >= toggleX && mouseX <= toggleX + 32 && mouseY >= toggleY && mouseY <= toggleY + 18;
+        int toggleColor = isEnabled ? (hoverToggle ? 0xFF38A169 : 0xFF289C50) : (hoverToggle ? 0xFFE53E3E : 0xFFA03232);
+        Mc189Compat.drawRoundedRectangle(toggleX, toggleY, 32, 18, 2, toggleColor, 0);
+        Mc189Compat.drawStringWithShadow(font, isEnabled ? "ON" : "OFF", toggleX + (isEnabled ? 8 : 5), toggleY + 5, 0xFFFFFFFF);
+
         // Scale Control
         int scalePct = Math.round(element.scale() * 100.0F);
         String scaleText = "Scale: " + scalePct + "%";
-        Mc189Compat.drawStringWithShadow(font, scaleText, barX + 80, barY + 4, 0xFF52BEEB);
+        Mc189Compat.drawStringWithShadow(font, scaleText, barX + 104, barY + 4, 0xFF52BEEB);
 
         // Opacity Control
         int opacityPct = Math.round(element.opacity() * 100.0F);
         String opacityText = "Alpha: " + opacityPct + "%";
-        Mc189Compat.drawStringWithShadow(font, opacityText, barX + 145, barY + 4, 0xFFA0AEC0);
+        Mc189Compat.drawStringWithShadow(font, opacityText, barX + 172, barY + 4, 0xFFA0AEC0);
 
         // Reset Button
-        int btnX = barX + barW - 38;
+        int btnX = barX + barW - 36;
         int btnY = barY + 3;
-        boolean hoverReset = mouseX >= btnX && mouseX <= btnX + 34 && mouseY >= btnY && mouseY <= btnY + 18;
-        Mc189Compat.drawRect(btnX, btnY, btnX + 34, btnY + 18, hoverReset ? 0xCCFF5555 : 0x44FF5555);
-        Mc189Compat.drawStringWithShadow(font, "Reset", btnX + 4, btnY + 5, 0xFFFFFFFF);
+        boolean hoverReset = mouseX >= btnX && mouseX <= btnX + 32 && mouseY >= btnY && mouseY <= btnY + 18;
+        Mc189Compat.drawRoundedRectangle(btnX, btnY, 32, 18, 2, hoverReset ? 0xCCFF5555 : 0x44FF5555, 0);
+        Mc189Compat.drawStringWithShadow(font, "Reset", btnX + 3, btnY + 5, 0xFFFFFFFF);
     }
 
     private void drawHelpBar() {
         Object font = Mc189Compat.screenFontRenderer(this);
         String help = "[Drag] Move  |  [Scroll] Scale  |  [Shift+Scroll] Opacity  |  [R] Reset  |  [ESC] Save & Exit";
         int textW = Mc189Compat.stringWidth(font, help);
-        int barX = (width - textW - 16) / 2;
-        int barY = height - 22;
+        int w = Mc189Compat.screenWidth(this);
+        int h = Mc189Compat.screenHeight(this);
+        int barX = (w - textW - 16) / 2;
+        int barY = h - 22;
 
-        Mc189Compat.drawRect(barX, barY, barX + textW + 16, barY + 18, 0xDD10141B);
+        Mc189Compat.drawRoundedRectangle(barX, barY, textW + 16, 18, 3, 0xDD10141B, 0);
         Mc189Compat.drawStringWithShadow(font, help, barX + 8, barY + 5, ACCENT_COLOR);
     }
 
@@ -289,17 +326,27 @@ public final class AetherHudEditorScreen extends GuiScreen {
         if (selectedElement != null) {
             Dimension dim = elementDimensions.get(selectedElement.id());
             int elementW = dim != null ? dim.width : 50;
-            int barW = 220;
+            int barW = 270;
             int barH = 26;
-            int barX = Math.max(8, Math.min(width - barW - 8, selectedElement.x() + (elementW - barW) / 2));
+            int w = Mc189Compat.screenWidth(this);
+            int barX = Math.max(8, Math.min(w - barW - 8, selectedElement.x() + (elementW - barW) / 2));
             int barY = selectedElement.y() - barH - 8;
             if (barY < 8) {
                 barY = selectedElement.y() + (dim != null ? dim.height : 12) + 8;
             }
 
-            int btnX = barX + barW - 38;
+            int toggleX = barX + 65;
+            int toggleY = barY + 3;
+            if (mouseX >= toggleX && mouseX <= toggleX + 32 && mouseY >= toggleY && mouseY <= toggleY + 18) {
+                boolean currentState = renderer.enabled(selectedElement.id());
+                client.modules().setEnabled(selectedElement.id(), !currentState);
+                saveQuietly();
+                return;
+            }
+
+            int btnX = barX + barW - 36;
             int btnY = barY + 3;
-            if (mouseX >= btnX && mouseX <= btnX + 34 && mouseY >= btnY && mouseY <= btnY + 18) {
+            if (mouseX >= btnX && mouseX <= btnX + 32 && mouseY >= btnY && mouseY <= btnY + 18) {
                 selectedElement.setScale(1.0F);
                 selectedElement.setOpacity(1.0F);
                 calculateDimensions();
@@ -309,7 +356,6 @@ public final class AetherHudEditorScreen extends GuiScreen {
 
         // Check HUD elements
         for (HudElement element : client.hudLayout().elements()) {
-            if (!renderer.enabled(element.id())) continue;
             Dimension dim = elementDimensions.get(element.id());
             if (dim == null) continue;
 
@@ -327,41 +373,65 @@ public final class AetherHudEditorScreen extends GuiScreen {
     }
 
     @Override
-    public void handleMouseInput() throws IOException {
-        super.handleMouseInput();
-        int dWheel = Mc189Compat.mouseWheelDelta();
-        if (dWheel != 0) {
-            int mouseX = Mc189Compat.mouseX() * width / Mc189Compat.displayWidth(Mc189Compat.minecraft());
-            int mouseY = height - Mc189Compat.mouseY() * height / Mc189Compat.displayHeight(Mc189Compat.minecraft()) - 1;
+    protected void mouseClickMove(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
+        if (draggingElement != null) {
+            updateDraggingPosition(mouseX, mouseY);
+        }
+    }
 
-            HudElement target = selectedElement;
-            if (target == null) {
-                for (HudElement element : client.hudLayout().elements()) {
-                    if (!renderer.enabled(element.id())) continue;
-                    Dimension dim = elementDimensions.get(element.id());
-                    if (dim != null && mouseX >= element.x() && mouseX <= element.x() + dim.width &&
-                        mouseY >= element.y() && mouseY <= element.y() + dim.height) {
-                        target = element;
-                        break;
+    // MCP 1.8.9 obfuscated alias for mouseClickMove
+    protected void func_73862_b(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
+        mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
+    }
+
+    @Override
+    public void handleMouseInput() throws IOException {
+        try {
+            int btn = Mc189Compat.getEventButton();
+            boolean pressed = Mc189Compat.getEventButtonState();
+            int dWheel = Mc189Compat.mouseWheelDelta();
+            int w = Mc189Compat.screenWidth(this);
+            int h = Mc189Compat.screenHeight(this);
+            Object mc = Mc189Compat.minecraft();
+            int mouseX = Mc189Compat.mouseX() * w / Math.max(1, Mc189Compat.displayWidth(mc));
+            int mouseY = h - Mc189Compat.mouseY() * h / Math.max(1, Mc189Compat.displayHeight(mc)) - 1;
+
+            if (btn != -1) {
+                if (pressed) {
+                    mouseClicked(mouseX, mouseY, btn);
+                } else {
+                    mouseReleased(mouseX, mouseY, btn);
+                }
+            } else if (dWheel != 0) {
+                // Scroll wheel: adjust scale or opacity of the target element
+                HudElement target = selectedElement;
+                if (target == null) {
+                    for (HudElement element : client.hudLayout().elements()) {
+                        if (!renderer.enabled(element.id())) continue;
+                        Dimension dim = elementDimensions.get(element.id());
+                        if (dim != null && mouseX >= element.x() && mouseX <= element.x() + dim.width &&
+                            mouseY >= element.y() && mouseY <= element.y() + dim.height) {
+                            target = element;
+                            break;
+                        }
                     }
                 }
-            }
-
-            if (target != null) {
-                boolean shift = isShiftKeyDown();
-                if (shift) {
-                    // Adjust Opacity
-                    float delta = dWheel > 0 ? 0.05F : -0.05F;
-                    float newOpacity = Math.max(0.10F, Math.min(1.0F, target.opacity() + delta));
-                    target.setOpacity(newOpacity);
-                } else {
-                    // Adjust Scale
-                    float delta = dWheel > 0 ? 0.05F : -0.05F;
-                    float newScale = Math.max(0.50F, Math.min(2.50F, target.scale() + delta));
-                    target.setScale(newScale);
-                    calculateDimensions();
+                if (target != null) {
+                    boolean shift = isShiftKeyDown();
+                    if (shift) {
+                        float delta = dWheel > 0 ? 0.05F : -0.05F;
+                        target.setOpacity(Math.max(0.10F, Math.min(1.0F, target.opacity() + delta)));
+                    } else {
+                        float delta = dWheel > 0 ? 0.05F : -0.05F;
+                        target.setScale(Math.max(0.50F, Math.min(2.50F, target.scale() + delta)));
+                        calculateDimensions();
+                    }
                 }
+            } else if (draggingElement != null) {
+                // Mouse moved while button held — update drag position
+                updateDraggingPosition(mouseX, mouseY);
             }
+        } catch (Throwable ignored) {
         }
     }
 
@@ -390,22 +460,41 @@ public final class AetherHudEditorScreen extends GuiScreen {
                 calculateDimensions();
             } else if (keyCode == KEY_MINUS) {
                 selectedElement.setScale(Math.max(0.50F, selectedElement.scale() - 0.05F));
-                calculateDimensions();
-            } else if (keyCode == KEY_RBRACKET) {
-                selectedElement.setOpacity(Math.min(1.00F, selectedElement.opacity() + 0.05F));
             } else if (keyCode == KEY_LBRACKET) {
                 selectedElement.setOpacity(Math.max(0.10F, selectedElement.opacity() - 0.05F));
             }
         }
     }
 
+    protected void func_73864_a(int mouseX, int mouseY, int mouseButton) throws IOException {
+        mouseClicked(mouseX, mouseY, mouseButton);
+    }
+
+    public void func_146274_d() throws IOException {
+        handleMouseInput();
+    }
+
+    protected void func_146286_b(int mouseX, int mouseY, int state) {
+        mouseReleased(mouseX, mouseY, state);
+    }
+
+    protected void func_73869_a(char typedChar, int keyCode) throws IOException {
+        keyTyped(typedChar, keyCode);
+    }
+
+    public boolean func_73868_f() {
+        return false;
+    }
+
     private void drawGrid() {
+        int w = Mc189Compat.screenWidth(this);
+        int h = Mc189Compat.screenHeight(this);
         int snap = 16;
-        for (int x = 0; x < width; x += snap) {
-            Mc189Compat.drawRect(x, 0, x + 1, height, 0x0DFFFFFF);
+        for (int x = 0; x < w; x += snap) {
+            Mc189Compat.drawRect(x, 0, x + 1, h, 0x0DFFFFFF);
         }
-        for (int y = 0; y < height; y += snap) {
-            Mc189Compat.drawRect(0, y, width, y + 1, 0x0DFFFFFF);
+        for (int y = 0; y < h; y += snap) {
+            Mc189Compat.drawRect(0, y, w, y + 1, 0x0DFFFFFF);
         }
     }
 

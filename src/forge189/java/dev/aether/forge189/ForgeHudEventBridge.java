@@ -23,17 +23,26 @@ final class ForgeHudEventBridge {
                 Mc189Compat.scaledHeight(event.resolution),
                 event.partialTicks
             ));
+            boolean scoreboardCustom = client.modules().get("interface.scoreboard_customization").state() == ClientModule.ModuleState.ENABLED;
+            Mc189Compat.setScoreboardDisabled(scoreboardCustom);
             renderer.render();
+            if (scoreboardCustom) {
+                renderer.renderScoreboard();
+            }
         }
     }
 
     @SubscribeEvent
     public void onRenderOverlayPre(RenderGameOverlayEvent.Pre event) {
-        if (event.type != RenderGameOverlayEvent.ElementType.CROSSHAIRS) {
-            return;
+        if (event.type == RenderGameOverlayEvent.ElementType.BOSSHEALTH) {
+            if (client.modules().get("interface.bossbar").state() == ClientModule.ModuleState.ENABLED) {
+                event.setCanceled(true);
+            }
         }
-        if (client.modules().get("graphics.custom_crosshair").state() == ClientModule.ModuleState.ENABLED) {
-            event.setCanceled(true);
+        if (event.type == RenderGameOverlayEvent.ElementType.CROSSHAIRS) {
+            if (client.modules().get("graphics.custom_crosshair").state() == ClientModule.ModuleState.ENABLED) {
+                event.setCanceled(true);
+            }
         }
     }
 }

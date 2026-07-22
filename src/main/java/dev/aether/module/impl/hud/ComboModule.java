@@ -8,7 +8,7 @@ public class ComboModule extends AbstractModule {
     public ComboModule() {
         super(ModuleMetadata.builder("hud.combo", "Combo Counter")
             .category(ModuleCategory.HUD)
-            .description("Provides a reserved HUD slot for fair-play combo stats.")
+            .description("Tracks and displays your hit combo count on the HUD during combat.")
             .build());
     }
 }

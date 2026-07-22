@@ -1,11 +1,11 @@
 package dev.aether.forge189;
 
 import dev.aether.AetherClient;
+import dev.aether.forge189.mixin.ItemRendererMixin;
 import dev.aether.module.ClientModule.ModuleState;
 import dev.aether.module.setting.Setting;
 import dev.aether.platform.ClientTickEvent;
 import dev.aether.platform.KeyInputEvent;
-import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.RenderGlobal;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.WorldRenderer;
@@ -44,6 +44,7 @@ final class ForgeClientEventBridge {
     private Integer originalHurtTime;
     private Integer originalMaxHurtTime;
     private Float originalAttackedAtYaw;
+    private boolean modMenuKeyDown;
 
     ForgeClientEventBridge(AetherClient client, ForgeKeyBindings keyBindings) {
         this.client = client;
@@ -57,9 +58,9 @@ final class ForgeClientEventBridge {
         }
         client.eventBus().publish(new ClientTickEvent(Mc189Compat.tickTimeMillis()));
         applyToggleSprint();
-        applyToggleSneak();
         applySnaplook();
         applyClientEffects();
+        checkModMenuKey();
     }
 
     @SubscribeEvent
@@ -114,7 +115,6 @@ final class ForgeClientEventBridge {
     @SubscribeEvent
     public void onAttackEntity(AttackEntityEvent event) {
         applyAttackParticles(event.target);
-        applyHitSound(event.target);
     }
 
     @SubscribeEvent
@@ -122,68 +122,91 @@ final class ForgeClientEventBridge {
         if (!enabled("pvp.block_overlay") || Mc189Compat.typeOfHit(event.target) != MovingObjectPosition.MovingObjectType.BLOCK) {
             return;
         }
+
+        net.minecraft.util.BlockPos blockpos = (net.minecraft.util.BlockPos) Mc189Compat.blockPos(event.target);
+        Object world = Mc189Compat.world(Mc189Compat.minecraft());
+        if (world == null || blockpos == null) {
+            return;
+        }
+
+        net.minecraft.block.state.IBlockState state = Mc189Compat.getBlockState(world, blockpos);
+        net.minecraft.block.Block block = Mc189Compat.getBlock(state);
+        if (block == null || Mc189Compat.getMaterial(block) == net.minecraft.block.material.Material.air
+                || !Mc189Compat.worldBorderContains(Mc189Compat.getWorldBorder(world), blockpos)) {
+            return;
+        }
+
+        AxisAlignedBB rawBox = Mc189Compat.getSelectedBoundingBox(block, world, blockpos);
+        if (rawBox == null) {
+            return;
+        }
+
+        // All guards passed — cancel the vanilla highlight and draw ours.
         event.setCanceled(true);
 
-        GlStateManager.enableBlend();
-        GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
-        GlStateManager.disableTexture2D();
-        GlStateManager.depthMask(false);
+        double d0 = Mc189Compat.lastTickPosX(event.player) + (Mc189Compat.posX(event.player) - Mc189Compat.lastTickPosX(event.player)) * (double) event.partialTicks;
+        double d1 = Mc189Compat.lastTickPosY(event.player) + (Mc189Compat.posY(event.player) - Mc189Compat.lastTickPosY(event.player)) * (double) event.partialTicks;
+        double d2 = Mc189Compat.lastTickPosZ(event.player) + (Mc189Compat.posZ(event.player) - Mc189Compat.lastTickPosZ(event.player)) * (double) event.partialTicks;
+        AxisAlignedBB boundingBox = rawBox.expand(0.002, 0.002, 0.002).offset(-d0, -d1, -d2);
+
+        // Set up GL state — MUST be restored in the finally block no matter what.
+        Mc189Compat.enableBlend();
+        Mc189Compat.tryBlendFuncSeparate(770, 771, 1, 0);
+        Mc189Compat.disableTexture2D();
+        Mc189Compat.depthMask(false);
 
         float thickness = (float) settingInt("pvp.block_overlay", "thickness", 2);
         Mc189Compat.glLineWidth(thickness);
 
-        net.minecraft.util.BlockPos blockpos = (net.minecraft.util.BlockPos) Mc189Compat.blockPos(event.target);
-        Object world = Mc189Compat.world(Mc189Compat.minecraft());
-        net.minecraft.block.state.IBlockState state = ((net.minecraft.world.World) world).getBlockState(blockpos);
-        net.minecraft.block.Block block = state.getBlock();
-
-        if (block.getMaterial() != net.minecraft.block.material.Material.air && ((net.minecraft.world.World) world).getWorldBorder().contains(blockpos)) {
-            double d0 = event.player.lastTickPosX + (event.player.posX - event.player.lastTickPosX) * (double) event.partialTicks;
-            double d1 = event.player.lastTickPosY + (event.player.posY - event.player.lastTickPosY) * (double) event.partialTicks;
-            double d2 = event.player.lastTickPosZ + (event.player.posZ - event.player.lastTickPosZ) * (double) event.partialTicks;
-            AxisAlignedBB boundingBox = block.getSelectedBoundingBox((net.minecraft.world.World) world, blockpos).expand(0.002, 0.002, 0.002).offset(-d0, -d1, -d2);
-
+        try {
             if (settingBool("pvp.block_overlay", "fill", true)) {
                 int color = settingColor("pvp.block_overlay", "fill_color", 0x4452BEEB);
                 float a = (float)(color >> 24 & 255) / 255.0F;
                 float r = (float)(color >> 16 & 255) / 255.0F;
-                float g = (float)(color >> 8 & 255) / 255.0F;
-                float b = (float)(color & 255) / 255.0F;
-                GlStateManager.color(r, g, b, a);
-                drawFilledBoundingBox(boundingBox);
+                float g = (float)(color >>  8 & 255) / 255.0F;
+                float b = (float)(color       & 255) / 255.0F;
+                Mc189Compat.color(r, g, b, a);
+                Mc189Compat.drawFilledBoundingBox(boundingBox);
             }
 
             if (settingBool("pvp.block_overlay", "outline", true)) {
                 int color = settingColor("pvp.block_overlay", "outline_color", 0x8852BEEB);
                 float a = (float)(color >> 24 & 255) / 255.0F;
                 float r = (float)(color >> 16 & 255) / 255.0F;
-                float g = (float)(color >> 8 & 255) / 255.0F;
-                float b = (float)(color & 255) / 255.0F;
-                GlStateManager.color(r, g, b, a);
-                RenderGlobal.drawSelectionBoundingBox(boundingBox);
+                float g = (float)(color >>  8 & 255) / 255.0F;
+                float b = (float)(color       & 255) / 255.0F;
+                Mc189Compat.color(r, g, b, a);
+                Mc189Compat.drawSelectionBoundingBox(boundingBox);
             }
+        } finally {
+            // Always restore GL state — failure to do so causes subsequent draws
+            // (HUD, chat, inventory) to render without textures = solid white.
+            Mc189Compat.color(1.0F, 1.0F, 1.0F, 1.0F);
+            Mc189Compat.glLineWidth(1.0F);
+            Mc189Compat.depthMask(true);
+            Mc189Compat.enableTexture2D();
+            Mc189Compat.disableBlend();
         }
-
-        GlStateManager.depthMask(true);
-        GlStateManager.enableTexture2D();
-        GlStateManager.disableBlend();
     }
 
     @SubscribeEvent
     public void onRenderLivingPost(RenderLivingEvent.Post<EntityLivingBase> event) {
-        if (enabled("graphics.hit_color") && event.entity.hurtTime > 0) {
+        if (enabled("graphics.hit_color") && Mc189Compat.hurtTime(event.entity) > 0) {
             int color = settingColor("graphics.hit_color", "color", 0xFFFF5555);
             float a = (float)(color >> 24 & 255) / 255.0F;
             float r = (float)(color >> 16 & 255) / 255.0F;
             float g = (float)(color >> 8 & 255) / 255.0F;
             float b = (float)(color & 255) / 255.0F;
 
-            GlStateManager.pushMatrix();
-            GlStateManager.disableTexture2D();
-            GlStateManager.color(r, g, b, a);
-            RenderGlobal.drawSelectionBoundingBox(event.entity.getEntityBoundingBox().offset(-event.entity.posX, -event.entity.posY, -event.entity.posZ).offset(event.x, event.y, event.z));
-            GlStateManager.enableTexture2D();
-            GlStateManager.popMatrix();
+            AxisAlignedBB bb = Mc189Compat.getEntityBoundingBox(event.entity);
+            if (bb != null) {
+                Mc189Compat.pushMatrix();
+                Mc189Compat.disableTexture2D();
+                Mc189Compat.color(r, g, b, a);
+                Mc189Compat.drawSelectionBoundingBox(bb.offset(-Mc189Compat.posX(event.entity), -Mc189Compat.posY(event.entity), -Mc189Compat.posZ(event.entity)).offset(event.x, event.y, event.z));
+                Mc189Compat.enableTexture2D();
+                Mc189Compat.popMatrix();
+            }
         }
     }
 
@@ -194,21 +217,36 @@ final class ForgeClientEventBridge {
             client.modules().setEnabled("developer.overlay", enabled);
             client.eventBus().publish(new KeyInputEvent("developer.overlay", Mc189Compat.keyCode(keyBindings.developerOverlay())));
         }
-        if (Mc189Compat.keyPressed(keyBindings.modMenu())) {
-            client.eventBus().publish(new KeyInputEvent("mod_menu", Mc189Compat.keyCode(keyBindings.modMenu())));
+        checkModMenuKey();
+    }
+
+    private void checkModMenuKey() {
+        Object mc = Mc189Compat.minecraft();
+        if (Mc189Compat.currentScreen(mc) != null) {
+            this.modMenuKeyDown = false;
+            return;
+        }
+        int code = Mc189Compat.keyCode(keyBindings.modMenu());
+        boolean isDown = Mc189Compat.keyPressed(keyBindings.modMenu()) || Mc189Compat.keyboardKeyDown(code);
+        if (isDown && !this.modMenuKeyDown) {
+            client.eventBus().publish(new KeyInputEvent("mod_menu", code));
             Mc189Compat.displayGuiScreen(new AetherQuickNavScreen(client));
         }
+        this.modMenuKeyDown = isDown;
     }
 
     private void applyToggleSprint() {
         Object minecraft = Mc189Compat.minecraft();
         Object gameSettings = Mc189Compat.gameSettings(minecraft);
         if (!enabled("pvp.toggle_sprint")) {
-            this.toggleSprintActive = false;
-            this.toggleSprintKeyDown = false;
-            if (gameSettings != null) {
+            // Only clear the forced-sprint state once when transitioning to disabled.
+            // Do NOT call setKeyBindState every tick — that overwrites MC's own key
+            // state and prevents vanilla sprinting from working.
+            if (this.toggleSprintActive && gameSettings != null) {
                 Mc189Compat.setKeyBindState(Mc189Compat.keySprint(gameSettings), false);
             }
+            this.toggleSprintActive = false;
+            this.toggleSprintKeyDown = false;
             return;
         }
         boolean keyDown = Mc189Compat.keyboardKeyDown(settingInt("pvp.toggle_sprint", "keybind", 29));
@@ -227,32 +265,6 @@ final class ForgeClientEventBridge {
         }
     }
 
-    private boolean toggleSneakActive;
-    private boolean toggleSneakKeyDown;
-
-    private void applyToggleSneak() {
-        Object minecraft = Mc189Compat.minecraft();
-        Object gameSettings = Mc189Compat.gameSettings(minecraft);
-        if (!enabled("pvp.toggle_sneak")) {
-            this.toggleSneakActive = false;
-            this.toggleSneakKeyDown = false;
-            if (gameSettings != null) {
-                Mc189Compat.setKeyBindState(Mc189Compat.keyBindSneak(gameSettings), false);
-            }
-            return;
-        }
-        boolean keyDown = Mc189Compat.keyboardKeyDown(settingInt("pvp.toggle_sneak", "keybind", 42));
-        if (keyDown && !this.toggleSneakKeyDown) {
-            this.toggleSneakActive = !this.toggleSneakActive;
-        }
-        this.toggleSneakKeyDown = keyDown;
-
-        Object player = Mc189Compat.player(minecraft);
-        if (player == null || gameSettings == null) {
-            return;
-        }
-        Mc189Compat.setKeyBindState(Mc189Compat.keyBindSneak(gameSettings), this.toggleSneakActive);
-    }
 
     private boolean snaplookActive;
 
@@ -286,6 +298,8 @@ final class ForgeClientEventBridge {
             applyFreelook(gameSettings);
         }
         applyWeatherToggle(minecraft);
+        applyTimeChanger(minecraft);
+        applyAnimationState();
     }
 
     private void applyFullbright(Object gameSettings) {
@@ -305,14 +319,6 @@ final class ForgeClientEventBridge {
     private void applyFpsOptimizer(Object gameSettings) {
         boolean active = enabled("performance.fps_optimizer");
         if (active) {
-            if (settingBool("performance.fps_optimizer", "limit_particles", true)) {
-                if (this.originalParticles == null) {
-                    this.originalParticles = Integer.valueOf(Mc189Compat.particleSetting(gameSettings));
-                }
-                Mc189Compat.setParticleSetting(gameSettings, 2);
-            } else {
-                restoreParticles(gameSettings);
-            }
             if (settingBool("performance.fps_optimizer", "fast_graphics", true)) {
                 if (this.originalFancyGraphics == null) {
                     this.originalFancyGraphics = Boolean.valueOf(Mc189Compat.fancyGraphics(gameSettings));
@@ -321,6 +327,7 @@ final class ForgeClientEventBridge {
             } else {
                 restoreFancyGraphics(gameSettings);
             }
+
             if (settingBool("performance.fps_optimizer", "use_vbo", true)) {
                 if (this.originalUseVbo == null) {
                     this.originalUseVbo = Boolean.valueOf(Mc189Compat.useVbo(gameSettings));
@@ -328,41 +335,6 @@ final class ForgeClientEventBridge {
                 Mc189Compat.setUseVbo(gameSettings, true);
             } else {
                 restoreUseVbo(gameSettings);
-            }
-            int fpsLimit = clamp(settingInt("performance.fps_optimizer", "fps_limit", 260), 30, 1000);
-            if (this.originalLimitFramerate == null) {
-                this.originalLimitFramerate = Integer.valueOf(Mc189Compat.limitFramerate(gameSettings));
-            }
-            if (Mc189Compat.limitFramerate(gameSettings) < fpsLimit) {
-                Mc189Compat.setLimitFramerate(gameSettings, fpsLimit);
-            }
-            int maxDist = clamp(settingInt("performance.fps_optimizer", "max_render_distance", 8), 2, 32);
-            if (maxDist > 0) {
-                if (this.originalRenderDistance == null) {
-                    this.originalRenderDistance = Integer.valueOf(Mc189Compat.renderDistanceChunks(gameSettings));
-                }
-                int current = Mc189Compat.renderDistanceChunks(gameSettings);
-                Mc189Compat.setRenderDistanceChunks(gameSettings, Math.max(2, Math.min(current, maxDist)));
-            } else {
-                restoreRenderDistance(gameSettings);
-            }
-
-            if (settingBool("performance.fps_optimizer", "disable_entity_shadows", true)) {
-                if (this.originalEntityShadows == null) {
-                    this.originalEntityShadows = Boolean.valueOf(Mc189Compat.entityShadows(gameSettings));
-                }
-                Mc189Compat.setEntityShadows(gameSettings, false);
-            } else {
-                restoreEntityShadows(gameSettings);
-            }
-
-            if (settingBool("performance.fps_optimizer", "disable_clouds", true)) {
-                if (this.originalClouds == null) {
-                    this.originalClouds = Integer.valueOf(Mc189Compat.clouds(gameSettings));
-                }
-                Mc189Compat.setClouds(gameSettings, 0);
-            } else {
-                restoreClouds(gameSettings);
             }
 
             if (settingBool("performance.fps_optimizer", "fast_lighting", true)) {
@@ -380,8 +352,7 @@ final class ForgeClientEventBridge {
                     this.nextMemoryCleanupMillis = now + 45000L;
                     Runtime runtime = Runtime.getRuntime();
                     long used = runtime.totalMemory() - runtime.freeMemory();
-                    long threshold = clamp(settingInt("performance.fps_optimizer", "memory_threshold", 70), 1, 95);
-                    if (used > runtime.totalMemory() * threshold / 100L) {
+                    if (used > runtime.totalMemory() * 70L / 100L) {
                         System.gc();
                     }
                 }
@@ -389,13 +360,8 @@ final class ForgeClientEventBridge {
             return;
         }
 
-        restoreParticles(gameSettings);
         restoreFancyGraphics(gameSettings);
         restoreUseVbo(gameSettings);
-        restoreLimitFramerate(gameSettings);
-        restoreRenderDistance(gameSettings);
-        restoreEntityShadows(gameSettings);
-        restoreClouds(gameSettings);
         restoreAmbientOcclusion(gameSettings);
     }
 
@@ -466,6 +432,27 @@ final class ForgeClientEventBridge {
         Object world = Mc189Compat.world(minecraft);
         if (world != null) {
             Mc189Compat.setWorldRain(world, false);
+        }
+    }
+
+    private void applyTimeChanger(Object minecraft) {
+        if (!enabled("graphics.time_changer")) {
+            return;
+        }
+        Object world = Mc189Compat.world(minecraft);
+        if (world != null) {
+            long offset = (long) clamp(settingInt("graphics.time_changer", "offset", 12000), 0, 24000);
+            long worldTime = Mc189Compat.worldTime(world);
+            long dayBase = (worldTime / 24000L) * 24000L;
+            // Freeze world time at the configured offset (time-of-day)
+            Mc189Compat.setWorldTime(world, dayBase + offset);
+        }
+    }
+
+    private void applyAnimationState() {
+        boolean animationEnabled = enabled("graphics.animation");
+        if (ItemRendererMixin.animationEnabled != animationEnabled) {
+            ItemRendererMixin.animationEnabled = animationEnabled;
         }
     }
 
@@ -613,32 +600,6 @@ final class ForgeClientEventBridge {
             && !Mc189Compat.riding(player);
     }
 
-    private void applyHitSound(Object target) {
-        if (!enabled("pvp.hit_sound") || target == null) return;
-        Object mc = Mc189Compat.minecraft();
-        Object player = Mc189Compat.player(mc);
-        if (player == null) return;
-
-        String soundType = settingString("pvp.hit_sound", "sound_type", "Ding");
-        int pitchSetting = settingInt("pvp.hit_sound", "pitch", 100);
-        int volumeSetting = settingInt("pvp.hit_sound", "volume", 100);
-
-        float pitch = pitchSetting / 100.0F;
-        float volume = volumeSetting / 100.0F;
-
-        String soundName = "random.orb";
-        if ("Ding".equalsIgnoreCase(soundType)) soundName = "random.orb";
-        else if ("Anvil".equalsIgnoreCase(soundType)) soundName = "random.anvil_land";
-        else if ("Pop".equalsIgnoreCase(soundType)) soundName = "random.pop";
-        else if ("Orb".equalsIgnoreCase(soundType)) soundName = "random.orb";
-        else if ("Subtle Click".equalsIgnoreCase(soundType)) soundName = "gui.button.press";
-
-        Mc189Compat.playSound(mc, soundName, volume, pitch);
-
-        if (settingBool("pvp.hit_sound", "spawn_particles", true)) {
-            Mc189Compat.onCriticalHit(player, target);
-        }
-    }
 
     private boolean enabled(String id) {
         try {

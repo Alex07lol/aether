@@ -128,15 +128,12 @@ public final class AetherModMenuScreen extends GuiScreen {
         CHOICE_OPTIONS.put("hud.coordinates.mode",                new String[]{"Horizontal", "Vertical"});
         CHOICE_OPTIONS.put("hud.potions.mode",                    new String[]{"Compact", "Detailed"});
         CHOICE_OPTIONS.put("pvp.toggle_sprint.mode",              new String[]{"Modern", "Legacy"});
-        CHOICE_OPTIONS.put("pvp.toggle_sneak.mode",               new String[]{"Modern", "Legacy"});
         CHOICE_OPTIONS.put("hud.cps.mode",                        new String[]{"Modern", "Legacy"});
-        CHOICE_OPTIONS.put("hud.day_counter.mode",                new String[]{"Modern", "Legacy"});
         CHOICE_OPTIONS.put("hud.ping.mode",                       new String[]{"Modern", "Legacy"});
         CHOICE_OPTIONS.put("hud.reach_display.mode",              new String[]{"Modern", "Legacy"});
         CHOICE_OPTIONS.put("hud.speed_indicator.mode",            new String[]{"Modern", "Legacy"});
         CHOICE_OPTIONS.put("hud.server_address.mode",             new String[]{"Modern", "Legacy"});
         CHOICE_OPTIONS.put("hud.fps_graph.graph_mode",            new String[]{"Sparkline", "Bar Chart"});
-        CHOICE_OPTIONS.put("pvp.hit_sound.sound_type",            new String[]{"Ding", "Anvil", "Pop", "Orb", "Subtle Click"});
     }
 
     /* ------------------------------------------------------------------ */
@@ -153,6 +150,8 @@ public final class AetherModMenuScreen extends GuiScreen {
     /* ------------------------------------------------------------------ */
     /*  Constructors                                                       */
     /* ------------------------------------------------------------------ */
+
+    private final Map<String, Boolean> textureExistsCache = new HashMap<>();
 
     public AetherModMenuScreen(AetherClient client) {
         this(client, null);
@@ -258,6 +257,11 @@ public final class AetherModMenuScreen extends GuiScreen {
         }
     }
 
+    // MCP 1.8.9 obfuscated alias for mouseClickMove
+    protected void func_73862_b(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
+        mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
+    }
+
     @Override
     protected void mouseReleased(int mouseX, int mouseY, int state) {
         if (dragState != DRAG_NONE) {
@@ -267,6 +271,11 @@ public final class AetherModMenuScreen extends GuiScreen {
             draggedController = null;
             saveClient();
         }
+    }
+
+    // MCP 1.8.9 obfuscated alias for mouseReleased
+    protected void func_73861_b(int mouseX, int mouseY, int state) {
+        mouseReleased(mouseX, mouseY, state);
     }
 
     @Override
@@ -300,10 +309,28 @@ public final class AetherModMenuScreen extends GuiScreen {
 
     @Override
     public void handleMouseInput() throws IOException {
-        super.handleMouseInput();
-        int dWheel = Mc189Compat.mouseWheelDelta();
-        if (dWheel != 0) {
-            handleWheelScroll(-dWheel / 8);
+        try {
+            int btn = Mc189Compat.getEventButton();
+            boolean pressed = Mc189Compat.getEventButtonState();
+            int dWheel = Mc189Compat.mouseWheelDelta();
+            int w = Mc189Compat.screenWidth(this);
+            int h = Mc189Compat.screenHeight(this);
+            Object mc = Mc189Compat.minecraft();
+            int mouseX = Mc189Compat.mouseX() * w / Math.max(1, Mc189Compat.displayWidth(mc));
+            int mouseY = h - Mc189Compat.mouseY() * h / Math.max(1, Mc189Compat.displayHeight(mc)) - 1;
+            if (btn != -1) {
+                if (pressed) {
+                    click(mouseX, mouseY, btn);
+                } else {
+                    mouseReleased(mouseX, mouseY, btn);
+                }
+            } else if (dWheel != 0) {
+                handleWheelScroll(-dWheel / 8);
+            } else if (dragState == DRAG_SLIDER && draggedSetting != null && draggedController != null) {
+                // mouse moved while held — treat as drag
+                draggedController.drag(draggedSetting, mouseX);
+            }
+        } catch (Throwable ignored) {
         }
     }
 
@@ -337,8 +364,16 @@ public final class AetherModMenuScreen extends GuiScreen {
     }
 
     private void updateFilteredModules() {
-        moduleGridPanel.setModules(filteredModules());
+        List<ClientModule> filtered = filteredModules();
+        moduleGridPanel.setModules(filtered);
         moduleGridPanel.scrollOffset = 0;
+        // Keep property panel in sync: if the selected module is no longer visible
+        // in the filtered list, auto-select the first match so the panel always
+        // reflects what's shown in the grid.
+        if (!filtered.contains(selectedModule)) {
+            selectedModule = filtered.isEmpty() ? null : filtered.get(0);
+            propertyPanel.setModule(selectedModule);
+        }
     }
 
     private List<ClientModule> filteredModules() {
@@ -701,29 +736,20 @@ public final class AetherModMenuScreen extends GuiScreen {
          * as an image placeholder for the module icon.
          */
         private void drawModuleIconPlaceholder(Object font, ClientModule mod, int ix, int iy, int size) {
-            // Try to load actual texture first
-            String texturePath = "textures/mod/" + mod.metadata().id() + ".png";
-            try {
-                Mc189Compat.drawTexture(texturePath, ix, iy, size, size);
-                return; // If texture exists, we're done
-            } catch (Exception ignored) {
-                // Fall through to placeholder
-            }
-
-            // Coloured placeholder based on category
+            // 1. Draw procedural background card container
             Integer catColor = CATEGORY_ICON_COLORS.get(mod.metadata().category());
-            int bgColor = catColor != null ? catColor : 0xFF4A5568;
+            int bgColor = catColor != null ? catColor : 0xFF1E2838;
             Mc189Compat.drawRect(ix, iy, ix + size, iy + size, bgColor);
 
-            // Subtle inner border
+            // Subtle inner border bevel
             Mc189Compat.drawRect(ix, iy, ix + size, iy + 1, 0x33FFFFFF);
             Mc189Compat.drawRect(ix, iy + size - 1, ix + size, iy + size, 0x22000000);
             Mc189Compat.drawRect(ix, iy, ix + 1, iy + size, 0x22FFFFFF);
             Mc189Compat.drawRect(ix + size - 1, iy, ix + size, iy + size, 0x22000000);
 
-            // First letter centred
-            String letter = mod.metadata().name().substring(0, 1).toUpperCase();
-            AetherUi.centered(font, letter, ix, iy + (size - 8) / 2, size, 0xFFFFFFFF);
+            // 2. Draw custom PNG module icon texture
+            String texturePath = "textures/mod/" + mod.metadata().id() + ".png";
+            Mc189Compat.drawTexture(texturePath, ix, iy, size, size);
         }
 
         @Override
@@ -800,9 +826,9 @@ public final class AetherModMenuScreen extends GuiScreen {
                             on ? AetherUi.MODERN_UI_ACCENT : AetherUi.COLOR_TEXT_DISABLED);
                 }
                 @Override public void click(Setting<?> setting, int mouseX, int mouseY) {
+                    // Row Y already verified by outer mouseClicked loop; only check X.
                     int toggleX = PropertyPanel.this.x + PropertyPanel.this.width - 45;
-                    int rowY = findRowY(setting);
-                    if (mouseX >= toggleX && mouseX <= toggleX + 30 && mouseY >= rowY && mouseY <= rowY + 14) {
+                    if (mouseX >= toggleX && mouseX <= toggleX + 30) {
                         setSettingValue(setting, !((Boolean) setting.value()));
                         saveClient();
                         writeLastChange("Setting '" + setting.label() + "' -> " + setting.value());
@@ -817,9 +843,9 @@ public final class AetherModMenuScreen extends GuiScreen {
                     Mc189Compat.drawRect(swatchX, y, swatchX + 30, y + 14, ((Number) setting.value()).intValue());
                 }
                 @Override public void click(Setting<?> setting, int mouseX, int mouseY) {
+                    // Row Y already verified by outer mouseClicked loop; only check X.
                     int swatchX = PropertyPanel.this.x + PropertyPanel.this.width - 45;
-                    int rowY = findRowY(setting);
-                    if (mouseX >= swatchX - 1 && mouseX <= swatchX + 31 && mouseY >= rowY - 1 && mouseY <= rowY + 15) {
+                    if (mouseX >= swatchX - 1 && mouseX <= swatchX + 31) {
                         setSettingValue(setting, nextColor(((Number) setting.value()).intValue()));
                         saveClient();
                         writeLastChange("Setting '" + setting.label() + "' color changed");
@@ -850,11 +876,11 @@ public final class AetherModMenuScreen extends GuiScreen {
                     AetherUi.text(font, valStr, textX, y + 4, AetherUi.COLOR_TEXT_SECONDARY);
                 }
                 @Override public void click(Setting<?> setting, int mouseX, int mouseY) {
+                    // Row Y already verified by outer mouseClicked loop; only check X.
                     int sliderW = Math.min(80, PropertyPanel.this.width - 120);
                     if (sliderW < 30) sliderW = 30;
                     int sliderX = PropertyPanel.this.x + PropertyPanel.this.width - 15 - sliderW;
-                    int rowY = findRowY(setting);
-                    if (mouseX >= sliderX && mouseX <= sliderX + sliderW && mouseY >= rowY + 2 && mouseY <= rowY + 12) {
+                    if (mouseX >= sliderX && mouseX <= sliderX + sliderW) {
                         draggedSetting = setting;
                         dragState = DRAG_SLIDER;
                         draggedController = this;
@@ -894,6 +920,7 @@ public final class AetherModMenuScreen extends GuiScreen {
                     AetherUi.centered(font, trimmed, ctrlX, y + 4, w, AetherUi.COLOR_TEXT_SECONDARY);
                 }
                 @Override public void click(Setting<?> setting, int mouseX, int mouseY) {
+                    // Row Y already verified by outer mouseClicked loop; only check X.
                     Object font = Mc189Compat.screenFontRenderer(AetherModMenuScreen.this);
                     String text = setting.type() == SettingType.KEYBIND
                             ? Mc189Compat.keyName(((Number) setting.value()).intValue())
@@ -902,8 +929,7 @@ public final class AetherModMenuScreen extends GuiScreen {
                     String trimmed = AetherUi.trim(font, text, maxPillW - 10);
                     int w = Math.min(maxPillW, Math.max(34, Mc189Compat.stringWidth(font, trimmed) + 10));
                     int ctrlX = PropertyPanel.this.x + PropertyPanel.this.width - 15 - w;
-                    int rowY = findRowY(setting);
-                    if (mouseX >= ctrlX && mouseX <= ctrlX + w && mouseY >= rowY && mouseY <= rowY + 14) {
+                    if (mouseX >= ctrlX && mouseX <= ctrlX + w) {
                         if (setting.type() == SettingType.KEYBIND) {
                             setSettingValue(setting, nextKeybind(((Number) setting.value()).intValue()));
                         } else {
@@ -947,7 +973,13 @@ public final class AetherModMenuScreen extends GuiScreen {
 
         private int findRowY(Setting<?> target) {
             if (module == null || module.settings().isEmpty()) return -1;
-            int sY = getSettingStartY() + 20;
+            // draw() layout after descY:
+            //   descY+10  = "GENERAL" label  (+20 → descY+30)
+            //   descY+30  = toggle row       (+25 → descY+55)
+            //   descY+55+10 = "SETTINGS" label (+20 → descY+85)
+            //   descY+85  = first setting row
+            // getSettingStartY() returns descY+30, so first row = +55 from that.
+            int sY = getSettingStartY() + 55;
             for (Setting<?> s : module.settings()) {
                 if (s == target) return sY;
                 sY += 22;
@@ -1057,6 +1089,8 @@ public final class AetherModMenuScreen extends GuiScreen {
         @Override
         void mouseClicked(int mouseX, int mouseY, int button) {
             if (button != 0 || module == null || !isHovered(mouseX, mouseY)) return;
+            // Ignore clicks that are visually outside the panel's vertical bounds
+            if (mouseY < y || mouseY > y + height) return;
 
             int contentY = y - (int) scrollOffset;
             int descY = contentY + 34;
@@ -1081,9 +1115,13 @@ public final class AetherModMenuScreen extends GuiScreen {
                 descY += 11;
             }
 
-            int settingY = descY + 30;
+            // ── GENERAL section ──────────────────────────────────────────────
+            // draw() does: settingY = descY + 10, draws "GENERAL", settingY += 20
+            // so the toggle row is at: descY + 10 + 20 = descY + 30
+            int settingY = descY + 10;
+            settingY += 20; // "GENERAL" label height
 
-            // Enabled toggle
+            // Enabled toggle is at settingY
             if (mouseY >= settingY && mouseY <= settingY + 14) {
                 int toggleX = x + width - 45;
                 if (mouseX >= toggleX && mouseX <= toggleX + 30) {
@@ -1091,10 +1129,13 @@ public final class AetherModMenuScreen extends GuiScreen {
                     return;
                 }
             }
-            settingY += 25;
+            settingY += 25; // toggle row height
 
             if (!module.settings().isEmpty()) {
-                settingY += 20;
+                // draw() does: settingY += 10, draws "SETTINGS", settingY += 20
+                settingY += 10;
+                settingY += 20; // "SETTINGS" label height
+
                 for (Setting<?> s : module.settings()) {
                     if (mouseY >= settingY && mouseY <= settingY + 22) {
                         SettingController ctrl = settingControllers.get(s.type());

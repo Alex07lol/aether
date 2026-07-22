@@ -8,7 +8,7 @@ public class ScrollTooltipsModule extends AbstractModule {
     public ScrollTooltipsModule() {
         super(ModuleMetadata.builder("interface.scroll_tooltips", "Scroll Tooltips")
             .category(ModuleCategory.INTERFACE)
-            .description("Allows scrolling within item tooltips.")
+            .description("Enables mouse wheel scrolling within long item and inventory tooltips.")
             .build());
     }
 }

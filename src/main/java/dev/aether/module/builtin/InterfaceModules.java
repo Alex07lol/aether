@@ -9,7 +9,6 @@ import dev.aether.module.impl.interface_.NickHiderModule;
 import dev.aether.module.impl.interface_.NotificationsModule;
 import dev.aether.module.impl.interface_.ScoreboardCustomizationModule;
 import dev.aether.module.impl.interface_.ScreenshotManagerModule;
-import dev.aether.module.impl.interface_.ScrollTooltipsModule;
 import dev.aether.module.impl.interface_.ThemeSelectorModule;
 
 final class InterfaceModules {
@@ -21,11 +20,10 @@ final class InterfaceModules {
         modules.register(new ThemeSelectorModule());
         modules.register(new NotificationsModule());
         modules.register(new ScoreboardCustomizationModule());
+        modules.register(new BossbarModule());
         modules.register(new ChatCustomizationModule());
         modules.register(new ScreenshotManagerModule());
-        modules.register(new BossbarModule());
         modules.register(new GuiTweaksModule());
         modules.register(new NickHiderModule());
-        modules.register(new ScrollTooltipsModule());
     }
 }

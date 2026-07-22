@@ -16,8 +16,10 @@ public class CoordinatesModule extends AbstractModule {
         addBool("show_coordinates", "Show Coordinates", true);
         addBool("hide_y", "Hide Y Coordinate", false);
         addBool("show_direction", "Direction", true);
+        addBool("show_background", "Show Background", false);
         addText("custom_line", "Custom Line", "");
         addColor("coordinates_color", "Coordinates Color", 0xFFFFFFFF);
         addColor("direction_color", "Direction Color", 0xFFFFFFFF);
+        addColor("background_color", "Background Color", 0x6F000000);
     }
 }

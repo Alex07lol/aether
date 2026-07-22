@@ -8,7 +8,7 @@ public class MotionBlurModule extends AbstractModule {
     public MotionBlurModule() {
         super(ModuleMetadata.builder("graphics.motion_blur", "Motion Blur")
             .category(ModuleCategory.GRAPHICS)
-            .description("Adds a reserved graphics-effect slot.")
+            .description("Applies a motion blur effect when turning or moving the camera quickly.")
             .build());
 
         addNumber("strength", "Strength", 40);

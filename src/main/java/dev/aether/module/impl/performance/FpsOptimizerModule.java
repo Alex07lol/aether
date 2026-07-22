@@ -12,15 +12,9 @@ public class FpsOptimizerModule extends AbstractModule {
             .favoriteByDefault(true)
             .build());
 
-        addBool("limit_particles", "Limit Particles", true);
         addBool("fast_graphics", "Fast Graphics", true);
         addBool("use_vbo", "Use VBO", true);
-        addBool("disable_entity_shadows", "Disable Entity Shadows", true);
-        addBool("disable_clouds", "Disable Clouds", true);
         addBool("fast_lighting", "Fast Smooth Lighting", true);
         addBool("memory_cleanup", "Memory Cleanup", true);
-        addNumber("memory_threshold", "Memory Threshold", 70);
-        addNumber("max_render_distance", "Max Render Distance", 8);
-        addNumber("fps_limit", "FPS Limit", 260);
     }
 }

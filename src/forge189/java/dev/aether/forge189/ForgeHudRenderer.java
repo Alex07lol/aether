@@ -5,10 +5,11 @@ import dev.aether.hud.HudElement;
 import dev.aether.module.ClientModule.ModuleState;
 import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
-import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
+import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.potion.Potion;
 import net.minecraft.potion.PotionEffect;
 import net.minecraft.util.MovingObjectPosition;
@@ -28,12 +29,33 @@ final class ForgeHudRenderer {
     private static final int ACCENT_COLOR = 0x52BEEB;
 
     private final AetherClient client;
-    private final long sessionStartedMillis = System.currentTimeMillis();
-    private final SimpleDateFormat clockFormat = new SimpleDateFormat("HH:mm", Locale.ENGLISH);
-    private final List<Long> leftClicks = new ArrayList<Long>();
-    private final List<Long> rightClicks = new ArrayList<Long>();
+    private final java.text.SimpleDateFormat clockFormat = new java.text.SimpleDateFormat("HH:mm", Locale.ENGLISH);
+
+    // Optimized primitive click tracking buffers (zero GC)
+    private final long[] leftClickTimes = new long[128];
+    private int leftClickCount = 0;
+    private final long[] rightClickTimes = new long[128];
+    private int rightClickCount = 0;
     private boolean lastAttackDown;
     private boolean lastUseDown;
+
+    // Optimized FPS history ring buffer (zero GC)
+    private final int[] fpsHistory = new int[60];
+    private int fpsHistoryCount = 0;
+
+    // Cached render strings (zero GC)
+    private long lastClockSec = -1;
+    private String cachedClockText = "Time 00:00";
+    private long lastMemUpdate = -1;
+    private String cachedMemText = "Mem 0/0MB";
+    private String cachedDevOverlayText = "";
+    private int lastFpsValue = -1;
+    private String cachedFpsText = "FPS 0";
+
+    // Scoreboard reusable collections (zero GC)
+    private final List<net.minecraft.scoreboard.Score> reusableFilteredScores = new ArrayList<net.minecraft.scoreboard.Score>(16);
+    private final List<String> reusableFormattedLines = new ArrayList<String>(16);
+    private final List<String> reusableFormattedScores = new ArrayList<String>(16);
 
     ForgeHudRenderer(AetherClient client) {
         this.client = client;
@@ -47,40 +69,93 @@ final class ForgeHudRenderer {
             return;
         }
 
+        Mc189Compat.enableBlend();
+        Mc189Compat.tryBlendFuncSeparate(770, 771, 1, 0);
+        Mc189Compat.enableTexture2D();
+        Mc189Compat.color(1.0F, 1.0F, 1.0F, 1.0F);
+
         renderFps(fontRenderer);
         renderCoordinates(fontRenderer, minecraft);
         updateClickCounters(gameSettings);
         renderKeystrokes(fontRenderer, gameSettings);
         renderCps(fontRenderer);
         renderToggleSprint(fontRenderer, gameSettings);
-        renderDirection(fontRenderer, minecraft);
         renderMemory(fontRenderer);
-        renderSessionTime(fontRenderer);
+
         renderClock(fontRenderer);
         renderDeveloperOverlay(fontRenderer);
         renderBlockInfo(fontRenderer, minecraft);
         renderArmorStatus(fontRenderer, minecraft);
         renderPotionStatus(fontRenderer, minecraft);
         renderCustomCrosshair(fontRenderer, minecraft);
-        renderDayCounter(fontRenderer, minecraft);
         renderPing(fontRenderer, minecraft);
         renderReachDisplay(fontRenderer);
         renderSpeedIndicator(fontRenderer, minecraft);
         renderServerAddress(fontRenderer, minecraft);
-        renderToggleSneak(fontRenderer, gameSettings);
+        renderDirection(fontRenderer, minecraft);
         renderFpsGraph(fontRenderer);
+
+        Mc189Compat.color(1.0F, 1.0F, 1.0F, 1.0F);
+        Mc189Compat.enableTexture2D();
+    }
+
+    void renderForEditor() {
+        Object minecraft = Mc189Compat.minecraft();
+        Object fontRenderer = Mc189Compat.fontRenderer(minecraft);
+        if (minecraft == null || fontRenderer == null) {
+            return;
+        }
+
+        Mc189Compat.enableBlend();
+        Mc189Compat.tryBlendFuncSeparate(770, 771, 1, 0);
+        Mc189Compat.enableTexture2D();
+        Mc189Compat.color(1.0F, 1.0F, 1.0F, 1.0F);
+
+        drawEditorPreview(fontRenderer, "hud.fps", "FPS 120");
+        drawEditorPreview(fontRenderer, "hud.coordinates", "XYZ 100.0 / 64.0 / -200.0 North");
+        drawEditorPreview(fontRenderer, "hud.cps", "CPS: 12 | 12");
+        drawEditorPreview(fontRenderer, "pvp.toggle_sprint", "Sprint (Toggled)");
+        drawEditorPreview(fontRenderer, "hud.memory", "Mem: 42% 1024MB");
+        drawEditorPreview(fontRenderer, "hud.clock", "12:30 PM");
+        drawEditorPreview(fontRenderer, "developer.overlay", "Aether v1.0 Dev Overlay");
+        drawEditorPreview(fontRenderer, "hud.block_info", "Grass Block");
+        drawEditorPreview(fontRenderer, "hud.ping", "24ms");
+        drawEditorPreview(fontRenderer, "hud.reach_display", "3.00m");
+        drawEditorPreview(fontRenderer, "hud.speed_indicator", "15.2 BPS");
+        drawEditorPreview(fontRenderer, "hud.server_address", "mc.hypixel.net");
+        drawEditorPreview(fontRenderer, "hud.direction", "South [S]");
+        drawEditorPreview(fontRenderer, "hud.potions", "Speed II (0:30)");
+        drawEditorPreview(fontRenderer, "hud.armor", "Armor Status");
+
+        Mc189Compat.color(1.0F, 1.0F, 1.0F, 1.0F);
+        Mc189Compat.enableTexture2D();
+    }
+
+    private void drawEditorPreview(Object fontRenderer, String id, String previewText) {
+        HudElement element = client.hudLayout().get(id);
+        if (element == null) return;
+        boolean isEnabled = enabled(id);
+        int textColor = isEnabled ? settingColor(id, "text_color", ACCENT_COLOR) : 0xAA888888;
+        if (settingBool(id, "show_background", true)) {
+            drawBackground(fontRenderer, previewText, element, isEnabled ? settingColor(id, "background_color", 0x6F000000) : 0x44222222);
+        }
+        draw(fontRenderer, previewText, element, textColor);
     }
 
     private void renderFps(Object fontRenderer) {
         if (!enabled("hud.fps")) {
             return;
         }
-        HudElement element = client.hudLayout().get("hud.fps");
-        String text = "FPS " + Mc189Compat.debugFps();
-        if (settingBool("hud.fps", "show_background", true)) {
-            drawBackground(fontRenderer, text, element, settingColor("hud.fps", "background_color", 0x6F000000));
+        int currentFps = Mc189Compat.debugFps();
+        if (currentFps != lastFpsValue) {
+            lastFpsValue = currentFps;
+            cachedFpsText = "FPS " + currentFps;
         }
-        draw(fontRenderer, text, element, settingColor("hud.fps", "text_color", ACCENT_COLOR));
+        HudElement element = client.hudLayout().get("hud.fps");
+        if (settingBool("hud.fps", "show_background", true)) {
+            drawBackground(fontRenderer, cachedFpsText, element, settingColor("hud.fps", "background_color", 0x6F000000));
+        }
+        draw(fontRenderer, cachedFpsText, element, settingColor("hud.fps", "text_color", ACCENT_COLOR));
     }
 
     private void renderCoordinates(Object fontRenderer, Object minecraft) {
@@ -107,7 +182,11 @@ final class ForgeHudRenderer {
             text = text.length() == 0 ? direction : text + " " + direction;
         }
         if (text.length() > 0) {
-            draw(fontRenderer, text, client.hudLayout().get("hud.coordinates"), settingColor("hud.coordinates", "coordinates_color", TEXT_COLOR));
+            HudElement element = client.hudLayout().get("hud.coordinates");
+            if (settingBool("hud.coordinates", "show_background", false)) {
+                drawBackground(fontRenderer, text, element, settingColor("hud.coordinates", "background_color", 0x6F000000));
+            }
+            draw(fontRenderer, text, element, settingColor("hud.coordinates", "coordinates_color", TEXT_COLOR));
         }
     }
 
@@ -158,15 +237,34 @@ final class ForgeHudRenderer {
         boolean attackDown = Mc189Compat.keyDown(Mc189Compat.keyAttack(gameSettings));
         boolean useDown = Mc189Compat.keyDown(Mc189Compat.keyUseItem(gameSettings));
         if (attackDown && !this.lastAttackDown) {
-            this.leftClicks.add(Long.valueOf(now));
+            addClick(this.leftClickTimes, this.leftClickCount++);
+            if (this.leftClickCount >= this.leftClickTimes.length) this.leftClickCount = this.leftClickTimes.length;
         }
         if (useDown && !this.lastUseDown) {
-            this.rightClicks.add(Long.valueOf(now));
+            addClick(this.rightClickTimes, this.rightClickCount++);
+            if (this.rightClickCount >= this.rightClickTimes.length) this.rightClickCount = this.rightClickTimes.length;
         }
         this.lastAttackDown = attackDown;
         this.lastUseDown = useDown;
-        trimClicks(this.leftClicks, now);
-        trimClicks(this.rightClicks, now);
+
+        this.leftClickCount = pruneClicks(this.leftClickTimes, this.leftClickCount, now);
+        this.rightClickCount = pruneClicks(this.rightClickTimes, this.rightClickCount, now);
+    }
+
+    private static void addClick(long[] array, int index) {
+        if (index < array.length) {
+            array[index] = System.currentTimeMillis();
+        }
+    }
+
+    private static int pruneClicks(long[] array, int count, long now) {
+        int valid = 0;
+        for (int i = 0; i < count; i++) {
+            if (now - array[i] <= 1000L) {
+                array[valid++] = array[i];
+            }
+        }
+        return valid;
     }
 
     private void renderCps(Object fontRenderer) {
@@ -174,8 +272,8 @@ final class ForgeHudRenderer {
             return;
         }
         String text = settingBool("hud.cps", "right_click", false)
-            ? "CPS " + this.leftClicks.size() + " | " + this.rightClicks.size()
-            : "CPS " + this.leftClicks.size();
+            ? "CPS " + this.leftClickCount + " | " + this.rightClickCount
+            : "CPS " + this.leftClickCount;
         HudElement element = client.hudLayout().get("hud.cps");
         if (settingBool("hud.cps", "show_background", true)) {
             drawBackground(fontRenderer, text, element, settingColor("hud.cps", "background_color", 0x6F000000));
@@ -187,7 +285,10 @@ final class ForgeHudRenderer {
         if (!enabled("pvp.toggle_sprint") || !settingBool("pvp.toggle_sprint", "show_status", true) || gameSettings == null) {
             return;
         }
-        if (!Mc189Compat.keyDown(Mc189Compat.keySprint(gameSettings))) {
+        // keyDown on the sprint key binding reflects the toggled state because
+        // applyToggleSprint calls setKeyBindState to keep it in sync.
+        Object sprintKey = Mc189Compat.keySprint(gameSettings);
+        if (sprintKey == null || !Mc189Compat.keyDown(sprintKey)) {
             return;
         }
         String text = "Sprint toggled";
@@ -210,41 +311,45 @@ final class ForgeHudRenderer {
         if (!enabled("hud.memory")) {
             return;
         }
-        Runtime runtime = Runtime.getRuntime();
-        long usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024L * 1024L);
-        long totalMb = runtime.totalMemory() / (1024L * 1024L);
-        draw(fontRenderer, "Mem " + usedMb + "/" + totalMb + "MB", client.hudLayout().get("hud.memory"), TEXT_COLOR);
+        long now = System.currentTimeMillis();
+        if (now - lastMemUpdate > 500L) {
+            lastMemUpdate = now;
+            Runtime runtime = Runtime.getRuntime();
+            long usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024L * 1024L);
+            long totalMb = runtime.totalMemory() / (1024L * 1024L);
+            cachedMemText = "Mem " + usedMb + "/" + totalMb + "MB";
+        }
+        draw(fontRenderer, cachedMemText, client.hudLayout().get("hud.memory"), TEXT_COLOR);
     }
 
-    private void renderSessionTime(Object fontRenderer) {
-        if (!enabled("hud.session_time")) {
-            return;
-        }
-        long elapsedSeconds = (System.currentTimeMillis() - sessionStartedMillis) / 1000L;
-        long minutes = elapsedSeconds / 60L;
-        long seconds = elapsedSeconds % 60L;
-        draw(fontRenderer, String.format(Locale.ENGLISH, "Session %02d:%02d", Long.valueOf(minutes), Long.valueOf(seconds)), client.hudLayout().get("hud.session_time"), TEXT_COLOR);
-    }
 
     private void renderClock(Object fontRenderer) {
         if (!enabled("hud.clock")) {
             return;
         }
-        draw(fontRenderer, "Time " + clockFormat.format(new Date()), client.hudLayout().get("hud.clock"), TEXT_COLOR);
+        long sec = System.currentTimeMillis() / 1000L;
+        if (sec != lastClockSec) {
+            lastClockSec = sec;
+            cachedClockText = "Time " + clockFormat.format(new Date(sec * 1000L));
+        }
+        draw(fontRenderer, cachedClockText, client.hudLayout().get("hud.clock"), TEXT_COLOR);
     }
 
     private void renderDeveloperOverlay(Object fontRenderer) {
         if (!enabled("developer.overlay")) {
             return;
         }
-        Runtime runtime = Runtime.getRuntime();
-        long usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024L * 1024L);
-        long totalMb = runtime.totalMemory() / (1024L * 1024L);
-        String text = "Aether " + client.version().name()
-            + " | MC " + client.version().primaryGameVersion().displayName()
-            + " | " + client.platform().displayName()
-            + " | Mem " + usedMb + "/" + totalMb + "MB";
-        draw(fontRenderer, text, client.hudLayout().get("developer.overlay"), ACCENT_COLOR);
+        long now = System.currentTimeMillis();
+        if (now - lastMemUpdate > 500L || cachedDevOverlayText.isEmpty()) {
+            Runtime runtime = Runtime.getRuntime();
+            long usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024L * 1024L);
+            long totalMb = runtime.totalMemory() / (1024L * 1024L);
+            cachedDevOverlayText = "Aether " + client.version().name()
+                + " | MC " + client.version().primaryGameVersion().displayName()
+                + " | " + client.platform().displayName()
+                + " | Mem " + usedMb + "/" + totalMb + "MB";
+        }
+        draw(fontRenderer, cachedDevOverlayText, client.hudLayout().get("developer.overlay"), ACCENT_COLOR);
     }
 
     private void renderBlockInfo(Object fontRenderer, Object minecraft) {
@@ -255,7 +360,9 @@ final class ForgeHudRenderer {
         MovingObjectPosition mouseOver = (MovingObjectPosition) Mc189Compat.objectMouseOver(mc);
         if (mouseOver != null && Mc189Compat.typeOfHit(mouseOver) == MovingObjectPosition.MovingObjectType.BLOCK) {
             net.minecraft.util.BlockPos blockPos = (net.minecraft.util.BlockPos) Mc189Compat.blockPos(mouseOver);
-            IBlockState state = mc.theWorld.getBlockState(blockPos);
+            WorldClient world = Mc189Compat.theWorld(mc);
+            if (world == null) return;
+            IBlockState state = world.getBlockState(blockPos);
             Block block = state.getBlock();
 
             if (block != null && block != Blocks.air) {
@@ -279,7 +386,8 @@ final class ForgeHudRenderer {
             return;
         }
         net.minecraft.client.Minecraft mc = (net.minecraft.client.Minecraft) minecraft;
-        if (mc.thePlayer == null) {
+        EntityPlayerSP player = Mc189Compat.thePlayer(mc);
+        if (player == null) {
             return;
         }
 
@@ -288,17 +396,17 @@ final class ForgeHudRenderer {
         int y = element.y();
 
         RenderHelper.enableGUIStandardItemLighting();
-        GlStateManager.enableRescaleNormal();
+        Mc189Compat.enableRescaleNormal();
 
         for (int i = 0; i < 4; i++) {
-            ItemStack itemStack = mc.thePlayer.inventory.armorInventory[3 - i];
+            ItemStack itemStack = player.inventory.armorInventory[3 - i];
             if (itemStack == null) {
                 continue;
             }
             
             int currentY = y + i * 18;
 
-            mc.getRenderItem().renderItemAndEffectIntoGUI(itemStack, x, currentY);
+            Mc189Compat.renderItemAndEffectIntoGUI(itemStack, x, currentY);
 
             if (settingBool("hud.armor", "show_durability", true) && itemStack.isItemDamaged()) {
                 int durability = itemStack.getMaxDamage() - itemStack.getItemDamage();
@@ -309,8 +417,136 @@ final class ForgeHudRenderer {
             }
         }
 
-        GlStateManager.disableRescaleNormal();
+        Mc189Compat.disableRescaleNormal();
         RenderHelper.disableStandardItemLighting();
+    }
+
+    public void renderScoreboard() {
+        if (!enabled("interface.scoreboard_customization")) {
+            return;
+        }
+
+        Object minecraft = Mc189Compat.minecraft();
+        net.minecraft.client.Minecraft mc = (net.minecraft.client.Minecraft) minecraft;
+        WorldClient world = Mc189Compat.theWorld(mc);
+        if (world == null) {
+            return;
+        }
+
+        net.minecraft.scoreboard.Scoreboard scoreboard = Mc189Compat.scoreboard(world);
+        if (scoreboard == null) {
+            return;
+        }
+
+        net.minecraft.scoreboard.ScoreObjective objective = Mc189Compat.objectiveInDisplaySlot(scoreboard, 1);
+        if (objective == null) {
+            return;
+        }
+
+        Collection<net.minecraft.scoreboard.Score> scores = Mc189Compat.sortedScores(scoreboard, objective);
+        reusableFilteredScores.clear();
+        for (net.minecraft.scoreboard.Score score : scores) {
+            String pName = Mc189Compat.scorePlayerName(score);
+            if (pName != null && !pName.startsWith("#")) {
+                reusableFilteredScores.add(score);
+            }
+        }
+
+        if (reusableFilteredScores.size() > 15) {
+            int toRemove = reusableFilteredScores.size() - 15;
+            for (int i = 0; i < toRemove; i++) {
+                reusableFilteredScores.remove(0);
+            }
+        }
+
+        Object fontRenderer = Mc189Compat.fontRenderer(minecraft);
+        String title = Mc189Compat.objectiveDisplayName(objective);
+
+        boolean showBackground = settingBool("interface.scoreboard_customization", "show_background", true);
+        boolean textShadow = settingBool("interface.scoreboard_customization", "text_shadow", true);
+        boolean hideRedNumbers = settingBool("interface.scoreboard_customization", "hide_red_numbers", false);
+        int scaleSetting = settingInt("interface.scoreboard_customization", "scale", 100);
+        int titleColor = settingColor("interface.scoreboard_customization", "title_color", 0xFFFFFFFF);
+        int textColor = settingColor("interface.scoreboard_customization", "text_color", 0xFFFFFFFF);
+        int bgColor = settingColor("interface.scoreboard_customization", "background_color", 0x6F000000);
+
+        int maxLineWidth = Mc189Compat.stringWidth(fontRenderer, title);
+        reusableFormattedLines.clear();
+        reusableFormattedScores.clear();
+
+        for (net.minecraft.scoreboard.Score score : reusableFilteredScores) {
+            String pName = Mc189Compat.scorePlayerName(score);
+            net.minecraft.scoreboard.ScorePlayerTeam team = Mc189Compat.playersTeam(scoreboard, pName);
+            String name = Mc189Compat.formatPlayerName(team, pName);
+            reusableFormattedLines.add(name);
+            String scoreVal = net.minecraft.util.EnumChatFormatting.RED + "" + Mc189Compat.scorePoints(score);
+            reusableFormattedScores.add(scoreVal);
+            int lineWidth = Mc189Compat.stringWidth(fontRenderer, name) + (hideRedNumbers ? 0 : Mc189Compat.stringWidth(fontRenderer, "  " + scoreVal));
+            maxLineWidth = Math.max(maxLineWidth, lineWidth);
+        }
+
+        int fontHeight = 9;
+        int totalHeight = (reusableFilteredScores.size() + 1) * fontHeight;
+        int boxWidth = maxLineWidth + 6;
+
+        net.minecraft.client.gui.ScaledResolution res = new net.minecraft.client.gui.ScaledResolution(mc);
+        int scaledW = Mc189Compat.scaledWidth(res);
+        int scaledH = Mc189Compat.scaledHeight(res);
+
+        float scaleFactor = Math.max(0.5F, Math.min(1.5F, scaleSetting / 100.0F));
+        boolean isScaled = scaleFactor != 1.0F;
+
+        if (isScaled) {
+            Mc189Compat.pushMatrix();
+            Mc189Compat.scale(scaleFactor, scaleFactor, 1.0F);
+        }
+
+        int rightX = (int) ((scaledW - 3) / scaleFactor);
+        int startY = (int) ((scaledH / 2 - totalHeight / 2) / scaleFactor);
+        int leftX = rightX - boxWidth;
+
+        // Render Background Card
+        if (showBackground) {
+            Mc189Compat.drawRoundedRectangle(leftX, startY, boxWidth, totalHeight + fontHeight, 3, bgColor, 0);
+        }
+
+        // Render Title
+        int titleX = leftX + (boxWidth - Mc189Compat.stringWidth(fontRenderer, title)) / 2;
+        if (textShadow) {
+            Mc189Compat.drawStringWithShadow(fontRenderer, title, titleX, startY + 1, titleColor);
+        } else {
+            drawNoShadowString(fontRenderer, title, titleX, startY + 1, titleColor);
+        }
+
+        // Render Scores
+        for (int i = 0; i < reusableFilteredScores.size(); i++) {
+            int lineIdx = reusableFilteredScores.size() - 1 - i;
+            String lineName = reusableFormattedLines.get(lineIdx);
+            String lineScore = reusableFormattedScores.get(lineIdx);
+            int lineY = startY + (i + 1) * fontHeight;
+
+            if (textShadow) {
+                Mc189Compat.drawStringWithShadow(fontRenderer, lineName, leftX + 2, lineY + 1, textColor);
+                if (!hideRedNumbers) {
+                    int scoreX = rightX - 2 - Mc189Compat.stringWidth(fontRenderer, lineScore);
+                    Mc189Compat.drawStringWithShadow(fontRenderer, lineScore, scoreX, lineY + 1, 0xFFFF5555);
+                }
+            } else {
+                drawNoShadowString(fontRenderer, lineName, leftX + 2, lineY + 1, textColor);
+                if (!hideRedNumbers) {
+                    int scoreX = rightX - 2 - Mc189Compat.stringWidth(fontRenderer, lineScore);
+                    drawNoShadowString(fontRenderer, lineScore, scoreX, lineY + 1, 0xFFFF5555);
+                }
+            }
+        }
+
+        if (isScaled) {
+            Mc189Compat.popMatrix();
+        }
+    }
+
+    private void drawNoShadowString(Object fontRenderer, String text, float x, float y, int color) {
+        Mc189Compat.drawString(fontRenderer, text, x, y, color, false);
     }
 
     private void renderPotionStatus(Object fontRenderer, Object minecraft) {
@@ -318,7 +554,8 @@ final class ForgeHudRenderer {
             return;
         }
         net.minecraft.client.Minecraft mc = (net.minecraft.client.Minecraft) minecraft;
-        if (mc.thePlayer == null || mc.thePlayer.getActivePotionEffects().isEmpty()) {
+        EntityPlayerSP player = Mc189Compat.thePlayer(mc);
+        if (player == null || player.getActivePotionEffects().isEmpty()) {
             return;
         }
 
@@ -327,7 +564,7 @@ final class ForgeHudRenderer {
         int y = element.y();
         String mode = settingString("hud.potions", "mode", "Compact");
 
-        for (PotionEffect effect : (Collection<PotionEffect>) mc.thePlayer.getActivePotionEffects()) {
+        for (PotionEffect effect : (Collection<PotionEffect>) player.getActivePotionEffects()) {
             Potion potion = Potion.potionTypes[effect.getPotionID()];
             String name = StatCollector.translateToLocal(potion.getName());
             if (effect.getAmplifier() > 0) {
@@ -384,21 +621,6 @@ final class ForgeHudRenderer {
         }
     }
 
-    private void renderDayCounter(Object fontRenderer, Object minecraft) {
-        if (!enabled("hud.day_counter")) {
-            return;
-        }
-        Object world = Mc189Compat.world(minecraft);
-        if (world == null) return;
-        HudElement element = client.hudLayout().get("hud.day_counter");
-        long totalTime = Mc189Compat.worldTime(world);
-        long day = totalTime / 24000L;
-        String text = "Day " + day;
-        if (settingBool("hud.day_counter", "show_background", true)) {
-            drawBackground(fontRenderer, text, element, settingColor("hud.day_counter", "background_color", 0x6F000000));
-        }
-        draw(fontRenderer, text, element, settingColor("hud.day_counter", "text_color", ACCENT_COLOR));
-    }
 
     private void renderPing(Object fontRenderer, Object minecraft) {
         if (!enabled("hud.ping")) {
@@ -451,22 +673,6 @@ final class ForgeHudRenderer {
         draw(fontRenderer, text, element, settingColor("hud.server_address", "text_color", ACCENT_COLOR));
     }
 
-    private void renderToggleSneak(Object fontRenderer, Object gameSettings) {
-        if (!enabled("pvp.toggle_sneak")) {
-            return;
-        }
-        HudElement element = client.hudLayout().get("pvp.toggle_sneak");
-        Object keySneak = Mc189Compat.keyBindSneak(gameSettings);
-        if (keySneak != null && Mc189Compat.keyDown(keySneak)) {
-            String text = "[Sneaking (Toggled)]";
-            if (settingBool("pvp.toggle_sneak", "show_background", true)) {
-                drawBackground(fontRenderer, text, element, settingColor("pvp.toggle_sneak", "background_color", 0x6F000000));
-            }
-            draw(fontRenderer, text, element, settingColor("pvp.toggle_sneak", "text_color", ACCENT_COLOR));
-        }
-    }
-
-    private final List<Integer> fpsHistory = new ArrayList<Integer>();
 
     private void renderFpsGraph(Object fontRenderer) {
         if (!enabled("hud.fps_graph")) {
@@ -475,9 +681,11 @@ final class ForgeHudRenderer {
         HudElement element = client.hudLayout().get("hud.fps_graph");
         int fps = Mc189Compat.debugFps();
 
-        fpsHistory.add(Integer.valueOf(fps));
-        while (fpsHistory.size() > 60) {
-            fpsHistory.remove(0);
+        if (fpsHistoryCount < 60) {
+            fpsHistory[fpsHistoryCount++] = fps;
+        } else {
+            System.arraycopy(fpsHistory, 1, fpsHistory, 0, 59);
+            fpsHistory[59] = fps;
         }
 
         int width = clamp(settingInt("hud.fps_graph", "graph_width", 80), 40, 200);
@@ -489,17 +697,17 @@ final class ForgeHudRenderer {
             Mc189Compat.drawRect(element.x() - 3, element.y() - 3, element.x() + width + 3, element.y() + height + 3, bgColor);
         }
 
-        if (fpsHistory.size() < 2) return;
+        if (fpsHistoryCount < 2) return;
 
         int maxFps = 60;
-        for (Integer f : fpsHistory) {
-            if (f.intValue() > maxFps) maxFps = f.intValue();
+        for (int i = 0; i < fpsHistoryCount; i++) {
+            if (fpsHistory[i] > maxFps) maxFps = fpsHistory[i];
         }
 
-        float stepX = (float) width / (float) (fpsHistory.size() - 1);
-        for (int i = 0; i < fpsHistory.size() - 1; i++) {
-            int currentFps = fpsHistory.get(i).intValue();
-            int nextFps = fpsHistory.get(i + 1).intValue();
+        float stepX = (float) width / (float) (fpsHistoryCount - 1);
+        for (int i = 0; i < fpsHistoryCount - 1; i++) {
+            int currentFps = fpsHistory[i];
+            int nextFps = fpsHistory[i + 1];
 
             int x1 = Math.round(element.x() + (i * stepX));
             int y1 = Math.round(element.y() + height - ((float) currentFps / maxFps * height));
@@ -523,7 +731,7 @@ final class ForgeHudRenderer {
     private void drawKeyBox(Object fontRenderer, String label, Object keyBinding, int x, int y, int width, int height, boolean background, int backgroundColor, int pressedColor, int textColor) {
         boolean down = Mc189Compat.keyDown(keyBinding);
         if (background || down) {
-            Mc189Compat.drawRect(x, y, x + width, y + height, down ? pressedColor : backgroundColor);
+            Mc189Compat.drawRoundedRectangle(x, y, width, height, 2, down ? pressedColor : backgroundColor, 0);
         }
         int textX = x + (width - Mc189Compat.stringWidth(fontRenderer, label)) / 2;
         int textY = y + height / 2 - 4;
@@ -611,10 +819,10 @@ final class ForgeHudRenderer {
             Mc189Compat.scale(scale, scale, 1.0F);
             int unscaledX = Math.round(element.x() / scale);
             int unscaledY = Math.round(element.y() / scale);
-            Mc189Compat.drawRect(unscaledX - 3, unscaledY - 3, unscaledX + width, unscaledY + 11, finalColor);
+            Mc189Compat.drawRoundedRectangle(unscaledX - 3, unscaledY - 3, width + 3, 14, 2, finalColor, 0);
             Mc189Compat.popMatrix();
         } else {
-            Mc189Compat.drawRect(element.x() - 3, element.y() - 3, element.x() + width, element.y() + 11, finalColor);
+            Mc189Compat.drawRoundedRectangle(element.x() - 3, element.y() - 3, width + 3, 14, 2, finalColor, 0);
         }
     }
 
@@ -654,9 +862,9 @@ final class ForgeHudRenderer {
                 break;
             }
             case "hud.coordinates": {
-                if (player == null) break;
-                // This is an approximation as it depends on settings
-                String text = String.format(Locale.ENGLISH, "XYZ %.1f / %.1f / %.1f %s", Mc189Compat.posX(player), Mc189Compat.posY(player), Mc189Compat.posZ(player), "North West");
+                String text = player != null
+                    ? String.format(Locale.ENGLISH, "XYZ %.1f / %.1f / %.1f %s", Mc189Compat.posX(player), Mc189Compat.posY(player), Mc189Compat.posZ(player), "North")
+                    : "XYZ 100.0 / 64.0 / -200.0 North";
                 width = Mc189Compat.stringWidth(fontRenderer, text);
                 height = 8;
                 break;
@@ -697,7 +905,6 @@ final class ForgeHudRenderer {
             }
             case "hud.direction":
             case "hud.memory":
-            case "hud.session_time":
             case "hud.clock":
             case "developer.overlay": {
                 String text = "Sample Text 123"; // Approximation
@@ -714,10 +921,10 @@ final class ForgeHudRenderer {
                 break;
             }
             case "hud.potions": {
-                if (mc.thePlayer == null) break;
-                Collection<PotionEffect> effects = mc.thePlayer.getActivePotionEffects();
-                if (effects.isEmpty()) {
-                    width = Mc189Compat.stringWidth(fontRenderer, "Speed II: 0:00");
+                EntityPlayerSP playerSp = mc != null ? Mc189Compat.thePlayer(mc) : null;
+                Collection<PotionEffect> effects = playerSp != null ? playerSp.getActivePotionEffects() : null;
+                if (effects == null || effects.isEmpty()) {
+                    width = Mc189Compat.stringWidth(fontRenderer, "Speed II: 0:30");
                     height = 10;
                 } else {
                     width = 0;

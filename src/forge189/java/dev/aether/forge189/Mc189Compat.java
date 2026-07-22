@@ -4,15 +4,33 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.client.renderer.RenderGlobal;
+import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.WorldRenderer;
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.entity.Entity;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.BlockPos;
+import net.minecraft.block.state.IBlockState;
+import net.minecraft.block.Block;
+import net.minecraft.block.material.Material;
 
+import net.minecraft.scoreboard.Scoreboard;
+import net.minecraft.scoreboard.ScoreObjective;
+import net.minecraft.scoreboard.Score;
+import net.minecraft.scoreboard.ScorePlayerTeam;
+import java.util.Collection;
+import java.util.Collections;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-final class Mc189Compat {
+public final class Mc189Compat {
     private static final Map<String, Method> methodCache = new ConcurrentHashMap<>();
     private static final Map<String, Field> fieldCache = new ConcurrentHashMap<>();
 
@@ -52,6 +70,74 @@ final class Mc189Compat {
 
     static Object player(Object minecraft) {
         return getField(minecraft, new String[] {"thePlayer", "field_71439_g"});
+    }
+
+    static EntityPlayerSP thePlayer(Object minecraft) {
+        return (EntityPlayerSP) player(minecraft);
+    }
+
+    static WorldClient theWorld(Object minecraft) {
+        return (WorldClient) world(minecraft);
+    }
+
+    static Scoreboard scoreboard(Object world) {
+        if (world == null) return null;
+        Object obj = invoke(world, new String[] {"getScoreboard", "func_96441_U"});
+        return obj instanceof Scoreboard ? (Scoreboard) obj : null;
+    }
+
+    static ScoreObjective objectiveInDisplaySlot(Scoreboard scoreboard, int slot) {
+        if (scoreboard == null) return null;
+        Object obj = invoke(scoreboard, new String[] {"getObjectiveInDisplaySlot", "func_96539_a"},
+            new Class<?>[] {Integer.TYPE}, Integer.valueOf(slot));
+        return obj instanceof ScoreObjective ? (ScoreObjective) obj : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    static Collection<Score> sortedScores(Scoreboard scoreboard, ScoreObjective objective) {
+        if (scoreboard == null || objective == null) return Collections.emptyList();
+        Object obj = invoke(scoreboard, new String[] {"getSortedScores", "func_96534_a"},
+            new Class<?>[] {ScoreObjective.class}, objective);
+        return obj instanceof Collection ? (Collection<Score>) obj : Collections.<Score>emptyList();
+    }
+
+    static String objectiveDisplayName(ScoreObjective objective) {
+        if (objective == null) return "";
+        Object obj = invoke(objective, new String[] {"getDisplayName", "func_96678_d"});
+        return obj instanceof String ? (String) obj : "";
+    }
+
+    static String scorePlayerName(Score score) {
+        if (score == null) return "";
+        Object obj = invoke(score, new String[] {"getPlayerName", "func_96653_e"});
+        return obj instanceof String ? (String) obj : "";
+    }
+
+    static int scorePoints(Score score) {
+        if (score == null) return 0;
+        Object obj = invoke(score, new String[] {"getScorePoints", "func_96652_c"});
+        return obj instanceof Integer ? ((Integer) obj).intValue() : 0;
+    }
+
+    static ScorePlayerTeam playersTeam(Scoreboard scoreboard, String playerName) {
+        if (scoreboard == null || playerName == null) return null;
+        Object obj = invoke(scoreboard, new String[] {"getPlayersTeam", "func_96508_e"},
+            new Class<?>[] {String.class}, playerName);
+        return obj instanceof ScorePlayerTeam ? (ScorePlayerTeam) obj : null;
+    }
+
+    static String formatPlayerName(ScorePlayerTeam team, String playerName) {
+        Object obj = invokeStatic(ScorePlayerTeam.class, new String[] {"formatPlayerName", "func_96667_a"},
+            new Class<?>[] {ScorePlayerTeam.class, String.class}, team, playerName);
+        return obj instanceof String ? (String) obj : playerName;
+    }
+
+    static void renderItemAndEffectIntoGUI(ItemStack stack, int x, int y) {
+        Object renderItem = invoke(minecraft(), new String[] {"getRenderItem", "func_175599_af"});
+        if (renderItem != null) {
+            invoke(renderItem, new String[] {"renderItemAndEffectIntoGUI", "func_180450_b"},
+                new Class<?>[] {ItemStack.class, Integer.TYPE, Integer.TYPE}, stack, Integer.valueOf(x), Integer.valueOf(y));
+        }
     }
 
     static Object renderViewEntity(Object minecraft) {
@@ -111,6 +197,11 @@ final class Mc189Compat {
 
     static float attackedAtYaw(Object entity) {
         return floatField(entity, new String[] {"attackedAtYaw", "field_70739_aP"});
+    }
+
+    static AxisAlignedBB getEntityBoundingBox(Object entity) {
+        Object obj = invoke(entity, new String[] {"getEntityBoundingBox", "func_174813_aQ"});
+        return obj instanceof AxisAlignedBB ? (AxisAlignedBB) obj : null;
     }
 
     static void setAttackedAtYaw(Object entity, float value) {
@@ -259,6 +350,10 @@ final class Mc189Compat {
         return value instanceof Number ? ((Number) value).longValue() : 0L;
     }
 
+    static void setWorldTime(Object world, long time) {
+        invoke(world, new String[] {"setWorldTime", "func_72877_b"}, new Class<?>[] {Long.TYPE}, Long.valueOf(time));
+    }
+
     static int playerPing(Object minecraft) {
         Object player = player(minecraft);
         Object connection = invoke(minecraft, new String[] {"getNetHandler", "func_147114_u"});
@@ -307,8 +402,50 @@ final class Mc189Compat {
         return doubleField(entity, new String[] {"lastTickPosX", "field_70142_S"});
     }
 
+    static double lastTickPosY(Object entity) {
+        return doubleField(entity, new String[] {"lastTickPosY", "field_70137_T"});
+    }
+
     static double lastTickPosZ(Object entity) {
         return doubleField(entity, new String[] {"lastTickPosZ", "field_70136_U"});
+    }
+
+    static IBlockState getBlockState(Object world, BlockPos pos) {
+        if (world == null || pos == null) return null;
+        Object obj = invoke(world, new String[] {"getBlockState", "func_180495_p"},
+            new Class<?>[] {BlockPos.class}, pos);
+        return obj instanceof IBlockState ? (IBlockState) obj : null;
+    }
+
+    static Block getBlock(IBlockState state) {
+        if (state == null) return null;
+        Object obj = invoke(state, new String[] {"getBlock", "func_177230_c"});
+        return obj instanceof Block ? (Block) obj : null;
+    }
+
+    static Material getMaterial(Block block) {
+        if (block == null) return null;
+        Object obj = invoke(block, new String[] {"getMaterial", "func_149688_o"});
+        return obj instanceof Material ? (Material) obj : null;
+    }
+
+    static Object getWorldBorder(Object world) {
+        if (world == null) return null;
+        return invoke(world, new String[] {"getWorldBorder", "func_175726_f"});
+    }
+
+    static boolean worldBorderContains(Object worldBorder, BlockPos pos) {
+        if (worldBorder == null || pos == null) return true;
+        Object obj = invoke(worldBorder, new String[] {"contains", "func_177746_a"},
+            new Class<?>[] {BlockPos.class}, pos);
+        return obj instanceof Boolean ? ((Boolean) obj).booleanValue() : true;
+    }
+
+    static AxisAlignedBB getSelectedBoundingBox(Block block, Object world, BlockPos pos) {
+        if (block == null || world == null || pos == null) return null;
+        Object obj = invoke(block, new String[] {"getSelectedBoundingBox", "func_180646_a"},
+            new Class<?>[] {net.minecraft.world.World.class, BlockPos.class}, world, pos);
+        return obj instanceof AxisAlignedBB ? (AxisAlignedBB) obj : null;
     }
 
     static void setKeyBindState(Object keyBinding, boolean pressed) {
@@ -338,7 +475,7 @@ final class Mc189Compat {
             Method method = keyboard.getMethod("isKeyDown", Integer.TYPE);
             Object value = method.invoke(null, Integer.valueOf(keyCode));
             return value instanceof Boolean && ((Boolean) value).booleanValue();
-        } catch (ReflectiveOperationException exception) {
+        } catch (Throwable exception) {
             return false;
         }
     }
@@ -352,7 +489,7 @@ final class Mc189Compat {
             Method method = keyboard.getMethod("getKeyName", Integer.TYPE);
             Object value = method.invoke(null, Integer.valueOf(keyCode));
             return value instanceof String ? (String) value : String.valueOf(keyCode);
-        } catch (ReflectiveOperationException exception) {
+        } catch (Throwable exception) {
             return String.valueOf(keyCode);
         }
     }
@@ -463,10 +600,35 @@ final class Mc189Compat {
         return value instanceof Integer ? ((Integer) value).intValue() : 1;
     }
 
-    static void drawStringWithShadow(Object fontRenderer, String text, float x, float y, int color) {
+    public static void drawStringWithShadow(Object fontRenderer, String text, float x, float y, int color) {
+        if (fontRenderer == null || text == null || text.isEmpty()) return;
+        enableBlend();
+        enableTexture2D();
+        color(1.0F, 1.0F, 1.0F, 1.0F);
         invoke(fontRenderer, new String[] {"drawStringWithShadow", "func_175063_a"},
             new Class<?>[] {String.class, Float.TYPE, Float.TYPE, Integer.TYPE},
             text, Float.valueOf(x), Float.valueOf(y), Integer.valueOf(color));
+        color(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
+    public static void drawString(Object fontRenderer, String text, float x, float y, int color, boolean dropShadow) {
+        if (fontRenderer == null || text == null || text.isEmpty()) return;
+        enableBlend();
+        enableTexture2D();
+        color(1.0F, 1.0F, 1.0F, 1.0F);
+        if (dropShadow) {
+            drawStringWithShadow(fontRenderer, text, x, y, color);
+        } else {
+            Object res = invoke(fontRenderer, new String[] {"drawString", "func_78276_b"},
+                new Class<?>[] {String.class, Integer.TYPE, Integer.TYPE, Integer.TYPE},
+                text, Integer.valueOf((int) x), Integer.valueOf((int) y), Integer.valueOf(color));
+            if (res == null) {
+                invoke(fontRenderer, new String[] {"drawString", "func_175065_a"},
+                    new Class<?>[] {String.class, Integer.TYPE, Integer.TYPE, Integer.TYPE, Boolean.TYPE},
+                    text, Integer.valueOf((int) x), Integer.valueOf((int) y), Integer.valueOf(color), Boolean.valueOf(false));
+            }
+        }
+        color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
     static int stringWidth(Object fontRenderer, String text) {
@@ -516,9 +678,43 @@ final class Mc189Compat {
                 method.invoke(null, Integer.valueOf(left), Integer.valueOf(top), Integer.valueOf(right), Integer.valueOf(bottom), Integer.valueOf(color));
                 return;
             } catch (ReflectiveOperationException ignored) {
-                // Try the next runtime naming scheme.
+                // Try the next runtime naming scheme before falling back to direct GL.
             }
         }
+
+        if (left > right) {
+            int temp = left;
+            left = right;
+            right = temp;
+        }
+        if (top > bottom) {
+            int temp = top;
+            top = bottom;
+            bottom = temp;
+        }
+
+        float a = (float) (color >> 24 & 255) / 255.0F;
+        float r = (float) (color >> 16 & 255) / 255.0F;
+        float g = (float) (color >> 8 & 255) / 255.0F;
+        float b = (float) (color & 255) / 255.0F;
+
+        enableBlend();
+        disableTexture2D();
+        tryBlendFuncSeparate(770, 771, 1, 0);
+        color(r, g, b, a);
+
+        Tessellator tessellator = getTessellator();
+        WorldRenderer worldRenderer = tessellator.getWorldRenderer();
+        worldRenderer.begin(7, DefaultVertexFormats.POSITION);
+        worldRenderer.pos((double) left, (double) bottom, 0.0D).endVertex();
+        worldRenderer.pos((double) right, (double) bottom, 0.0D).endVertex();
+        worldRenderer.pos((double) right, (double) top, 0.0D).endVertex();
+        worldRenderer.pos((double) left, (double) top, 0.0D).endVertex();
+        tessellator.draw();
+
+        enableTexture2D();
+        disableBlend();
+        color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
     static void drawTexture(String path, int x, int y, int width, int height) {
@@ -527,25 +723,213 @@ final class Mc189Compat {
         }
         Object minecraft = minecraft();
         Object textureManager = invoke(minecraft, new String[] {"getTextureManager", "func_110434_K"});
+        if (textureManager == null) return;
+
+        enableTexture2D();
+        enableBlend();
+        tryBlendFuncSeparate(770, 771, 1, 0);
+        color(1.0F, 1.0F, 1.0F, 1.0F);
+
         invoke(textureManager, new String[] {"bindTexture", "func_110577_a"},
             new Class<?>[] {ResourceLocation.class}, new ResourceLocation("aether", path));
-        invokeStatic(Gui.class, new String[] {"drawModalRectWithCustomSizedTexture", "func_146110_a"},
-            new Class<?>[] {Integer.TYPE, Integer.TYPE, Float.TYPE, Float.TYPE, Integer.TYPE, Integer.TYPE, Float.TYPE, Float.TYPE},
-            Integer.valueOf(x), Integer.valueOf(y), Float.valueOf(0.0F), Float.valueOf(0.0F),
-            Integer.valueOf(width), Integer.valueOf(height), Float.valueOf(width), Float.valueOf(height));
+
+        for (String name : new String[] {"drawModalRectWithCustomSizedTexture", "func_146110_a"}) {
+            Method method = findMethod(Gui.class, name, new Class<?>[] {
+                Integer.TYPE, Integer.TYPE, Float.TYPE, Float.TYPE, Integer.TYPE, Integer.TYPE, Float.TYPE, Float.TYPE
+            });
+            if (method != null) {
+                try {
+                    method.invoke(null, Integer.valueOf(x), Integer.valueOf(y), Float.valueOf(0.0F), Float.valueOf(0.0F),
+                        Integer.valueOf(width), Integer.valueOf(height), Float.valueOf((float) width), Float.valueOf((float) height));
+                    color(1.0F, 1.0F, 1.0F, 1.0F);
+                    return;
+                } catch (ReflectiveOperationException ignored) {
+                }
+            }
+        }
+
+        Tessellator tessellator = getTessellator();
+        WorldRenderer worldRenderer = tessellator.getWorldRenderer();
+        worldRenderer.begin(7, DefaultVertexFormats.POSITION_TEX);
+        worldRenderer.pos(x, y + height, 0.0D).tex(0.0D, 1.0D).endVertex();
+        worldRenderer.pos(x + width, y + height, 0.0D).tex(1.0D, 1.0D).endVertex();
+        worldRenderer.pos(x + width, y, 0.0D).tex(1.0D, 0.0D).endVertex();
+        worldRenderer.pos(x, y, 0.0D).tex(0.0D, 0.0D).endVertex();
+        tessellator.draw();
+        color(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
+    static boolean hasResource(String domain, String path) {
+        Object minecraft = minecraft();
+        Object resourceManager = invoke(minecraft, new String[] {"getResourceManager", "func_110442_L"});
+        if (resourceManager != null) {
+            Object res = invoke(resourceManager, new String[] {"getResource", "func_110549_a"},
+                new Class<?>[] {ResourceLocation.class}, new ResourceLocation(domain, path));
+            return res != null;
+        }
+        return false;
     }
 
     static void pushMatrix() {
-        invokeStatic(glStateManagerClass(), new String[] {"pushMatrix", "func_179094_E"});
+        if (invokeStatic(glStateManagerClass(), new String[] {"pushMatrix", "func_179094_E"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glPushMatrix"});
+        }
     }
 
     static void popMatrix() {
-        invokeStatic(glStateManagerClass(), new String[] {"popMatrix", "func_179121_F"});
+        if (invokeStatic(glStateManagerClass(), new String[] {"popMatrix", "func_179121_F"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glPopMatrix"});
+        }
     }
 
     static void scale(float x, float y, float z) {
-        invokeStatic(glStateManagerClass(), new String[] {"scale", "func_179152_a"},
-            new Class<?>[] {Float.TYPE, Float.TYPE, Float.TYPE}, Float.valueOf(x), Float.valueOf(y), Float.valueOf(z));
+        if (invokeStatic(glStateManagerClass(), new String[] {"scale", "func_179152_a"},
+            new Class<?>[] {Float.TYPE, Float.TYPE, Float.TYPE}, Float.valueOf(x), Float.valueOf(y), Float.valueOf(z)) == null) {
+            invokeStatic(gl11Class(), new String[] {"glScalef"},
+                new Class<?>[] {Float.TYPE, Float.TYPE, Float.TYPE}, Float.valueOf(x), Float.valueOf(y), Float.valueOf(z));
+        }
+    }
+
+    public static void rotate(float angle, float x, float y, float z) {
+        if (invokeStatic(glStateManagerClass(), new String[] {"rotate", "func_179114_b"},
+            new Class<?>[] {Float.TYPE, Float.TYPE, Float.TYPE, Float.TYPE},
+            Float.valueOf(angle), Float.valueOf(x), Float.valueOf(y), Float.valueOf(z)) == null) {
+            invokeStatic(gl11Class(), new String[] {"glRotatef"},
+                new Class<?>[] {Float.TYPE, Float.TYPE, Float.TYPE, Float.TYPE},
+                Float.valueOf(angle), Float.valueOf(x), Float.valueOf(y), Float.valueOf(z));
+        }
+    }
+
+    public static void translate(float x, float y, float z) {
+        if (invokeStatic(glStateManagerClass(), new String[] {"translate", "func_179109_b"},
+            new Class<?>[] {Float.TYPE, Float.TYPE, Float.TYPE},
+            Float.valueOf(x), Float.valueOf(y), Float.valueOf(z)) == null) {
+            invokeStatic(gl11Class(), new String[] {"glTranslatef"},
+                new Class<?>[] {Float.TYPE, Float.TYPE, Float.TYPE},
+                Float.valueOf(x), Float.valueOf(y), Float.valueOf(z));
+        }
+    }
+
+    public static void setAngles(Object entity, float yaw, float pitch) {
+        invoke(entity, new String[] {"setAngles", "func_70082_c"},
+            new Class<?>[] {Float.TYPE, Float.TYPE}, Float.valueOf(yaw), Float.valueOf(pitch));
+    }
+
+    public static void enableAlpha() {
+        if (invokeStatic(glStateManagerClass(), new String[] {"enableAlpha", "func_179092_a"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glEnable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(3008));
+        }
+    }
+
+    public static void bindTexture(int textureId) {
+        if (invokeStatic(glStateManagerClass(), new String[] {"bindTexture", "func_179144_i"},
+            new Class<?>[] {Integer.TYPE}, Integer.valueOf(textureId)) == null) {
+            invokeStatic(gl11Class(), new String[] {"glBindTexture"},
+                new Class<?>[] {Integer.TYPE, Integer.TYPE}, Integer.valueOf(3553), Integer.valueOf(textureId));
+        }
+    }
+
+    static void enableBlend() {
+        if (invokeStatic(glStateManagerClass(), new String[] {"enableBlend", "func_179147_l"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glEnable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(3042));
+        }
+    }
+
+    static void disableBlend() {
+        if (invokeStatic(glStateManagerClass(), new String[] {"disableBlend", "func_179084_k"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glDisable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(3042));
+        }
+    }
+
+    static void tryBlendFuncSeparate(int srcFactor, int dstFactor, int srcFactorAlpha, int dstFactorAlpha) {
+        if (invokeStatic(glStateManagerClass(), new String[] {"tryBlendFuncSeparate", "func_179120_a"},
+            new Class<?>[] {Integer.TYPE, Integer.TYPE, Integer.TYPE, Integer.TYPE},
+            Integer.valueOf(srcFactor), Integer.valueOf(dstFactor), Integer.valueOf(srcFactorAlpha), Integer.valueOf(dstFactorAlpha)) == null) {
+            try {
+                Class<?> openGlHelper = Class.forName("net.minecraft.client.renderer.OpenGlHelper");
+                invokeStatic(openGlHelper, new String[] {"glBlendFunc", "func_148821_a"},
+                    new Class<?>[] {Integer.TYPE, Integer.TYPE, Integer.TYPE, Integer.TYPE},
+                    Integer.valueOf(srcFactor), Integer.valueOf(dstFactor), Integer.valueOf(srcFactorAlpha), Integer.valueOf(dstFactorAlpha));
+            } catch (ClassNotFoundException ignored) {
+            }
+        }
+    }
+
+    static void disableTexture2D() {
+        if (invokeStatic(glStateManagerClass(), new String[] {"disableTexture2D", "func_179090_x"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glDisable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(3553));
+        }
+    }
+
+    static void enableTexture2D() {
+        if (invokeStatic(glStateManagerClass(), new String[] {"enableTexture2D", "func_179098_w"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glEnable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(3553));
+        }
+    }
+
+    static void depthMask(boolean flag) {
+        if (invokeStatic(glStateManagerClass(), new String[] {"depthMask", "func_179132_a"},
+            new Class<?>[] {Boolean.TYPE}, Boolean.valueOf(flag)) == null) {
+            invokeStatic(gl11Class(), new String[] {"glDepthMask"}, new Class<?>[] {Boolean.TYPE}, Boolean.valueOf(flag));
+        }
+    }
+
+    static void color(float red, float green, float blue, float alpha) {
+        if (invokeStatic(glStateManagerClass(), new String[] {"color", "func_179131_c", "func_179124_c"},
+            new Class<?>[] {Float.TYPE, Float.TYPE, Float.TYPE, Float.TYPE},
+            Float.valueOf(red), Float.valueOf(green), Float.valueOf(blue), Float.valueOf(alpha)) == null) {
+            invokeStatic(gl11Class(), new String[] {"glColor4f"},
+                new Class<?>[] {Float.TYPE, Float.TYPE, Float.TYPE, Float.TYPE},
+                Float.valueOf(red), Float.valueOf(green), Float.valueOf(blue), Float.valueOf(alpha));
+        }
+    }
+
+    static void enableRescaleNormal() {
+        if (invokeStatic(glStateManagerClass(), new String[] {"enableRescaleNormal", "func_179129_p"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glEnable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(32826));
+        }
+    }
+
+    static void disableRescaleNormal() {
+        if (invokeStatic(glStateManagerClass(), new String[] {"disableRescaleNormal", "func_179101_B"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glDisable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(32826));
+        }
+    }
+
+    static void drawSelectionBoundingBox(AxisAlignedBB box) {
+        if (invokeStatic(RenderGlobal.class, new String[] {"drawSelectionBoundingBox", "func_181561_a"},
+            new Class<?>[] {AxisAlignedBB.class}, box) == null) {
+            drawOutlinedBoundingBox(box);
+        }
+    }
+
+    private static void drawOutlinedBoundingBox(AxisAlignedBB box) {
+        Tessellator tessellator = getTessellator();
+        WorldRenderer worldRenderer = tessellator.getWorldRenderer();
+        worldRenderer.begin(3, DefaultVertexFormats.POSITION);
+        worldRenderer.pos(box.minX, box.minY, box.minZ).endVertex();
+        worldRenderer.pos(box.maxX, box.minY, box.minZ).endVertex();
+        worldRenderer.pos(box.maxX, box.minY, box.maxZ).endVertex();
+        worldRenderer.pos(box.minX, box.minY, box.maxZ).endVertex();
+        worldRenderer.pos(box.minX, box.minY, box.minZ).endVertex();
+        tessellator.draw();
+        worldRenderer.begin(3, DefaultVertexFormats.POSITION);
+        worldRenderer.pos(box.minX, box.maxY, box.minZ).endVertex();
+        worldRenderer.pos(box.maxX, box.maxY, box.minZ).endVertex();
+        worldRenderer.pos(box.maxX, box.maxY, box.maxZ).endVertex();
+        worldRenderer.pos(box.minX, box.maxY, box.maxZ).endVertex();
+        worldRenderer.pos(box.minX, box.maxY, box.minZ).endVertex();
+        tessellator.draw();
+        worldRenderer.begin(1, DefaultVertexFormats.POSITION);
+        worldRenderer.pos(box.minX, box.minY, box.minZ).endVertex();
+        worldRenderer.pos(box.minX, box.maxY, box.minZ).endVertex();
+        worldRenderer.pos(box.maxX, box.minY, box.minZ).endVertex();
+        worldRenderer.pos(box.maxX, box.maxY, box.minZ).endVertex();
+        worldRenderer.pos(box.maxX, box.minY, box.maxZ).endVertex();
+        worldRenderer.pos(box.maxX, box.maxY, box.maxZ).endVertex();
+        worldRenderer.pos(box.minX, box.minY, box.maxZ).endVertex();
+        worldRenderer.pos(box.minX, box.maxY, box.maxZ).endVertex();
+        tessellator.draw();
     }
 
     private static Class<?> glStateManagerClass() {
@@ -578,7 +962,7 @@ final class Mc189Compat {
             Method method = mouse.getMethod("getEventDWheel");
             Object value = method.invoke(null);
             return value instanceof Integer ? ((Integer) value).intValue() : 0;
-        } catch (ReflectiveOperationException exception) {
+        } catch (Throwable exception) {
             return 0;
         }
     }
@@ -589,7 +973,7 @@ final class Mc189Compat {
             Method method = mouse.getMethod("getX");
             Object value = method.invoke(null);
             return value instanceof Integer ? ((Integer) value).intValue() : 0;
-        } catch (ReflectiveOperationException exception) {
+        } catch (Throwable exception) {
             return 0;
         }
     }
@@ -600,8 +984,30 @@ final class Mc189Compat {
             Method method = mouse.getMethod("getY");
             Object value = method.invoke(null);
             return value instanceof Integer ? ((Integer) value).intValue() : 0;
-        } catch (ReflectiveOperationException exception) {
+        } catch (Throwable exception) {
             return 0;
+        }
+    }
+
+    static int getEventButton() {
+        try {
+            Class<?> mouse = Class.forName("org.lwjgl.input.Mouse");
+            Method method = mouse.getMethod("getEventButton");
+            Object value = method.invoke(null);
+            return value instanceof Integer ? ((Integer) value).intValue() : -1;
+        } catch (Throwable exception) {
+            return -1;
+        }
+    }
+
+    static boolean getEventButtonState() {
+        try {
+            Class<?> mouse = Class.forName("org.lwjgl.input.Mouse");
+            Method method = mouse.getMethod("getEventButtonState");
+            Object value = method.invoke(null);
+            return value instanceof Boolean && ((Boolean) value).booleanValue();
+        } catch (Throwable exception) {
+            return false;
         }
     }
 
@@ -633,6 +1039,20 @@ final class Mc189Compat {
         return value instanceof Boolean && ((Boolean) value).booleanValue();
     }
 
+    private static Method findMethod(Class<?> type, String name, Class<?>[] parameterTypes) {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                Method method = current.getDeclaredMethod(name, parameterTypes);
+                method.setAccessible(true);
+                return method;
+            } catch (NoSuchMethodException ignored) {
+                current = current.getSuperclass();
+            }
+        }
+        return null;
+    }
+
     private static Object invokeStatic(Class<?> type, String[] names) {
         return invokeStatic(type, names, new Class<?>[0]);
     }
@@ -651,13 +1071,13 @@ final class Mc189Compat {
             }
         }
         for (String name : names) {
-            try {
-                Method method = type.getMethod(name, parameterTypes);
-                method.setAccessible(true);
-                methodCache.put(cacheKey, method);
-                return method.invoke(null, args);
-            } catch (ReflectiveOperationException ignored) {
-                // Try the next runtime naming scheme.
+            Method method = findMethod(type, name, parameterTypes);
+            if (method != null) {
+                try {
+                    methodCache.put(cacheKey, method);
+                    return method.invoke(null, args);
+                } catch (ReflectiveOperationException ignored) {
+                }
             }
         }
         return null;
@@ -681,13 +1101,13 @@ final class Mc189Compat {
             }
         }
         for (String name : names) {
-            try {
-                Method method = target.getClass().getMethod(name, parameterTypes);
-                method.setAccessible(true);
-                methodCache.put(cacheKey, method);
-                return method.invoke(target, args);
-            } catch (ReflectiveOperationException ignored) {
-                // Try the next runtime naming scheme.
+            Method method = findMethod(target.getClass(), name, parameterTypes);
+            if (method != null) {
+                try {
+                    methodCache.put(cacheKey, method);
+                    return method.invoke(target, args);
+                } catch (ReflectiveOperationException ignored) {
+                }
             }
         }
         return null;
@@ -768,6 +1188,209 @@ final class Mc189Compat {
         } catch (ClassNotFoundException e) {
             return null;
         }
+    }
+
+    /**
+     * Returns the Tessellator singleton in a way that works on MC 1.8.9.
+     * At runtime the singleton is exposed as a public static field
+     * {@code Tessellator.instance}, while the stub (and some other
+     * environments) expose it as a static {@code getInstance()} method.
+     * We try the field first, then fall back to the method.
+     */
+    private static Tessellator getTessellator() {
+        // Try the 1.8.9 static field 'instance' / 'field_178181_a' first.
+        for (String name : new String[] {"instance", "field_178181_a"}) {
+            Field field = findField(Tessellator.class, name);
+            if (field != null) {
+                try {
+                    field.setAccessible(true);
+                    Object value = field.get(null);
+                    if (value instanceof Tessellator) return (Tessellator) value;
+                } catch (IllegalAccessException ignored) { }
+            }
+        }
+        // Fall back to getInstance() for environments where the method exists.
+        return Tessellator.getInstance();
+    }
+
+    static void setScoreboardDisabled(boolean disabled) {
+        try {
+            Class<?> guiIngameForge = Class.forName("net.minecraftforge.client.GuiIngameForge");
+            Field field = guiIngameForge.getDeclaredField("renderObjective");
+            field.setAccessible(true);
+            field.setBoolean(null, !disabled);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    static void drawRectangle(int x, int y, int width, int height, int color) {
+        drawRect(x, y, x + width, y + height, color);
+    }
+
+    static void drawOutlinedRectangle(int x, int y, int w, int h, int t, int color) {
+        drawRectangle(x, y, w, t, color);
+        drawRectangle(x + w - t, y, t, h, color);
+        drawRectangle(x, y + h - t, w, t, color);
+        drawRectangle(x, y, t, h, color);
+    }
+
+    static void shadeModel(int mode) {
+        if (invokeStatic(glStateManagerClass(), new String[] {"shadeModel", "func_179103_j"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(mode)) == null) {
+            invokeStatic(gl11Class(), new String[] {"glShadeModel"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(mode));
+        }
+    }
+
+    static void drawCircle(float x, float y, float r, int h, int j, int color) {
+        enableBlend();
+        disableTexture2D();
+
+        float a = (float)(color >> 24 & 255) / 255.0F;
+        float red = (float)(color >> 16 & 255) / 255.0F;
+        float g = (float)(color >> 8 & 255) / 255.0F;
+        float b = (float)(color & 255) / 255.0F;
+        color(red, g, b, a);
+
+        Class<?> gl = gl11Class();
+        invokeStatic(gl, new String[] {"glBegin"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(6));
+        invokeStatic(gl, new String[] {"glVertex2f"}, new Class<?>[] {Float.TYPE, Float.TYPE}, Float.valueOf(x), Float.valueOf(y));
+
+        for (float var = h; var <= j; var++) {
+            color(red, g, b, a);
+            float vx = (float) (r * Math.cos(Math.PI * var / 180) + x);
+            float vy = (float) (r * Math.sin(Math.PI * var / 180) + y);
+            invokeStatic(gl, new String[] {"glVertex2f"}, new Class<?>[] {Float.TYPE, Float.TYPE}, Float.valueOf(vx), Float.valueOf(vy));
+        }
+
+        invokeStatic(gl, new String[] {"glEnd"});
+        enableTexture2D();
+        disableBlend();
+    }
+
+    static void drawRoundedRectangle(int x, int y, int w, int h, int radius, int color, int index) {
+        if (w <= 0 || h <= 0) return;
+        if (radius <= 0) {
+            drawRectangle(x, y, w, h, color);
+            return;
+        }
+        int r = Math.min(radius, Math.min(w / 2, h / 2));
+        drawRectangle(x + r, y, w - r * 2, h, color);
+        drawRectangle(x, y + r, r, h - r * 2, color);
+        drawRectangle(x + w - r, y + r, r, h - r * 2, color);
+
+        for (int i = 0; i < r; i++) {
+            int step = (int) Math.round(Math.sqrt(r * r - (r - i - 1) * (r - i - 1)));
+            drawRectangle(x + r - step, y + i, step, 1, color);
+            drawRectangle(x + w - r, y + i, step, 1, color);
+            drawRectangle(x + r - step, y + h - 1 - i, step, 1, color);
+            drawRectangle(x + w - r, y + h - 1 - i, step, 1, color);
+        }
+        enableTexture2D();
+        disableBlend();
+        color(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
+    static void drawGradientRectangle(float x, float y, float w, float h, int startColor, int endColor) {
+        float f1 = (float) (startColor >> 24 & 255) / 255.0F;
+        float f2 = (float) (startColor >> 16 & 255) / 255.0F;
+        float f3 = (float) (startColor >> 8 & 255) / 255.0F;
+        float f4 = (float) (startColor & 255) / 255.0F;
+        float f5 = (float) (endColor >> 24 & 255) / 255.0F;
+        float f6 = (float) (endColor >> 16 & 255) / 255.0F;
+        float f7 = (float) (endColor >> 8 & 255) / 255.0F;
+        float f8 = (float) (endColor & 255) / 255.0F;
+
+        disableTexture2D();
+        enableBlend();
+        tryBlendFuncSeparate(770, 771, 1, 0);
+        shadeModel(7425);
+        Tessellator tessellator = getTessellator();
+        WorldRenderer worldRenderer = tessellator.getWorldRenderer();
+        worldRenderer.begin(7, DefaultVertexFormats.POSITION_COLOR);
+        worldRenderer.pos(x + w, y, 0f).color(f2, f3, f4, f1).endVertex();
+        worldRenderer.pos(x, y, 0f).color(f2, f3, f4, f1).endVertex();
+        worldRenderer.pos(x, y + h, 0f).color(f6, f7, f8, f5).endVertex();
+        worldRenderer.pos(x + w, y + h, 0f).color(f6, f7, f8, f5).endVertex();
+        tessellator.draw();
+        shadeModel(7424);
+        disableBlend();
+        enableTexture2D();
+        color(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
+    static void drawHorizontalGradientRectangle(float x, float y, float w, float h, int startColor, int endColor) {
+        float f1 = (float) (startColor >> 24 & 255) / 255.0F;
+        float f2 = (float) (startColor >> 16 & 255) / 255.0F;
+        float f3 = (float) (startColor >> 8 & 255) / 255.0F;
+        float f4 = (float) (startColor & 255) / 255.0F;
+        float f5 = (float) (endColor >> 24 & 255) / 255.0F;
+        float f6 = (float) (endColor >> 16 & 255) / 255.0F;
+        float f7 = (float) (endColor >> 8 & 255) / 255.0F;
+        float f8 = (float) (endColor & 255) / 255.0F;
+
+        disableTexture2D();
+        enableBlend();
+        tryBlendFuncSeparate(770, 771, 1, 0);
+        shadeModel(7425);
+        Tessellator tessellator = getTessellator();
+        WorldRenderer worldRenderer = tessellator.getWorldRenderer();
+        worldRenderer.begin(7, DefaultVertexFormats.POSITION_COLOR);
+        worldRenderer.pos(x, y, 0f).color(f2, f3, f4, f1).endVertex();
+        worldRenderer.pos(x, y + h, 0f).color(f2, f3, f4, f1).endVertex();
+        worldRenderer.pos(x + w, y + h, 0f).color(f6, f7, f8, f5).endVertex();
+        worldRenderer.pos(x + w, y, 0f).color(f6, f7, f8, f5).endVertex();
+        tessellator.draw();
+        shadeModel(7424);
+        disableBlend();
+        enableTexture2D();
+        color(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
+    static void drawFilledBoundingBox(AxisAlignedBB boundingBox) {
+        if (boundingBox == null) return;
+        Tessellator tessellator = getTessellator();
+        WorldRenderer worldRenderer = tessellator.getWorldRenderer();
+
+        worldRenderer.begin(7, DefaultVertexFormats.POSITION);
+        worldRenderer.pos(boundingBox.minX, boundingBox.maxY, boundingBox.maxZ).endVertex();
+        worldRenderer.pos(boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ).endVertex();
+        worldRenderer.pos(boundingBox.maxX, boundingBox.maxY, boundingBox.minZ).endVertex();
+        worldRenderer.pos(boundingBox.minX, boundingBox.maxY, boundingBox.minZ).endVertex();
+        tessellator.draw();
+
+        worldRenderer.begin(7, DefaultVertexFormats.POSITION);
+        worldRenderer.pos(boundingBox.maxX, boundingBox.minY, boundingBox.maxZ).endVertex();
+        worldRenderer.pos(boundingBox.minX, boundingBox.minY, boundingBox.maxZ).endVertex();
+        worldRenderer.pos(boundingBox.minX, boundingBox.minY, boundingBox.minZ).endVertex();
+        worldRenderer.pos(boundingBox.maxX, boundingBox.minY, boundingBox.minZ).endVertex();
+        tessellator.draw();
+
+        worldRenderer.begin(7, DefaultVertexFormats.POSITION);
+        worldRenderer.pos(boundingBox.minX, boundingBox.maxY, boundingBox.minZ).endVertex();
+        worldRenderer.pos(boundingBox.maxX, boundingBox.maxY, boundingBox.minZ).endVertex();
+        worldRenderer.pos(boundingBox.maxX, boundingBox.minY, boundingBox.minZ).endVertex();
+        worldRenderer.pos(boundingBox.minX, boundingBox.minY, boundingBox.minZ).endVertex();
+        tessellator.draw();
+
+        worldRenderer.begin(7, DefaultVertexFormats.POSITION);
+        worldRenderer.pos(boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ).endVertex();
+        worldRenderer.pos(boundingBox.minX, boundingBox.maxY, boundingBox.maxZ).endVertex();
+        worldRenderer.pos(boundingBox.minX, boundingBox.minY, boundingBox.maxZ).endVertex();
+        worldRenderer.pos(boundingBox.maxX, boundingBox.minY, boundingBox.maxZ).endVertex();
+        tessellator.draw();
+
+        worldRenderer.begin(7, DefaultVertexFormats.POSITION);
+        worldRenderer.pos(boundingBox.minX, boundingBox.minY, boundingBox.maxZ).endVertex();
+        worldRenderer.pos(boundingBox.minX, boundingBox.maxY, boundingBox.maxZ).endVertex();
+        worldRenderer.pos(boundingBox.minX, boundingBox.maxY, boundingBox.minZ).endVertex();
+        worldRenderer.pos(boundingBox.minX, boundingBox.minY, boundingBox.minZ).endVertex();
+        tessellator.draw();
+
+        worldRenderer.begin(7, DefaultVertexFormats.POSITION);
+        worldRenderer.pos(boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ).endVertex();
+        worldRenderer.pos(boundingBox.maxX, boundingBox.minY, boundingBox.maxZ).endVertex();
+        worldRenderer.pos(boundingBox.maxX, boundingBox.minY, boundingBox.minZ).endVertex();
+        worldRenderer.pos(boundingBox.maxX, boundingBox.maxY, boundingBox.minZ).endVertex();
+        tessellator.draw();
     }
 
     private static String buildCacheKey(String prefix, String[] names, Class<?>[] parameterTypes) {

@@ -8,7 +8,7 @@ public class ThemeSelectorModule extends AbstractModule {
     public ThemeSelectorModule() {
         super(ModuleMetadata.builder("interface.theme_selector", "Theme Selector")
             .category(ModuleCategory.INTERFACE)
-            .description("Adds a theme switching utility slot.")
+            .description("Opens the theme selection interface for switching between visual themes.")
             .build());
     }
 }

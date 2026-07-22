@@ -8,7 +8,7 @@ public class ScreenshotManagerModule extends AbstractModule {
     public ScreenshotManagerModule() {
         super(ModuleMetadata.builder("interface.screenshot_manager", "Screenshot Manager")
             .category(ModuleCategory.INTERFACE)
-            .description("Adds a screenshot organization utility slot.")
+            .description("Manages and organizes screenshots with an in-game viewer and sharing options.")
             .build());
     }
 }

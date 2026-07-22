@@ -8,7 +8,7 @@ public class NickHiderModule extends AbstractModule {
     public NickHiderModule() {
         super(ModuleMetadata.builder("interface.nick_hider", "Nick Hider")
             .category(ModuleCategory.INTERFACE)
-            .description("Hides your username in game by replacing it.")
+            .description("Replaces your in-game username with a custom nickname for privacy.")
             .build());
 
         addText("nickname", "Nickname", "You");
