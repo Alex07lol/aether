@@ -109,7 +109,26 @@ public final class GlyphPage {
     }
 
     public void bindTexture() {
-        dev.aether.forge189.Mc189Compat.bindTexture(loadedTexture.getGlTextureId());
+        int textureId = 0;
+        if (loadedTexture != null) {
+            try {
+                // In production 1.8.9, DynamicTexture extends AbstractTexture which has getGlTextureId()
+                // The method may be obfuscated; use reflection via Mc189Compat
+                Class<?> abstractTextureClass = Class.forName("net.minecraft.client.renderer.texture.AbstractTexture");
+                java.lang.reflect.Method method = abstractTextureClass.getDeclaredMethod("getGlTextureId");
+                method.setAccessible(true);
+                textureId = (Integer) method.invoke(loadedTexture);
+            } catch (Throwable t) {
+                // Fallback: try direct call (works in dev environment)
+                try {
+                    java.lang.reflect.Method method = loadedTexture.getClass().getMethod("getGlTextureId");
+                    textureId = (Integer) method.invoke(loadedTexture);
+                } catch (Throwable ignored) {
+                    textureId = 0;
+                }
+            }
+        }
+        dev.aether.forge189.Mc189Compat.bindTexture(textureId);
     }
 
     public void unbindTexture() {

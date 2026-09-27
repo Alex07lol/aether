@@ -1217,6 +1217,18 @@ public final class Mc189Compat {
         color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
+    public static void enableGUIStandardItemLighting() {
+        if (invokeStatic(renderHelperClass(), new String[] {"enableGUIStandardItemLighting", "func_74519_b"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glEnable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(2896)); // GL_LIGHTING
+        }
+    }
+
+    public static void disableStandardItemLighting() {
+        if (invokeStatic(renderHelperClass(), new String[] {"disableStandardItemLighting", "func_74518_a"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glDisable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(2896)); // GL_LIGHTING
+        }
+    }
+
     static void drawSelectionBoundingBox(AxisAlignedBB box) {
         if (invokeStatic(RenderGlobal.class, new String[] {"drawSelectionBoundingBox", "func_181561_a"},
             new Class<?>[] {AxisAlignedBB.class}, box) == null) {
@@ -1256,6 +1268,14 @@ public final class Mc189Compat {
     private static Class<?> glStateManagerClass() {
         try {
             return Class.forName("net.minecraft.client.renderer.GlStateManager");
+        } catch (ClassNotFoundException e) {
+            return null;
+        }
+    }
+
+    private static Class<?> renderHelperClass() {
+        try {
+            return Class.forName("net.minecraft.client.renderer.RenderHelper");
         } catch (ClassNotFoundException e) {
             return null;
         }

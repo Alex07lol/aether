@@ -5,7 +5,6 @@ import dev.aether.hud.HudElement;
 import dev.aether.module.ClientModule.ModuleState;
 import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
-import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
 import net.minecraft.client.entity.EntityPlayerSP;
@@ -569,7 +568,7 @@ final class ForgeHudRenderer {
         int x = element.x();
         int y = element.y();
 
-        RenderHelper.enableGUIStandardItemLighting();
+        Mc189Compat.enableGUIStandardItemLighting();
         Mc189Compat.enableRescaleNormal();
 
         for (int i = 0; i < 4; i++) {
@@ -604,7 +603,7 @@ final class ForgeHudRenderer {
         }
 
         Mc189Compat.disableRescaleNormal();
-        RenderHelper.disableStandardItemLighting();
+        Mc189Compat.disableStandardItemLighting();
     }
 
     public void renderScoreboard() {
