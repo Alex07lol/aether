@@ -1,9 +1,16 @@
 package dev.aether.forge189;
 
 import dev.aether.AetherClient;
+import dev.aether.forge189.mixin.EntityPlayerSPMixin;
 import dev.aether.forge189.mixin.EntityRendererMixin;
 import dev.aether.forge189.mixin.ItemRendererMixin;
 import dev.aether.forge189.mixin.RendererLivingEntityMixin;
+import dev.aether.forge189.mixin.WorldMixin;
+import dev.aether.graphics.FreelookMath;
+import dev.aether.graphics.HurtCamMath;
+import dev.aether.graphics.ZoomMath;
+import dev.aether.module.state.ToggleKey;
+import dev.aether.module.state.ValueHold;
 import dev.aether.module.impl.interface_.ChatCustomizationModule;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleState;
@@ -40,23 +47,34 @@ final class ForgeClientEventBridge {
     };
     private static final String LEGACY_CODES = "0123456789abcdef";
 
+    /** Chat timestamp formatters: built once and reused for every message. */
+    private final SimpleDateFormat clockFormat24 = new SimpleDateFormat("HH:mm", Locale.ROOT);
+    private final SimpleDateFormat clockFormat12 = new SimpleDateFormat("hh:mm a", Locale.ROOT);
+
     private final AetherClient client;
     private final ForgeKeyBindings keyBindings;
     private final ForgeCosmeticRenderer cosmetics;
     private final ForgeNameTagRenderer nametags;
     private final ForgeNotifications notifications;
-    private Float originalGamma;
-    private Integer originalParticles;
-    private Boolean originalFancyGraphics;
-    private Boolean originalUseVbo;
-    private Integer originalLimitFramerate;
-    private Integer originalRenderDistance;
-    private Float originalFov;
-    private Integer originalPerspective;
-    private boolean toggleSprintActive;
-    private boolean toggleSprintKeyDown;
-    private boolean toggleSneakActive;
-    private boolean toggleSneakKeyDown;
+    /**
+     * Held vanilla values. One {@link ValueHold} per value the client is allowed to override, so
+     * every "put it back" path captures exactly once and restores exactly once - the three bugs
+     * this replaces (capturing an override, restoring something never owned and leaking across a
+     * re-enable) are all closed in one place instead of once per setting.
+     */
+    private final ValueHold<Float> gammaHold = new ValueHold<Float>("gamma");
+    private final ValueHold<Boolean> fancyGraphicsHold = new ValueHold<Boolean>("fancy graphics");
+    private final ValueHold<Boolean> vboHold = new ValueHold<Boolean>("vbo");
+    private final ValueHold<Integer> ambientOcclusionHold = new ValueHold<Integer>("ambient occlusion");
+    private final ValueHold<Integer> cloudsHold = new ValueHold<Integer>("clouds");
+    private final ValueHold<Integer> freelookPerspectiveHold = new ValueHold<Integer>("freelook perspective");
+    private final ValueHold<Integer> snaplookPerspectiveHold = new ValueHold<Integer>("snaplook perspective");
+    private final ToggleKey toggleSprint = new ToggleKey();
+    private final ToggleKey toggleSneak = new ToggleKey();
+    /** True while the module owns the sprint/sneak key, so it is only handed back once. */
+    private boolean sprintKeyForced;
+    private boolean sneakKeyForced;
+    private long zoomPersistAtMillis;
     private int comboCount;
     private long lastComboMillis;
     private boolean freelookActive;
@@ -83,6 +101,7 @@ final class ForgeClientEventBridge {
         applyToggleSneak();
         applySnaplook();
         applyClientEffects();
+        flushZoomPersist();
         checkModMenuKey();
         applyHudEditorRequest();
         applyThemeSelectorRequest();
@@ -96,11 +115,17 @@ final class ForgeClientEventBridge {
         if (Mc189Compat.currentScreen(minecraft) != null) {
             return;
         }
-        if (enabled("pvp.zoom") && Mc189Compat.keyboardKeyDown(settingInt("pvp.zoom", "keybind", 0)) && settingBool("pvp.zoom", "scroll_to_zoom", true)) {
-            int delta = Mc189Compat.mouseWheelDelta();
-            if (delta == 0) return;
-            updateZoomFromScroll(delta > 0 ? 1 : -1);
+        if (!enabled("pvp.zoom") || !configuredBool("pvp.zoom", "scroll_to_zoom")) {
+            return;
         }
+        if (!Mc189Compat.keyboardKeyDown(configuredInt("pvp.zoom", "keybind"))) {
+            return;
+        }
+        int delta = Mc189Compat.mouseWheelDelta();
+        if (delta == 0) {
+            return;
+        }
+        updateZoomFromScroll(delta > 0 ? 1 : -1);
     }
 
     @SubscribeEvent
@@ -112,11 +137,15 @@ final class ForgeClientEventBridge {
         if (moduleId == null) {
             return;
         }
-        float sensitivity = clamp(settingInt(moduleId, "sensitivity", 100), 10, 250) / 100.0F;
-        this.freelookYaw += event.dx * 0.125F * sensitivity;
-        float pitchDelta = event.dy * 0.125F * sensitivity;
-        this.freelookPitch += settingBool(moduleId, "invert_y", false) ? -pitchDelta : pitchDelta;
-        this.freelookPitch = clamp(this.freelookPitch, -90.0F, 90.0F);
+        // Vanilla's own sensitivity curve, scaled by the module's dial: at the default slider and
+        // a sensitivity of 100 the camera turns exactly as fast as the player's head would.
+        float mouseSensitivity = Mc189Compat.mouseSensitivity(Mc189Compat.gameSettings(Mc189Compat.minecraft()));
+        float scale = FreelookMath.moduleScale(configuredInt(moduleId, "sensitivity"));
+        this.freelookYaw = FreelookMath.yawAfter(this.freelookYaw, event.dx, mouseSensitivity, scale);
+        this.freelookPitch = FreelookMath.pitchAfter(this.freelookPitch, event.dy, mouseSensitivity, scale,
+            configuredBool(moduleId, "invert_y"));
+        // The player is frozen inside the mixin as well; cancelling here is the primary guard so
+        // vanilla never even reads the delta.
         event.setCanceled(true);
     }
 
@@ -241,8 +270,12 @@ final class ForgeClientEventBridge {
     }
 
     private String timestampPrefix() {
-        String pattern = settingBool(ChatCustomizationModule.ID, "twenty_four_hour", true) ? "HH:mm" : "hh:mm a";
-        String clock = new SimpleDateFormat(pattern, Locale.ROOT).format(new Date());
+        // One formatter per format, built once: a chat line should not build a SimpleDateFormat and
+        // a pattern parser just to print a five character clock.
+        SimpleDateFormat format = settingBool(ChatCustomizationModule.ID, "twenty_four_hour", true)
+            ? this.clockFormat24
+            : this.clockFormat12;
+        String clock = format.format(new Date());
         char colour = legacyColourCode(settingColor(ChatCustomizationModule.ID, "timestamp_color", 0xFF52BEEB));
         return "\u00A78[\u00A7" + colour + clock + "\u00A78] \u00A7r";
     }
@@ -268,24 +301,47 @@ final class ForgeClientEventBridge {
         return LEGACY_CODES.charAt(best);
     }
 
+    /**
+     * The hit outline half of {@code graphics.hit_color}. Everything it changes is global render
+     * state, so the whole draw is wrapped in {@code try/finally}: the colour, line width, depth
+     * writes, texture and blend flags go back even if the draw throws, and nothing is left tinted
+     * for the next renderer that draws into the same frame.
+     */
     @SubscribeEvent
     public void onRenderLivingPost(RenderLivingEvent.Post<EntityLivingBase> event) {
-        if (enabled("graphics.hit_color") && Mc189Compat.hurtTime(event.entity) > 0) {
-            int color = settingColor("graphics.hit_color", "color", 0xFFFF5555);
-            float a = (float)(color >> 24 & 255) / 255.0F;
-            float r = (float)(color >> 16 & 255) / 255.0F;
-            float g = (float)(color >> 8 & 255) / 255.0F;
-            float b = (float)(color & 255) / 255.0F;
+        if (!enabled("graphics.hit_color") || Mc189Compat.hurtTime(event.entity) <= 0) {
+            return;
+        }
+        AxisAlignedBB box = Mc189Compat.getEntityBoundingBox(event.entity);
+        if (box == null) {
+            return;
+        }
+        int color = settingColor("graphics.hit_color", "color", 0xFFFF5555);
+        float a = (float)(color >> 24 & 255) / 255.0F;
+        float r = (float)(color >> 16 & 255) / 255.0F;
+        float g = (float)(color >> 8 & 255) / 255.0F;
+        float b = (float)(color & 255) / 255.0F;
+        AxisAlignedBB offset = box
+            .offset(-Mc189Compat.posX(event.entity), -Mc189Compat.posY(event.entity), -Mc189Compat.posZ(event.entity))
+            .offset(event.x, event.y, event.z);
 
-            AxisAlignedBB bb = Mc189Compat.getEntityBoundingBox(event.entity);
-            if (bb != null) {
-                Mc189Compat.pushMatrix();
-                Mc189Compat.disableTexture2D();
-                Mc189Compat.color(r, g, b, a);
-                Mc189Compat.drawSelectionBoundingBox(bb.offset(-Mc189Compat.posX(event.entity), -Mc189Compat.posY(event.entity), -Mc189Compat.posZ(event.entity)).offset(event.x, event.y, event.z));
-                Mc189Compat.enableTexture2D();
-                Mc189Compat.popMatrix();
-            }
+        Mc189Compat.pushMatrix();
+        try {
+            // Vanilla's own block-highlight state, so the outline reads the same as the vanilla one.
+            Mc189Compat.enableBlend();
+            Mc189Compat.tryBlendFuncSeparate(770, 771, 1, 0);
+            Mc189Compat.disableTexture2D();
+            Mc189Compat.depthMask(false);
+            Mc189Compat.glLineWidth(2.0F);
+            Mc189Compat.color(r, g, b, a);
+            Mc189Compat.drawSelectionBoundingBox(offset);
+        } finally {
+            Mc189Compat.color(1.0F, 1.0F, 1.0F, 1.0F);
+            Mc189Compat.glLineWidth(1.0F);
+            Mc189Compat.depthMask(true);
+            Mc189Compat.enableTexture2D();
+            Mc189Compat.disableBlend();
+            Mc189Compat.popMatrix();
         }
     }
 
@@ -314,66 +370,89 @@ final class ForgeClientEventBridge {
         this.modMenuKeyDown = isDown;
     }
 
+    /**
+     * Toggle sprint owns the sprint key only while the module is on and the toggle is engaged.
+     * <p>
+     * Three rules keep it from sticking: the key press is an edge (a held key cannot re-toggle),
+     * the forced key state is published only when it actually changes (so vanilla's own key handling
+     * keeps working in between, and nothing is rewritten every tick), and disabling the module hands
+     * the key back exactly once and forgets both the toggle and the key latch. The key is also
+     * ignored while a screen is open, so typing in chat cannot flip sprint.
+     */
     private void applyToggleSprint() {
         Object minecraft = Mc189Compat.minecraft();
         Object gameSettings = Mc189Compat.gameSettings(minecraft);
         if (!enabled("pvp.toggle_sprint")) {
-            // Only clear the forced-sprint state once when transitioning to disabled.
-            // Do NOT call setKeyBindState every tick — that overwrites MC's own key
-            // state and prevents vanilla sprinting from working.
-            if (this.toggleSprintActive && gameSettings != null) {
-                Mc189Compat.setKeyBindState(Mc189Compat.keySprint(gameSettings), false);
+            this.toggleSprint.reset();
+            if (this.sprintKeyForced) {
+                this.sprintKeyForced = false;
+                if (gameSettings != null) {
+                    Mc189Compat.setKeyBindState(Mc189Compat.keySprint(gameSettings), false);
+                }
             }
-            this.toggleSprintActive = false;
-            this.toggleSprintKeyDown = false;
             return;
         }
-        boolean keyDown = Mc189Compat.keyboardKeyDown(settingInt("pvp.toggle_sprint", "keybind", 29));
-        if (keyDown && !this.toggleSprintKeyDown) {
-            this.toggleSprintActive = !this.toggleSprintActive;
-            this.notifications.push("Toggle Sprint " + (this.toggleSprintActive ? "ON" : "OFF"));
+        boolean keyDown = Mc189Compat.currentScreen(minecraft) == null
+            && Mc189Compat.keyboardKeyDown(configuredInt("pvp.toggle_sprint", "keybind"));
+        if (this.toggleSprint.update(keyDown)) {
+            this.notifications.push("Toggle Sprint " + (this.toggleSprint.active() ? "ON" : "OFF"));
         }
-        this.toggleSprintKeyDown = keyDown;
 
         Object player = Mc189Compat.player(minecraft);
-        if (player == null || gameSettings == null) {
+        if (gameSettings == null || player == null) {
             return;
         }
-        Mc189Compat.setKeyBindState(Mc189Compat.keySprint(gameSettings), this.toggleSprintActive);
-        if (this.toggleSprintActive && Mc189Compat.keyDown(Mc189Compat.keyForward(gameSettings)) && !Mc189Compat.sneaking(player)) {
+        boolean wanted = this.toggleSprint.active();
+        if (this.sprintKeyForced != wanted) {
+            this.sprintKeyForced = wanted;
+            Mc189Compat.setKeyBindState(Mc189Compat.keySprint(gameSettings), wanted);
+        }
+        if (wanted && !Mc189Compat.sprinting(player)
+                && Mc189Compat.keyDown(Mc189Compat.keyForward(gameSettings))
+                && !Mc189Compat.sneaking(player)) {
             Mc189Compat.setSprinting(player, true);
         }
     }
 
 
-    /** Mirrors {@link #applyToggleSprint()} for the sneak key. */
+    /**
+     * Mirrors {@link #applyToggleSprint()} for the sneak key, with the same edge detection, the same
+     * publish-once key ownership and the same clean reset on disable.
+     * <p>
+     * Containers are deliberately not special-cased: the module holds the sneak key exactly like a
+     * held keyboard key would, and vanilla's own container behaviour (sneak is not what closes a
+     * chest - the GUI key is) is left alone. The one guard is the same as sprint's: a screen swallows
+     * key presses, so the toggle cannot flip while the player is typing.
+     */
     private void applyToggleSneak() {
         Object minecraft = Mc189Compat.minecraft();
         Object gameSettings = Mc189Compat.gameSettings(minecraft);
         if (!enabled("pvp.toggle_sneak")) {
-            // Same rule as toggle sprint: only clear the forced state on the way out,
-            // otherwise vanilla sneaking breaks because we keep overwriting its key.
-            if (this.toggleSneakActive && gameSettings != null) {
-                Mc189Compat.setKeyBindState(Mc189Compat.keyBindSneak(gameSettings), false);
+            this.toggleSneak.reset();
+            if (this.sneakKeyForced) {
+                this.sneakKeyForced = false;
+                if (gameSettings != null) {
+                    Mc189Compat.setKeyBindState(Mc189Compat.keyBindSneak(gameSettings), false);
+                }
             }
-            this.toggleSneakActive = false;
-            this.toggleSneakKeyDown = false;
             return;
         }
 
         // Never toggle while a screen is open, or typing in chat would flip sneak.
         boolean keyDown = Mc189Compat.currentScreen(minecraft) == null
-            && Mc189Compat.keyboardKeyDown(settingInt("pvp.toggle_sneak", "keybind", 42));
-        if (keyDown && !this.toggleSneakKeyDown) {
-            this.toggleSneakActive = !this.toggleSneakActive;
-            this.notifications.push("Toggle Sneak " + (this.toggleSneakActive ? "ON" : "OFF"));
+            && Mc189Compat.keyboardKeyDown(configuredInt("pvp.toggle_sneak", "keybind"));
+        if (this.toggleSneak.update(keyDown)) {
+            this.notifications.push("Toggle Sneak " + (this.toggleSneak.active() ? "ON" : "OFF"));
         }
-        this.toggleSneakKeyDown = keyDown;
 
         if (gameSettings == null || Mc189Compat.player(minecraft) == null) {
             return;
         }
-        Mc189Compat.setKeyBindState(Mc189Compat.keyBindSneak(gameSettings), this.toggleSneakActive);
+        boolean wanted = this.toggleSneak.active();
+        if (this.sneakKeyForced != wanted) {
+            this.sneakKeyForced = wanted;
+            Mc189Compat.setKeyBindState(Mc189Compat.keyBindSneak(gameSettings), wanted);
+        }
     }
 
     private void registerComboHit() {
@@ -381,7 +460,7 @@ final class ForgeClientEventBridge {
             return;
         }
         long now = System.currentTimeMillis();
-        int resetMillis = clamp(settingInt("hud.combo", "reset_time", 2000), 250, 10000);
+        int resetMillis = Math.max(50, settingRangeValue("hud.combo", "reset_time"));
         this.comboCount = now - this.lastComboMillis <= (long) resetMillis ? this.comboCount + 1 : 1;
         this.lastComboMillis = now;
         if (this.comboCount % 5 == 0) {
@@ -431,11 +510,11 @@ final class ForgeClientEventBridge {
     }
 
     boolean toggleSprintActive() {
-        return this.toggleSprintActive;
+        return this.toggleSprint.active();
     }
 
     boolean toggleSneakActive() {
-        return this.toggleSneakActive;
+        return this.toggleSneak.active();
     }
 
     int comboCount() {
@@ -450,25 +529,32 @@ final class ForgeClientEventBridge {
         return this.comboCount > 0 && System.currentTimeMillis() - this.lastComboMillis <= (long) maxGapMillis;
     }
 
-    private boolean snaplookActive;
-
+    /**
+     * Snaplook holds the camera behind the player while its key is down. The perspective the player
+     * was already using is captured once and restored once, so releasing the key returns to that
+     * perspective - a player who was already in third person does not get dropped into first person
+     * by a module that was only supposed to peek.
+     */
     private void applySnaplook() {
         Object minecraft = Mc189Compat.minecraft();
         Object gameSettings = Mc189Compat.gameSettings(minecraft);
-        if (!enabled("pvp.snaplook") || gameSettings == null) {
-            if (this.snaplookActive) {
-                Mc189Compat.setThirdPersonView(gameSettings, 0);
-                this.snaplookActive = false;
+        if (gameSettings == null) {
+            this.snaplookPerspectiveHold.forget();
+            return;
+        }
+        boolean active = enabled("pvp.snaplook")
+            && Mc189Compat.currentScreen(minecraft) == null
+            && Mc189Compat.keyboardKeyDown(configuredInt("pvp.snaplook", "keybind"));
+        if (active) {
+            this.snaplookPerspectiveHold.capture(Integer.valueOf(Mc189Compat.thirdPersonView(gameSettings)));
+            if (Mc189Compat.thirdPersonView(gameSettings) != 1) {
+                Mc189Compat.setThirdPersonView(gameSettings, 1);
             }
             return;
         }
-        boolean keyDown = Mc189Compat.keyboardKeyDown(settingInt("pvp.snaplook", "keybind", 33));
-        if (keyDown && !this.snaplookActive) {
-            this.snaplookActive = true;
-            Mc189Compat.setThirdPersonView(gameSettings, 1);
-        } else if (!keyDown && this.snaplookActive) {
-            this.snaplookActive = false;
-            Mc189Compat.setThirdPersonView(gameSettings, 0);
+        Integer restore = this.snaplookPerspectiveHold.release();
+        if (restore != null && Mc189Compat.thirdPersonView(gameSettings) != restore.intValue()) {
+            Mc189Compat.setThirdPersonView(gameSettings, restore.intValue());
         }
     }
 
@@ -478,9 +564,10 @@ final class ForgeClientEventBridge {
         if (gameSettings != null) {
             applyFullbright(gameSettings);
             applyFpsOptimizer(gameSettings);
-            applyZoom(gameSettings);
-            applyFreelook(gameSettings);
         }
+        // Zoom and freelook publish their own render-time state instead of writing game settings.
+        applyZoom();
+        applyFreelook();
         applyWeatherToggle(minecraft);
         applyTimeChanger(minecraft);
         applySkyCustomization(gameSettings);
@@ -511,10 +598,10 @@ final class ForgeClientEventBridge {
             restoreClouds(gameSettings);
             return;
         }
-        if (this.originalClouds == null) {
-            this.originalClouds = Integer.valueOf(Mc189Compat.clouds(gameSettings));
+        this.cloudsHold.capture(Integer.valueOf(Mc189Compat.clouds(gameSettings)));
+        if (Mc189Compat.clouds(gameSettings) != wanted) {
+            Mc189Compat.setClouds(gameSettings, wanted);
         }
-        Mc189Compat.setClouds(gameSettings, wanted);
     }
 
     @SubscribeEvent
@@ -526,51 +613,63 @@ final class ForgeClientEventBridge {
         }
     }
 
+    /**
+     * Fullbright raises the gamma the world is lit with. The player's own gamma is captured exactly
+     * once - on the first tick the module is active - and written back exactly once on the way out,
+     * which is what makes enable/disable/enable cycles idempotent: the module can never capture its
+     * own boosted value and leave the user's slider at 100.
+     */
     private void applyFullbright(Object gameSettings) {
-        if (enabled("graphics.fullbright")) {
-            if (originalGamma == null) {
-                originalGamma = Float.valueOf(Mc189Compat.gammaSetting(gameSettings));
-            }
-            Mc189Compat.setGammaSetting(gameSettings, settingInt("graphics.fullbright", "brightness", 100));
+        if (gameSettings == null) {
             return;
         }
-        if (originalGamma != null) {
-            Mc189Compat.setGammaSetting(gameSettings, originalGamma.floatValue());
-            originalGamma = null;
+        if (!enabled("graphics.fullbright")) {
+            Float restore = this.gammaHold.release();
+            if (restore != null && Mc189Compat.gammaSetting(gameSettings) != restore.floatValue()) {
+                Mc189Compat.setGammaSetting(gameSettings, restore.floatValue());
+            }
+            return;
+        }
+        this.gammaHold.capture(Float.valueOf(Mc189Compat.gammaSetting(gameSettings)));
+        float wanted = (float) settingRangeValue("graphics.fullbright", "brightness");
+        if (Mc189Compat.gammaSetting(gameSettings) != wanted) {
+            Mc189Compat.setGammaSetting(gameSettings, wanted);
         }
     }
 
     private void applyFpsOptimizer(Object gameSettings) {
-        boolean active = enabled("performance.fps_optimizer");
-        if (active) {
-            if (settingBool("performance.fps_optimizer", "fast_graphics", true)) {
-                if (this.originalFancyGraphics == null) {
-                    this.originalFancyGraphics = Boolean.valueOf(Mc189Compat.fancyGraphics(gameSettings));
+        if (gameSettings == null) {
+            return;
+        }
+        if (enabled("performance.fps_optimizer")) {
+            if (configuredBool("performance.fps_optimizer", "fast_graphics")) {
+                this.fancyGraphicsHold.capture(Boolean.valueOf(Mc189Compat.fancyGraphics(gameSettings)));
+                if (Mc189Compat.fancyGraphics(gameSettings)) {
+                    Mc189Compat.setFancyGraphics(gameSettings, false);
                 }
-                Mc189Compat.setFancyGraphics(gameSettings, false);
             } else {
                 restoreFancyGraphics(gameSettings);
             }
 
-            if (settingBool("performance.fps_optimizer", "use_vbo", true)) {
-                if (this.originalUseVbo == null) {
-                    this.originalUseVbo = Boolean.valueOf(Mc189Compat.useVbo(gameSettings));
+            if (configuredBool("performance.fps_optimizer", "use_vbo")) {
+                this.vboHold.capture(Boolean.valueOf(Mc189Compat.useVbo(gameSettings)));
+                if (!Mc189Compat.useVbo(gameSettings)) {
+                    Mc189Compat.setUseVbo(gameSettings, true);
                 }
-                Mc189Compat.setUseVbo(gameSettings, true);
             } else {
                 restoreUseVbo(gameSettings);
             }
 
-            if (settingBool("performance.fps_optimizer", "fast_lighting", true)) {
-                if (this.originalAmbientOcclusion == null) {
-                    this.originalAmbientOcclusion = Integer.valueOf(Mc189Compat.ambientOcclusion(gameSettings));
+            if (configuredBool("performance.fps_optimizer", "fast_lighting")) {
+                this.ambientOcclusionHold.capture(Integer.valueOf(Mc189Compat.ambientOcclusion(gameSettings)));
+                if (Mc189Compat.ambientOcclusion(gameSettings) != 0) {
+                    Mc189Compat.setAmbientOcclusion(gameSettings, 0);
                 }
-                Mc189Compat.setAmbientOcclusion(gameSettings, 0);
             } else {
                 restoreAmbientOcclusion(gameSettings);
             }
 
-            if (settingBool("performance.fps_optimizer", "memory_cleanup", true)) {
+            if (configuredBool("performance.fps_optimizer", "memory_cleanup")) {
                 long now = System.currentTimeMillis();
                 if (now >= this.nextMemoryCleanupMillis) {
                     this.nextMemoryCleanupMillis = now + 45000L;
@@ -589,88 +688,75 @@ final class ForgeClientEventBridge {
         restoreAmbientOcclusion(gameSettings);
     }
 
-    private Boolean originalEntityShadows;
-    private Integer originalClouds;
-    private Integer originalAmbientOcclusion;
-
-    private void restoreEntityShadows(Object gameSettings) {
-        if (this.originalEntityShadows != null) {
-            Mc189Compat.setEntityShadows(gameSettings, this.originalEntityShadows.booleanValue());
-            this.originalEntityShadows = null;
-        }
-    }
-
     private void restoreClouds(Object gameSettings) {
-        if (this.originalClouds != null) {
-            Mc189Compat.setClouds(gameSettings, this.originalClouds.intValue());
-            this.originalClouds = null;
+        Integer restore = this.cloudsHold.release();
+        if (restore != null && Mc189Compat.clouds(gameSettings) != restore.intValue()) {
+            Mc189Compat.setClouds(gameSettings, restore.intValue());
         }
     }
 
     private void restoreAmbientOcclusion(Object gameSettings) {
-        if (this.originalAmbientOcclusion != null) {
-            Mc189Compat.setAmbientOcclusion(gameSettings, this.originalAmbientOcclusion.intValue());
-            this.originalAmbientOcclusion = null;
-        }
-    }
-
-    private void restoreParticles(Object gameSettings) {
-        if (this.originalParticles != null) {
-            Mc189Compat.setParticleSetting(gameSettings, this.originalParticles.intValue());
-            this.originalParticles = null;
+        Integer restore = this.ambientOcclusionHold.release();
+        if (restore != null && Mc189Compat.ambientOcclusion(gameSettings) != restore.intValue()) {
+            Mc189Compat.setAmbientOcclusion(gameSettings, restore.intValue());
         }
     }
 
     private void restoreFancyGraphics(Object gameSettings) {
-        if (this.originalFancyGraphics != null) {
-            Mc189Compat.setFancyGraphics(gameSettings, this.originalFancyGraphics.booleanValue());
-            this.originalFancyGraphics = null;
+        Boolean restore = this.fancyGraphicsHold.release();
+        if (restore != null && Mc189Compat.fancyGraphics(gameSettings) != restore.booleanValue()) {
+            Mc189Compat.setFancyGraphics(gameSettings, restore.booleanValue());
         }
     }
 
     private void restoreUseVbo(Object gameSettings) {
-        if (this.originalUseVbo != null) {
-            Mc189Compat.setUseVbo(gameSettings, this.originalUseVbo.booleanValue());
-            this.originalUseVbo = null;
+        Boolean restore = this.vboHold.release();
+        if (restore != null && Mc189Compat.useVbo(gameSettings) != restore.booleanValue()) {
+            Mc189Compat.setUseVbo(gameSettings, restore.booleanValue());
         }
     }
 
-    private void restoreLimitFramerate(Object gameSettings) {
-        if (this.originalLimitFramerate != null) {
-            Mc189Compat.setLimitFramerate(gameSettings, this.originalLimitFramerate.intValue());
-            this.originalLimitFramerate = null;
-        }
-    }
-
-    private void restoreRenderDistance(Object gameSettings) {
-        if (this.originalRenderDistance != null) {
-            Mc189Compat.setRenderDistanceChunks(gameSettings, this.originalRenderDistance.intValue());
-            this.originalRenderDistance = null;
-        }
-    }
-
+    /**
+     * Hides rain and thunder without writing the client world: {@code World.getRainStrength} is
+     * reported as zero, which is what the rain renderer, the sky colour, the fog and the rain sound
+     * all read. The server's weather is untouched, so switching the module off restores normal
+     * weather on the very next frame - there is no captured state and nothing to lose.
+     */
     private void applyWeatherToggle(Object minecraft) {
-        if (!enabled("graphics.weather_toggle")) {
-            return;
-        }
-        Object world = Mc189Compat.world(minecraft);
-        if (world != null) {
-            Mc189Compat.setWorldRain(world, false);
-        }
+        WorldMixin.rainVisualSuppressed = enabled("graphics.weather_toggle")
+            && Mc189Compat.world(minecraft) != null;
     }
 
+    /**
+     * Moves the sky instead of the world clock. The real world time is sampled once per tick and
+     * published together with the configured offset; the mixin recomputes the celestial angle from
+     * those. Every other reader of world time - the server, the scoreboard, other mods, F3 - keeps
+     * seeing the real time, and the day count is never disturbed.
+     */
     private void applyTimeChanger(Object minecraft) {
-        if (!enabled("graphics.time_changer")) {
+        Object world = Mc189Compat.world(minecraft);
+        if (!enabled("graphics.time_changer") || world == null) {
+            WorldMixin.visualTimeActive = false;
             return;
         }
-        Object world = Mc189Compat.world(minecraft);
-        if (world != null) {
-            long offset = (long) clamp(settingInt("graphics.time_changer", "offset", 12000), 0, 24000);
-            long worldTime = Mc189Compat.worldTime(world);
-            long dayBase = (worldTime / 24000L) * 24000L;
-            // Freeze world time at the configured offset (time-of-day)
-            Mc189Compat.setWorldTime(world, dayBase + offset);
+        Integer dimension = Mc189Compat.worldDimension(world);
+        if (dimension != null && dimension.intValue() != 0) {
+            // Only the overworld draws a sky; the Nether and the End keep vanilla's fixed light.
+            WorldMixin.visualTimeActive = false;
+            return;
         }
+        WorldMixin.visualTimeWorldSnapshot = Mc189Compat.worldTime(world);
+        WorldMixin.visualTimeOffset = configuredInt("graphics.time_changer", "offset");
+        WorldMixin.visualTimeActive = true;
+    }
+
+    /** Saves the scroll-to-zoom setting once the wheel has been still for a moment. */
+    private void flushZoomPersist() {
+        if (this.zoomPersistAtMillis == 0L || System.currentTimeMillis() < this.zoomPersistAtMillis) {
+            return;
+        }
+        this.zoomPersistAtMillis = 0L;
+        saveQuietly();
     }
 
     /**
@@ -715,72 +801,102 @@ final class ForgeClientEventBridge {
         Mc189Compat.setSwingInProgress(player, true);
     }
 
-    private void applyFreelook(Object gameSettings) {
+    /**
+     * Freelook holds a camera that is independent of the player: the module keeps its own yaw and
+     * pitch, the mouse hook feeds them vanilla's own sensitivity maths, and the camera setup hook
+     * hands them straight to the renderer. The player's rotation is never written - it is frozen for
+     * as long as the key is held, and the perspective the player was already using is captured once
+     * and handed back on release.
+     */
+    private void applyFreelook() {
         String moduleId = freelookModuleId();
         Object minecraft = Mc189Compat.minecraft();
-        boolean active = moduleId != null
-            && Mc189Compat.currentScreen(minecraft) == null
-            && Mc189Compat.keyboardKeyDown(settingInt(moduleId, "keybind", 56));
-        if (active) {
-            startFreelook(gameSettings, minecraft);
-            if (this.originalPerspective == null) {
-                this.originalPerspective = Integer.valueOf(Mc189Compat.thirdPersonView(gameSettings));
-            }
-            Mc189Compat.setThirdPersonView(gameSettings, 1);
+        Object gameSettings = Mc189Compat.gameSettings(minecraft);
+        if (gameSettings == null) {
+            EntityPlayerSPMixin.freelookFreezesRotation = false;
             return;
         }
-        stopFreelook(gameSettings);
+        boolean active = moduleId != null
+            && Mc189Compat.currentScreen(minecraft) == null
+            && Mc189Compat.keyboardKeyDown(configuredInt(moduleId, "keybind"));
+        if (!active) {
+            stopFreelook(gameSettings);
+            return;
+        }
+        if (!this.freelookActive) {
+            startFreelook(gameSettings, minecraft);
+        }
+        if (EntityPlayerSPMixin.freelookFreezesRotation != this.freelookActive) {
+            EntityPlayerSPMixin.freelookFreezesRotation = this.freelookActive;
+        }
+        if (this.freelookActive && Mc189Compat.thirdPersonView(gameSettings) != 1) {
+            Mc189Compat.setThirdPersonView(gameSettings, 1);
+        }
     }
 
     private void startFreelook(Object gameSettings, Object minecraft) {
-        if (this.freelookActive) {
-            return;
-        }
         Object player = Mc189Compat.player(minecraft);
         if (player == null) {
             return;
         }
-        if (this.originalPerspective == null) {
-            this.originalPerspective = Integer.valueOf(Mc189Compat.thirdPersonView(gameSettings));
-        }
-        this.freelookYaw = Mc189Compat.rotationYaw(player) + 180.0F;
-        this.freelookPitch = Mc189Compat.rotationPitch(player);
+        this.freelookPerspectiveHold.capture(Integer.valueOf(Mc189Compat.thirdPersonView(gameSettings)));
+        // The camera starts where the player is already looking: vanilla orients its third-person
+        // camera from the player's yaw plus 180 degrees, and the pitch is the player's own pitch.
+        this.freelookYaw = FreelookMath.thirdPersonCameraYaw(Mc189Compat.rotationYaw(player));
+        this.freelookPitch = FreelookMath.clamp(Mc189Compat.rotationPitch(player),
+            -FreelookMath.PITCH_LIMIT, FreelookMath.PITCH_LIMIT);
         this.freelookActive = true;
     }
 
     private void stopFreelook(Object gameSettings) {
-        this.freelookActive = false;
-        if (this.originalPerspective != null) {
-            Mc189Compat.setThirdPersonView(gameSettings, this.originalPerspective.intValue());
-            this.originalPerspective = null;
+        if (this.freelookActive) {
+            this.freelookActive = false;
+            // The camera angle belongs to the hold: a fresh hold recaptures from the player again.
+            this.freelookYaw = 0.0F;
+            this.freelookPitch = 0.0F;
+        }
+        if (EntityPlayerSPMixin.freelookFreezesRotation) {
+            EntityPlayerSPMixin.freelookFreezesRotation = false;
+        }
+        Integer restore = this.freelookPerspectiveHold.release();
+        if (restore != null && Mc189Compat.thirdPersonView(gameSettings) != restore.intValue()) {
+            Mc189Compat.setThirdPersonView(gameSettings, restore.intValue());
         }
     }
 
-    private void applyZoom(Object gameSettings) {
-        boolean active = enabled("pvp.zoom")
-            && Mc189Compat.keyboardKeyDown(settingInt("pvp.zoom", "keybind", 0));
-        if (active) {
-            if (originalFov == null) {
-                originalFov = Float.valueOf(Mc189Compat.fovSetting(gameSettings));
-            }
-            int percent = Math.max(10, Math.min(100, settingInt("pvp.zoom", "zoom_percent", 40)));
-            Mc189Compat.setFovSetting(gameSettings, Math.max(0.05F, originalFov.floatValue() * percent / 100.0F));
+    /**
+     * Zoom publishes a target scale and lets the renderer apply it to the field of view it is about
+     * to use (see {@code EntityRendererMixin}). Nothing is written to {@code GameSettings}: the
+     * player's FOV slider keeps its value, there is no captured FOV to restore, and an external FOV
+     * change is scaled rather than overwritten.
+     */
+    private void applyZoom() {
+        if (!enabled("pvp.zoom")) {
+            EntityRendererMixin.resetZoomAnimation();
             return;
         }
-        if (originalFov != null) {
-            Mc189Compat.setFovSetting(gameSettings, originalFov.floatValue());
-            originalFov = null;
-        }
+        int percent = settingRangeValue("pvp.zoom", "zoom_percent");
+        int floor = settingMin("pvp.zoom", "zoom_percent", 5);
+        EntityRendererMixin.zoomTargetScale = Mc189Compat.keyboardKeyDown(configuredInt("pvp.zoom", "keybind"))
+            ? ZoomMath.scaleFromPercent(percent, floor)
+            : ZoomMath.NO_ZOOM;
     }
 
+    /**
+     * Scroll-to-zoom rewrites the module's own preference. The bounds come from the settings' own
+     * metadata (the zoom percentage's declared range, narrowed by the configured minimum and
+     * maximum), and the write to disk is debounced so a fast wheel does not save the config file
+     * several times a second.
+     */
     private void updateZoomFromScroll(int direction) {
-        int step = clamp(settingInt("pvp.zoom", "scroll_step", 5), 1, 25);
-        int current = settingInt("pvp.zoom", "zoom_percent", 40);
-        int next = current + direction * step;
-        int min = clamp(settingInt("pvp.zoom", "min_zoom_percent", 15), 5, 100);
-        int max = clamp(settingInt("pvp.zoom", "max_zoom_percent", 90), min, 100);
-        setSettingInt("pvp.zoom", "zoom_percent", Math.max(min, Math.min(max, next)));
-        saveQuietly();
+        int step = Math.max(1, configuredInt("pvp.zoom", "scroll_step"));
+        int low = Math.max(settingMin("pvp.zoom", "zoom_percent", 5),
+            configuredInt("pvp.zoom", "min_zoom_percent"));
+        int high = Math.min(settingMax("pvp.zoom", "zoom_percent", 100),
+            configuredInt("pvp.zoom", "max_zoom_percent"));
+        int next = ZoomMath.scrollTarget(configuredInt("pvp.zoom", "zoom_percent"), direction, step, low, high);
+        setSettingInt("pvp.zoom", "zoom_percent", next);
+        this.zoomPersistAtMillis = System.currentTimeMillis() + 800L;
     }
 
     /**
@@ -792,7 +908,7 @@ final class ForgeClientEventBridge {
         boolean active = enabled("graphics.no_hurt_cam");
         EntityRendererMixin.hurtCameraScaled = active;
         EntityRendererMixin.hurtCameraScale = active
-            ? clamp(settingInt("graphics.no_hurt_cam", "shake_amount", 100), 0, 100) / 100.0F
+            ? HurtCamMath.scaleFromPercent(settingRangeValue("graphics.no_hurt_cam", "shake_amount"))
             : 1.0F;
     }
 
@@ -814,24 +930,40 @@ final class ForgeClientEventBridge {
         RendererLivingEntityMixin.hitColorAlpha = (color >>> 24 & 255) / 255.0F;
     }
 
+    /**
+     * The module's extra hit particles. The modes are explicit and cheap to satisfy: {@code Never}
+     * spawns nothing at all (no loop, no vanilla particle, no player lookups), {@code Always} spawns
+     * the burst on every hit and {@code Vanilla} only when the hit would have crit anyway. The
+     * amount is read from the setting's own declared range, so a configured 0 means "no extra
+     * particles" instead of being clamped up to a hard-coded minimum.
+     */
     private void applyAttackParticles(Object target) {
         if (!enabled("graphics.particles") || target == null) {
+            return;
+        }
+        int amount = settingRangeValue("graphics.particles", "particle_amount");
+        String criticals = configuredString("graphics.particles", "show_criticals");
+        String sharpness = configuredString("graphics.particles", "show_sharpness");
+        boolean sharpnessAlways = "Always".equalsIgnoreCase(sharpness);
+        boolean criticalsAlways = "Always".equalsIgnoreCase(criticals);
+        boolean criticalsVanilla = "Vanilla".equalsIgnoreCase(criticals);
+        if (amount <= 0 || !sharpnessAlways && !criticalsAlways && !criticalsVanilla) {
             return;
         }
         Object player = Mc189Compat.player(Mc189Compat.minecraft());
         if (player == null) {
             return;
         }
-        int amount = clamp(settingInt("graphics.particles", "particle_amount", 5), 1, 25);
-        String criticals = settingString("graphics.particles", "show_criticals", "Vanilla");
-        String sharpness = settingString("graphics.particles", "show_sharpness", "Vanilla");
-        boolean vanillaCritical = isVanillaCritical(player);
+        boolean spawnCritical = criticalsAlways || criticalsVanilla && isVanillaCritical(player);
+        if (!sharpnessAlways && !spawnCritical) {
+            return;
+        }
 
         for (int i = 0; i < amount; i++) {
-            if ("Always".equalsIgnoreCase(sharpness)) {
+            if (sharpnessAlways) {
                 Mc189Compat.onEnchantmentCritical(player, target);
             }
-            if ("Always".equalsIgnoreCase(criticals) || "Vanilla".equalsIgnoreCase(criticals) && vanillaCritical) {
+            if (spawnCritical) {
                 Mc189Compat.onCriticalHit(player, target);
             }
         }
@@ -861,30 +993,97 @@ final class ForgeClientEventBridge {
         return null;
     }
 
-    private boolean settingBool(String moduleId, String settingId, boolean fallback) {
+    /** @return the module's setting, or {@code null} when the module or setting is not registered. */
+    private Setting<?> setting(String moduleId, String settingId) {
+        if (moduleId == null || settingId == null) {
+            return null;
+        }
         try {
-            for (dev.aether.module.setting.Setting<?> setting : client.modules().get(moduleId).settings()) {
-                if (settingId.equals(setting.id()) && setting.value() instanceof Boolean) {
-                    return ((Boolean) setting.value()).booleanValue();
+            for (Setting<?> setting : client.modules().get(moduleId).settings()) {
+                if (settingId.equals(setting.id())) {
+                    return setting;
                 }
             }
-        } catch (IllegalArgumentException exception) {
-            return fallback;
+        } catch (IllegalArgumentException ignored) {
         }
-        return fallback;
+        return null;
+    }
+
+    /**
+     * The configured number, or the setting's own declared default. Reading the default from the
+     * metadata keeps the bridge free of a second copy of every default value.
+     */
+    private int configuredInt(String moduleId, String settingId) {
+        Setting<?> setting = setting(moduleId, settingId);
+        if (setting == null) {
+            return 0;
+        }
+        if (setting.value() instanceof Number) {
+            return ((Number) setting.value()).intValue();
+        }
+        return setting.defaultValue() instanceof Number ? ((Number) setting.defaultValue()).intValue() : 0;
+    }
+
+    private boolean configuredBool(String moduleId, String settingId) {
+        Setting<?> setting = setting(moduleId, settingId);
+        if (setting == null) {
+            return false;
+        }
+        if (setting.value() instanceof Boolean) {
+            return ((Boolean) setting.value()).booleanValue();
+        }
+        return setting.defaultValue() instanceof Boolean && ((Boolean) setting.defaultValue()).booleanValue();
+    }
+
+    private String configuredString(String moduleId, String settingId) {
+        Setting<?> setting = setting(moduleId, settingId);
+        if (setting == null) {
+            return "";
+        }
+        if (setting.value() instanceof String) {
+            return (String) setting.value();
+        }
+        return setting.defaultValue() instanceof String ? (String) setting.defaultValue() : "";
+    }
+
+    /**
+     * The configured number clamped onto the setting's own declared range. This is what keeps the
+     * behaviour of a module in step with the slider the deck shows: the range lives in exactly one
+     * place, the setting.
+     */
+    private int settingRangeValue(String moduleId, String settingId) {
+        Setting<?> setting = setting(moduleId, settingId);
+        if (setting == null) {
+            return 0;
+        }
+        int value = configuredInt(moduleId, settingId);
+        return setting.hasRange() ? setting.range().snap(value) : value;
+    }
+
+    /** The lower bound a setting declares for itself. */
+    private int settingMin(String moduleId, String settingId, int fallback) {
+        Setting<?> setting = setting(moduleId, settingId);
+        return setting != null && setting.hasRange() ? setting.range().min() : fallback;
+    }
+
+    /** The upper bound a setting declares for itself. */
+    private int settingMax(String moduleId, String settingId, int fallback) {
+        Setting<?> setting = setting(moduleId, settingId);
+        return setting != null && setting.hasRange() ? setting.range().max() : fallback;
+    }
+
+    private boolean settingBool(String moduleId, String settingId, boolean fallback) {
+        Setting<?> setting = setting(moduleId, settingId);
+        return setting != null && setting.value() instanceof Boolean
+            ? ((Boolean) setting.value()).booleanValue()
+            : fallback;
     }
 
     private int settingInt(String moduleId, String settingId, int fallback) {
-        try {
-            for (dev.aether.module.setting.Setting<?> setting : client.modules().get(moduleId).settings()) {
-                if (settingId.equals(setting.id()) && setting.value() instanceof Number) {
-                    return ((Number) setting.value()).intValue();
-                }
-            }
-        } catch (IllegalArgumentException exception) {
-            return fallback;
-        }
-        return fallback;
+        Setting<?> setting = setting(moduleId, settingId);
+        return setting != null && setting.value() instanceof Number
+            ? ((Number) setting.value()).intValue()
+            : fallback;
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
@@ -901,16 +1100,8 @@ final class ForgeClientEventBridge {
     }
 
     private String settingString(String moduleId, String settingId, String fallback) {
-        try {
-            for (dev.aether.module.setting.Setting<?> setting : client.modules().get(moduleId).settings()) {
-                if (settingId.equals(setting.id()) && setting.value() instanceof String) {
-                    return (String) setting.value();
-                }
-            }
-        } catch (IllegalArgumentException exception) {
-            return fallback;
-        }
-        return fallback;
+        Setting<?> setting = setting(moduleId, settingId);
+        return setting != null && setting.value() instanceof String ? (String) setting.value() : fallback;
     }
 
     private int settingColor(String moduleId, String settingId, int fallback) {
@@ -922,14 +1113,6 @@ final class ForgeClientEventBridge {
             client.save();
         } catch (java.io.IOException ignored) {
         }
-    }
-
-    private static int clamp(int value, int min, int max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    private static float clamp(float value, float min, float max) {
-        return Math.max(min, Math.min(max, value));
     }
 
     private static void drawFilledBoundingBox(AxisAlignedBB box) {

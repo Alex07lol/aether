@@ -11,4 +11,10 @@ public @interface Inject {
     String[] method() default {};
     At[] at() default {};
     boolean cancellable() default false;
+
+    /**
+     * How many targets the injection must find: a positive number is a hard requirement, 0 means
+     * "apply if you can, skip quietly if you cannot" and -1 defers to the config's defaultRequire.
+     */
+    int require() default -1;
 }

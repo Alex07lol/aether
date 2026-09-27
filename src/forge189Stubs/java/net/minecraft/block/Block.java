@@ -7,6 +7,7 @@ import net.minecraft.util.BlockPos;
 import net.minecraft.world.World;
 
 public class Block {
+    public String getUnlocalizedName() { return ""; }
     public String getLocalizedName() { return ""; }
     public Material getMaterial() { return Material.air; }
     public AxisAlignedBB getSelectedBoundingBox(World world, BlockPos pos) { return new AxisAlignedBB(0,0,0,1,1,1); }

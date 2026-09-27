@@ -41,6 +41,11 @@ public final class AetherHudEditorScreen extends GuiScreen {
     // Active snap guide lines for rendering
     private final List<Integer> activeVerticalSnapLines = new ArrayList<>();
     private final List<Integer> activeHorizontalSnapLines = new ArrayList<>();
+    // Cursor position the guides were last computed for. Snapping only changes when the cursor
+    // moves, so a drag with a still cursor skips the element scan entirely.
+    private HudElement lastSnappedElement;
+    private int lastSnapMouseX = Integer.MIN_VALUE;
+    private int lastSnapMouseY = Integer.MIN_VALUE;
 
     public AetherHudEditorScreen(AetherClient client) {
         this.client = client;
@@ -105,12 +110,13 @@ public final class AetherHudEditorScreen extends GuiScreen {
         drawGrid();
         renderer.renderForEditor();
 
-        activeVerticalSnapLines.clear();
-        activeHorizontalSnapLines.clear();
-
-        // If currently dragging, update position with snapping
+        // If currently dragging, update position with snapping. The guide lines are kept from the
+        // last cursor position instead of being rebuilt every frame.
         if (draggingElement != null) {
             updateDraggingPosition(mouseX, mouseY);
+        } else {
+            clearSnapLines();
+            lastSnappedElement = null;
         }
 
         // Draw active snap guide lines
@@ -171,7 +177,22 @@ public final class AetherHudEditorScreen extends GuiScreen {
         Mc189Compat.drawRoundedRectangle(x - 1, y - 1, 5, 5, 1, AetherUi.ACCENT, 0);
     }
 
+    private void clearSnapLines() {
+        activeVerticalSnapLines.clear();
+        activeHorizontalSnapLines.clear();
+    }
+
     private void updateDraggingPosition(int mouseX, int mouseY) {
+        if (draggingElement == lastSnappedElement && mouseX == lastSnapMouseX && mouseY == lastSnapMouseY) {
+            // The cursor has not moved since the last frame: the position and the guides are
+            // already computed, and re-snapping every element again would change nothing.
+            return;
+        }
+        lastSnappedElement = draggingElement;
+        lastSnapMouseX = mouseX;
+        lastSnapMouseY = mouseY;
+        clearSnapLines();
+
         int targetX = mouseX - dragOffsetX;
         int targetY = mouseY - dragOffsetY;
 

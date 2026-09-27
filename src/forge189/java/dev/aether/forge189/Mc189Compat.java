@@ -209,12 +209,20 @@ public final class Mc189Compat {
         setField(gameSettings, new String[] {"gammaSetting", "field_74333_Y"}, Float.valueOf(value));
     }
 
-    static float fovSetting(Object gameSettings) {
-        return floatField(gameSettings, new String[] {"fovSetting", "field_74334_X"});
-    }
+    // There is deliberately no fovSetting accessor here any more: zoom scales the value vanilla is
+    // about to use (see EntityRendererMixin.aetherZoom) instead of writing the player's own FOV, so
+    // nothing in the client has a way to overwrite that setting.
 
-    static void setFovSetting(Object gameSettings, float value) {
-        setField(gameSettings, new String[] {"fovSetting", "field_74334_X"}, Float.valueOf(value));
+    /**
+     * Vanilla's mouse sensitivity slider, which the freelook module folds into its own camera
+     * maths. Falls back to vanilla's default of 0.5 when the field is not reachable, so a lookup
+     * miss makes freelook feel like vanilla rather than like broken input.
+     */
+    static float mouseSensitivity(Object gameSettings) {
+        Object value = getField(gameSettings, new String[] {"mouseSensitivity", "field_74341_c"});
+        return value instanceof Number
+            ? ((Number) value).floatValue()
+            : dev.aether.graphics.FreelookMath.DEFAULT_MOUSE_SENSITIVITY;
     }
 
     static int particleSetting(Object gameSettings) {
@@ -343,8 +351,25 @@ public final class Mc189Compat {
         return value instanceof Number ? ((Number) value).longValue() : 0L;
     }
 
-    static void setWorldTime(Object world, long time) {
-        invoke(world, new String[] {"setWorldTime", "func_72877_b"}, new Class<?>[] {Long.TYPE}, Long.valueOf(time));
+    /**
+     * The dimension a world belongs to (0 is the overworld), or {@code null} when the provider is
+     * not reachable. The visual time override only makes sense where a sky is drawn, so the caller
+     * treats an unreadable dimension as "apply anyway" and a readable non-zero one as "skip".
+     */
+    static Integer worldDimension(Object world) {
+        if (world == null) {
+            return null;
+        }
+        Object provider = getField(world, new String[] {"provider", "field_73011_w"});
+        if (provider == null) {
+            return null;
+        }
+        Object id = invoke(provider, new String[] {"getDimensionId", "func_186058_p"});
+        if (id instanceof Number) {
+            return Integer.valueOf(((Number) id).intValue());
+        }
+        id = getField(provider, new String[] {"dimensionId"});
+        return id instanceof Number ? Integer.valueOf(((Number) id).intValue()) : null;
     }
 
     static int playerPing(Object minecraft) {
@@ -812,18 +837,10 @@ public final class Mc189Compat {
         return sneaking instanceof Boolean && ((Boolean) sneaking).booleanValue();
     }
 
-    static Object worldInfo(Object world) {
-        return invoke(world, new String[] {"getWorldInfo", "func_72912_H"});
-    }
-
-    static void setWorldRain(Object world, boolean raining) {
-        invoke(world, new String[] {"setRainStrength", "func_72894_k"}, new Class<?>[] {Float.TYPE}, Float.valueOf(raining ? 1.0F : 0.0F));
-        invoke(world, new String[] {"setThunderStrength", "func_147442_i"}, new Class<?>[] {Float.TYPE}, Float.valueOf(raining ? 1.0F : 0.0F));
-        Object info = worldInfo(world);
-        invoke(info, new String[] {"setRaining", "func_76084_b"}, new Class<?>[] {Boolean.TYPE}, Boolean.valueOf(raining));
-        invoke(info, new String[] {"setThundering", "func_76069_a"}, new Class<?>[] {Boolean.TYPE}, Boolean.valueOf(raining));
-        invoke(info, new String[] {"setRainTime", "func_76080_g"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(0));
-        invoke(info, new String[] {"setThunderTime", "func_76090_f"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(0));
+    /** @return the player's own sprint flag, so a forced sprint is only ever applied once. */
+    static boolean sprinting(Object entity) {
+        Object sprint = invoke(entity, new String[] {"isSprinting", "func_70051_ag"});
+        return sprint instanceof Boolean && ((Boolean) sprint).booleanValue();
     }
 
     static Object typeOfHit(Object movingObjectPosition) {

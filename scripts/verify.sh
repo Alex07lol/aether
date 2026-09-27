@@ -35,6 +35,12 @@ for test_class in \
   dev.aether.hud.HudLayoutTest \
   dev.aether.runtime.PlatformDetectorTest \
   dev.aether.graphics.FirstPersonAnimsTest \
+  dev.aether.graphics.FreelookMathTest \
+  dev.aether.graphics.ZoomMathTest \
+  dev.aether.graphics.TimeChangerMathTest \
+  dev.aether.graphics.HurtCamMathTest \
+  dev.aether.module.state.ToggleKeyTest \
+  dev.aether.module.state.ValueHoldTest \
   dev.aether.cosmetic.CosmeticLibraryTest \
   dev.aether.theme.ThemeModuleTest
 do

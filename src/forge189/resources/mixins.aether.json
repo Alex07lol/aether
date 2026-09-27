@@ -5,9 +5,11 @@
   "compatibilityLevel": "JAVA_8",
   "refmap": "mixins.aether.refmap.json",
   "client": [
+    "EntityPlayerSPMixin",
     "EntityRendererMixin",
     "ItemRendererMixin",
-    "RendererLivingEntityMixin"
+    "RendererLivingEntityMixin",
+    "WorldMixin"
   ],
   "injectors": {
     "defaultRequire": 1

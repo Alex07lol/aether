@@ -194,6 +194,17 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     @Override
     public void onGuiClosed() {
+        // Transient input state belongs to this screen instance: close it out so a slider drag that
+        // was interrupted by the close still records its last value, and so nothing is left focused,
+        // capturing a key or holding a palette when the deck is re-opened.
+        if (this.draggingSetting != null) {
+            writeLastChange("Setting '" + this.draggingSetting.label() + "' -> " + this.draggingSetting.value());
+            this.draggingSetting = null;
+        }
+        this.paletteSetting = null;
+        this.capturingSetting = null;
+        this.editingSetting = null;
+        this.searchFocused = false;
         if (this.blurLoaded) {
             this.blurLoaded = false;
             try {
@@ -989,6 +1000,15 @@ public final class AetherClickGuiScreen extends GuiScreen {
             }
         }
 
+        // Rows own the list column and only the list column: a click in the margins, the ribbon,
+        // the spine or the footer must not fall through to a row that happens to share its y range,
+        // and a row scrolled out of the viewport must not be reachable at all even though its
+        // geometry still exists in the layout.
+        if (mouseX < listX || mouseX > listX + listW || mouseY < listY || mouseY > listY + listH) {
+            searchFocused = false;
+            return;
+        }
+
         for (int i = 0; i < boxes.size(); i++) {
             Box box = boxes.get(i);
             if (mouseY < box.y || mouseY > box.y + box.height) {
@@ -1019,7 +1039,8 @@ public final class AetherClickGuiScreen extends GuiScreen {
                     return;
                 }
             }
-            if (box.chevron.contains(mouseX, mouseY) || mouseY >= box.y + ROW_H - 8) {
+            if (box.chevron.contains(mouseX, mouseY)
+                    || mouseY >= box.y + ROW_H - 8 && mouseX >= box.x && mouseX <= box.x + box.w) {
                 toggleExpanded(box.module);
                 return;
             }

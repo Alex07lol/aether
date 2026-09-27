@@ -68,6 +68,10 @@ final class ForgeHudRenderer {
     private String cachedDevOverlayText = "";
     private int lastFpsValue = -1;
     private String cachedFpsText = "FPS 0";
+    /** The looked-at block's name only changes when the block does; no ItemStack per frame. */
+    private String cachedBlockKey = "";
+    private int cachedBlockMeta = Integer.MIN_VALUE;
+    private String cachedBlockName = "";
 
     // Multi-line HUD blocks (coordinates) reuse these so we never allocate per frame.
     private final List<String> reusableHudLines = new ArrayList<String>(4);
@@ -528,11 +532,19 @@ final class ForgeHudRenderer {
             Block block = state.getBlock();
 
             if (block != null && block != Blocks.air) {
-                ItemStack stack = new ItemStack(block, 1, block.getMetaFromState(state));
-                String blockName = stack.getDisplayName();
-                if (stack.getItem() == null) {
-                    blockName = block.getLocalizedName();
+                int meta = block.getMetaFromState(state);
+                String blockKey = String.valueOf(block.getUnlocalizedName());
+                if (!blockKey.equals(this.cachedBlockKey) || meta != this.cachedBlockMeta) {
+                    this.cachedBlockKey = blockKey;
+                    this.cachedBlockMeta = meta;
+                    ItemStack stack = new ItemStack(block, 1, meta);
+                    String name = stack.getDisplayName();
+                    if (stack.getItem() == null) {
+                        name = block.getLocalizedName();
+                    }
+                    this.cachedBlockName = name;
                 }
+                String blockName = this.cachedBlockName;
 
                 HudElement element = client.hudLayout().get("hud.block_info");
                 if (settingBool("hud.block_info", "show_background", true)) {

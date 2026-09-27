@@ -10,6 +10,11 @@ class under `src/main/java/dev/aether/module/impl` was checked for three things:
 3. **Settings honoured** - is each declared setting consumed by the adapter, or
    is it stored and then ignored?
 
+> Follow-up passes on the same 57 modules: `docs/MODULE_LOGIC_AUDIT.md` (module
+> state, lifecycle, mixin scope, side effects and the CloudClient classification)
+> and `docs/PERFORMANCE_AUDIT.md` (static hot-path findings, cache cadences and the
+> profiling work that is still outstanding).
+
 ## Summary
 
 | Status | Count | Meaning |
