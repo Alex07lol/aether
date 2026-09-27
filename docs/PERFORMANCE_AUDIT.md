@@ -191,3 +191,51 @@ Measurements should be reported with the scenario, render distance, module set a
 profiler used, and compared against the same scenario on the previous build - not against
 CloudClient, which cannot be run here either and whose modules are architecturally
 different.
+
+---
+
+# Addendum: Aether 2.0 pass (same day)
+
+The no-runtime-measurement rule still applies: everything below is static.
+
+## 6. Control Center
+
+| Cost | Before (Click Deck) | After (Control Center) |
+| --- | --- | --- |
+| Module search | every render frame re-scored every visible module against the query (`rebuildRows` in the paint path) | `ModuleSearch` recomputes only when query/category/filters/source change; `results()` returns one reused list instance |
+| Section pages | did not exist | Profiles/Screenshots/Settings are plain data reads; the screenshot listing is throttled to one directory read per 2 s |
+| Sidebar hit-testing | n/a | registered during layout alongside module boxes; zero extra passes |
+| Row rendering | unchanged | unchanged: viewport culling kept, hover blending kept |
+| Text measurement | unchanged | label widths for waypoint markers are cached per rounded distance (new); deck strings unchanged |
+
+## 7. Screenshots
+
+- The render thread pays one `glReadPixels` + one array copy per capture, only when
+  the player asks for one. No per-frame cost while idle (a boolean check).
+- PNG encode + disk write run on a single daemon worker; a slow encode cannot stall
+  a frame, and captures queue behind each other instead of racing the disk.
+- The Screenshots page lists metadata only (name/size/mtime); it never decodes
+  pixels to draw the list. Thumbnails are deliberately not implemented until there
+  is a cache with a decode budget to back them.
+
+## 8. Waypoints
+
+- Per frame: one dimension read, one list filter, and for each enabled waypoint of
+  the current dimension a distance computation. Beyond 512 blocks the cost is the
+  distance computation only.
+- The distance label is re-measured only when its rounded distance changes; the
+  cache is a fixed 8-slot array, no allocation per frame.
+- The draw path reuses the block-overlay line drawing (no new tessellator pipeline)
+  and restores blend/texture/depth/line-width/matrix in a `finally`.
+
+## 9. FPS limiter
+
+`performance.fps_limiter` drives vanilla's own framerate cap through `ValueHold`
+(captured once, restored once, writes only on change) - it adds no loop of its own
+and no polling beyond the existing tick handler.
+
+## 10. What must be measured in game
+
+Unchanged from section 5, plus: the Control Center's frame cost at 60 vs 59-module
+lists, the screenshot capture hitch (should be one glReadPixels), and waypoint
+rendering with 100+ enabled waypoints at close range.

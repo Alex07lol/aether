@@ -37,8 +37,12 @@ public abstract class WorldMixin {
     /** The offset in ticks the sky is drawn with. */
     public static int visualTimeOffset = 0;
 
-    /** Set by ForgeClientEventBridge while graphics.weather_toggle is on. */
-    public static boolean rainVisualSuppressed = false;
+    /** Set by ForgeClientEventBridge while graphics.weather_toggle is overriding the weather. */
+    public static boolean weatherOverrideActive = false;
+
+    /** The strengths to report while the override is active, as 0-1 values. */
+    public static float weatherRainStrength = 0.0F;
+    public static float weatherThunderStrength = 0.0F;
 
     @Inject(method = "getCelestialAngle", at = @At("RETURN"), cancellable = true, require = 0)
     private void aetherVisualTime(float partialTicks, CallbackInfoReturnable<Float> cir) {
@@ -51,9 +55,16 @@ public abstract class WorldMixin {
     }
 
     @Inject(method = "getRainStrength", at = @At("RETURN"), cancellable = true, require = 0)
-    private void aetherRainSuppression(float partialTicks, CallbackInfoReturnable<Float> cir) {
-        if (rainVisualSuppressed) {
-            cir.setReturnValue(0.0F);
+    private void aetherRainStrength(float partialTicks, CallbackInfoReturnable<Float> cir) {
+        if (weatherOverrideActive) {
+            cir.setReturnValue(weatherRainStrength);
+        }
+    }
+
+    @Inject(method = "getThunderStrength", at = @At("RETURN"), cancellable = true, require = 0)
+    private void aetherThunderStrength(float partialTicks, CallbackInfoReturnable<Float> cir) {
+        if (weatherOverrideActive) {
+            cir.setReturnValue(weatherThunderStrength);
         }
     }
 }

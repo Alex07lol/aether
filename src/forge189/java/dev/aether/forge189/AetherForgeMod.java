@@ -56,6 +56,9 @@ public final class AetherForgeMod {
 
     @Mod.EventHandler
     public void serverStopping(FMLServerStoppingEvent event) {
+        if (client != null && client.screenshots() != null) {
+            client.screenshots().shutdown();
+        }
         saveQuietly();
     }
 

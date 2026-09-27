@@ -1,10 +1,17 @@
 package dev.aether.forge189;
 
 import dev.aether.AetherClient;
+import dev.aether.config.ClientPreferences;
+import dev.aether.config.ProfileStore;
 import dev.aether.module.ClientModule;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleState;
 import dev.aether.module.setting.Setting;
+import dev.aether.screenshot.ScreenshotInfo;
+import dev.aether.ui.ControlCenterSection;
+import dev.aether.ui.ControlCenterState;
+import dev.aether.ui.ControlFocus;
+import dev.aether.ui.ModuleSearch;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.ScaledResolution;
@@ -16,7 +23,6 @@ import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -26,26 +32,24 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Aether Click Deck — the primary click GUI.
+ * Aether Control Center — the primary click GUI.
  * <p>
- * This screen is deliberately a different shape from the three-panel, card tile
- * manager in {@link AetherModMenuScreen}. Rather than a wide sidebar plus a grid
- * of icon cards plus a separate properties column, the deck is built around:
+ * The deck keeps its proven body: one full-width row per module, an inline accordion with real
+ * controls, a telemetry spine, keyboard-first input, one {@code computeLayout} feeding both
+ * painting and hit-testing, and viewport culling. What changes is the navigation model:
  * <ul>
- *   <li>a horizontal ribbon of view chips (All / Live / Favorites / categories),</li>
- *   <li>one full-width row per module with a favourite star, category tag, status
- *       lamp, inline enable switch and a settings chevron,</li>
- *   <li>an inline accordion opening under the row that exposes every setting as a
- *       real control (switch, slider, colour palette, choice pill, keybind
- *       capture, text field) instead of a side panel,</li>
- *   <li>a telemetry spine on the right with live FPS sparkline, enabled gauge,
- *       per-category bars, profile data and jump buttons,</li>
- *   <li>a keyboard-first interaction model: type to search, arrows to move,
- *       Enter to toggle, Space to expand, Tab to switch view, R to reset.</li>
+ *   <li>a sidebar of pages (Modules / Profiles / Themes / Cosmetics / Screenshots / Settings)
+ *       driven by {@link ControlCenterSection}, replacing the old view-chip ribbon,</li>
+ *   <li>an explicit {@link ControlCenterState.MenuState} machine instead of loose booleans,</li>
+ *   <li>search and filtering go through the cached {@link ModuleSearch} instead of re-scoring
+ *       every module every frame,</li>
+ *   <li>Modules / Themes / Cosmetics are the same module-list machinery against different
+ *       sources, so no section is a second implementation of a module list.</li>
+ *   <li>Profiles, Screenshots and Settings are real pages with real content: profile
+ *       save/apply/delete, the async screenshot list, and the client-wide preferences.</li>
  * </ul>
- * Layout is computed once per frame into {@link Box} geometry and that same
- * geometry drives both painting and hit-testing, so a click can never land on a
- * place the module maths has already moved away from.
+ * Layout stays single-source: the sidebar geometry, the module boxes and the page rows are all
+ * computed in {@link #computeLayout} and the click path reads the same boxes the renderer drew.
  */
 public final class AetherClickGuiScreen extends GuiScreen {
     /* ── keys ───────────────────────────────────────────────────────────── */
@@ -66,8 +70,9 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     /* ── metrics ────────────────────────────────────────────────────────── */
     private static final int HEADER_H = 42;
-    private static final int RIBBON_H = 26;
     private static final int FOOTER_H = 18;
+    private static final int SIDEBAR_W = 128;
+    private static final int SIDEBAR_ITEM_H = 26;
     private static final int ROW_H = 30;
     private static final int SUB_H = 22;
     private static final int SWITCH_W = 26;
@@ -83,13 +88,10 @@ public final class AetherClickGuiScreen extends GuiScreen {
     private static final int DESCRIPTION_PAD = 6;
     private static final int DESCRIPTION_LINE_H = 10;
     private static final int ACCORDION_PAD = 8;
+    private static final int SHOT_THUMB = 92;
 
-    /*
-     * The deck holds no palette of its own: every colour below comes from the shared
-     * {@link AetherUi} tokens, which {@link AetherUi#syncTheme()} repaints from
-     * the active theme module. That is what makes a theme switch visible here and on every
-     * other Aether screen at the same time.
-     */
+    /** Filter chips shown under the section list; keys match the filter-key contract. */
+    private static final String[] FILTER_CHIPS = {"!all", "!live", "!fav"};
 
     private static final int[] PALETTE_ROW_1 = {
         0xFFFFFFFF, 0xFFFF6B6B, 0xFFFF9F43, 0xFFFFE066, 0xFF7BED9F,
@@ -99,23 +101,23 @@ public final class AetherClickGuiScreen extends GuiScreen {
         0x00FFFFFF, 0x40FFFFFF, 0x66FFFFFF, 0x99FFFFFF, 0xCCFFFFFF, 0xFFFFFFFF
     };
 
-    // Slider bounds and choice lists come from the settings themselves (Setting.Range and
-    // Setting.choices), so the deck keeps no id-keyed tables that could drift from core.
-
     /* ── state ──────────────────────────────────────────────────────────── */
     private final AetherClient client;
     private final GuiScreen parent;
     private boolean blurLoaded;
 
-    private final List<Tab> tabs = new ArrayList<Tab>();
+    private final ControlCenterState nav = new ControlCenterState();
+    private final ModuleSearch search = new ModuleSearch();
+    /** Rows currently visible on the module-driven pages; rebuilt only when the search is dirty. */
     private final List<ClientModule> visible = new ArrayList<ClientModule>();
     private final List<Box> boxes = new ArrayList<Box>();
-    private final Set<String> expanded = new HashSet<String>();
     private final Map<String, Float> hoverBlend = new HashMap<String, Float>();
     private final int[] fpsSamples = new int[48];
-    private final Rect[] spineButtons = new Rect[4];
+    private final Rect[] spineButtons = new Rect[3];
+    private final Map<String, Rect> sidebarHits = new HashMap<String, Rect>();
+    private final Map<String, Rect> pageRowHits = new HashMap<String, Rect>();
+    private final Map<String, Rect> pageActionHits = new HashMap<String, Rect>();
 
-    private String activeTab = "!all";
     private String query = "";
     private boolean searchFocused;
     private int selected;
@@ -125,20 +127,12 @@ public final class AetherClickGuiScreen extends GuiScreen {
     private long lastSampleMillis;
     private long lastFrameMillis;
     private int fpsCursor;
+    private String activeProfile;
+    private String profileDraftName = "";
+    private boolean screenshotRequested;
+    private List<ScreenshotInfo> screenshots = Collections.emptyList();
 
-    private Setting<?> draggingSetting;
-    private int dragTrackX;
-    private int dragTrackW;
-
-    private Setting<?> paletteSetting;
-    private int paletteX;
-    private int paletteY;
-
-    private Setting<?> capturingSetting;
-
-    private Setting<?> editingSetting;
-    private String textBuffer = "";
-
+    /* ── geometry (single source: computeLayout; renderer + hit-testing share it) ── */
     private int deckX;
     private int deckY;
     private int deckW;
@@ -151,8 +145,15 @@ public final class AetherClickGuiScreen extends GuiScreen {
     private int spineY;
     private int spineW;
     private int spineH;
+    private int sidebarX;
+    private int sidebarY;
+    private int sidebarW;
+    private int sidebarH;
     private int footerY;
     private int contentHeight;
+    private long screenshotsReadAtMillis;
+    private String screenshotStatus;
+    private long screenshotStatusAtMillis;
 
     /* ── construction ───────────────────────────────────────────────────── */
 
@@ -166,23 +167,27 @@ public final class AetherClickGuiScreen extends GuiScreen {
     }
 
     /**
-     * Opens the deck directly on one category. The theme selector module uses this so it
-     * lands on the Interface tab, where the theme modules are listed.
+     * Opens the deck directly on one category. The theme selector module uses this so it lands on
+     * the Modules page filtered to the category, where the theme modules are listed.
      */
     void focusCategory(ModuleCategory category) {
-        this.activeTab = "cat:" + category.name();
+        nav.showSection(ControlCenterSection.MODULES);
+        nav.filterKey("cat:" + category.name());
+        search.category(category);
+    }
+
+    ControlCenterState nav() {
+        return nav;
     }
 
     @Override
     public void initGui() {
-        rebuildTabs();
-        rebuildRows();
+        search.source(client.modules().all());
+        search.query(query);
+        syncVisible();
         selected = clamp(selected, 0, Math.max(0, visible.size() - 1));
         lastFrameMillis = System.currentTimeMillis();
-        for (ClientModule module : visible) {
-            if (module.metadata().favoriteByDefault() && module.settings().isEmpty()) {
-                continue;
-            }
+        for (ClientModule module : client.modules().all()) {
             hoverBlend.put(module.metadata().id(), Float.valueOf(0F));
         }
     }
@@ -197,14 +202,11 @@ public final class AetherClickGuiScreen extends GuiScreen {
         // Transient input state belongs to this screen instance: close it out so a slider drag that
         // was interrupted by the close still records its last value, and so nothing is left focused,
         // capturing a key or holding a palette when the deck is re-opened.
-        if (this.draggingSetting != null) {
-            writeLastChange("Setting '" + this.draggingSetting.label() + "' -> " + this.draggingSetting.value());
-            this.draggingSetting = null;
+        if (nav.focus().kind() == ControlFocus.Kind.SLIDER && nav.focus().setting() != null) {
+            writeLastChange("Setting '" + nav.focus().setting().label() + "' -> " + nav.focus().setting().value());
         }
-        this.paletteSetting = null;
-        this.capturingSetting = null;
-        this.editingSetting = null;
-        this.searchFocused = false;
+        nav.clearFocus();
+        searchFocused = false;
         if (this.blurLoaded) {
             this.blurLoaded = false;
             try {
@@ -225,123 +227,64 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     /* ── data ───────────────────────────────────────────────────────────── */
 
-    private void rebuildTabs() {
-        tabs.clear();
-        tabs.add(new Tab("!all", "All"));
-        tabs.add(new Tab("!live", "Live"));
-        tabs.add(new Tab("!fav", "Favorites"));
-        for (ModuleCategory category : orderedCategories()) {
-            if (client.modules().byCategory(category).isEmpty()) {
-                continue;
-            }
-            tabs.add(new Tab("cat:" + category.name(), label(category)));
+    /** The source list for a module-driven page: Themes and Cosmetics show only their categories. */
+    private List<ClientModule> sectionSource() {
+        ControlCenterSection section = nav.section();
+        if (section == ControlCenterSection.THEMES) {
+            return client.modules().byCategory(ModuleCategory.THEMES);
         }
-        boolean found = false;
-        for (Tab tab : tabs) {
-            if (tab.id.equals(activeTab)) {
-                found = true;
-                break;
-            }
+        if (section == ControlCenterSection.COSMETICS) {
+            return client.modules().byCategory(ModuleCategory.COSMETICS);
         }
-        if (!found) {
-            activeTab = "!all";
+        return client.modules().all();
+    }
+
+    private void syncVisible() {
+        search.query(query);
+        List<ClientModule> source = sectionSource();
+        search.source(source);
+        nav.filterKey(currentFilterKey());
+        applyFilterKeyToSearch();
+        List<ClientModule> results = search.results();
+        if (visible.size() != results.size() || !visible.containsAll(results)) {
+            visible.clear();
+            visible.addAll(results);
+            selected = clamp(selected, 0, Math.max(0, visible.size() - 1));
         }
     }
 
-    private static List<ModuleCategory> orderedCategories() {
-        List<ModuleCategory> order = new ArrayList<ModuleCategory>();
-        Collections.addAll(order,
-            ModuleCategory.HUD, ModuleCategory.PVP, ModuleCategory.GRAPHICS, ModuleCategory.RENDER,
-            ModuleCategory.INTERFACE, ModuleCategory.PERFORMANCE, ModuleCategory.COSMETICS,
-            ModuleCategory.THEMES, ModuleCategory.MOVEMENT, ModuleCategory.AUDIO,
-            ModuleCategory.ACCESSIBILITY, ModuleCategory.GENERAL);
-        return order;
+    private String currentFilterKey() {
+        ModuleCategory category = search.category();
+        boolean live = search.liveOnly();
+        boolean favs = search.favoritesOnly();
+        if (category != null) {
+            return "cat:" + category.name();
+        }
+        if (live) {
+            return "!live";
+        }
+        if (favs) {
+            return "!fav";
+        }
+        return "!all";
     }
 
-    private void rebuildRows() {
-        visible.clear();
-        final String needle = query.toLowerCase(Locale.ENGLISH);
-        for (ClientModule module : client.modules().all()) {
-            if (!matchesTab(module)) {
-                continue;
+    private void applyFilterKeyToSearch() {
+        String key = nav.filterKey();
+        search.category(null);
+        search.liveOnly(false);
+        search.favoritesOnly(false);
+        if ("!live".equals(key)) {
+            search.liveOnly(true);
+        } else if ("!fav".equals(key)) {
+            search.favoritesOnly(true);
+        } else if (key.startsWith("cat:")) {
+            try {
+                search.category(ModuleCategory.valueOf(key.substring(4)));
+            } catch (IllegalArgumentException unknownCategory) {
+                nav.filterKey("!all");
             }
-            if (!needle.isEmpty() && score(module, needle) < 0) {
-                continue;
-            }
-            visible.add(module);
         }
-        final Map<String, Integer> scores = new HashMap<String, Integer>();
-        for (ClientModule module : visible) {
-            scores.put(module.metadata().id(), Integer.valueOf(needle.isEmpty() ? 0 : score(module, needle)));
-        }
-        Collections.sort(visible, new Comparator<ClientModule>() {
-            public int compare(ClientModule a, ClientModule b) {
-                Integer left = scores.get(a.metadata().id());
-                Integer right = scores.get(b.metadata().id());
-                if (left != null && right != null && !left.equals(right)) {
-                    return right.intValue() - left.intValue();
-                }
-                if (a.metadata().favoriteByDefault() != b.metadata().favoriteByDefault()) {
-                    return a.metadata().favoriteByDefault() ? -1 : 1;
-                }
-                return a.metadata().name().compareToIgnoreCase(b.metadata().name());
-            }
-        });
-        selected = clamp(selected, 0, Math.max(0, visible.size() - 1));
-    }
-
-    private boolean matchesTab(ClientModule module) {
-        if ("!live".equals(activeTab)) {
-            return module.state() == ModuleState.ENABLED;
-        }
-        if ("!fav".equals(activeTab)) {
-            return module.metadata().favoriteByDefault();
-        }
-        if (activeTab.startsWith("cat:")) {
-            return module.metadata().category().name().equals(activeTab.substring(4));
-        }
-        return true;
-    }
-
-    private static int score(ClientModule module, String needle) {
-        String name = module.metadata().name().toLowerCase(Locale.ENGLISH);
-        String id = module.metadata().id().toLowerCase(Locale.ENGLISH);
-        String description = module.metadata().description().toLowerCase(Locale.ENGLISH);
-        String category = module.metadata().category().name().toLowerCase(Locale.ENGLISH);
-        int best = score(name, needle);
-        best = Math.max(best, score(id, needle));
-        best = Math.max(best, score(description, needle) - 6);
-        best = Math.max(best, score(category, needle) - 4);
-        return best;
-    }
-
-    /** Subsequence match with a contiguity bonus; returns -1 when the needle does not fit. */
-    private static int score(String haystack, String needle) {
-        if (needle.isEmpty()) {
-            return 0;
-        }
-        int cursor = 0;
-        int total = 0;
-        int streak = 0;
-        for (int i = 0; i < needle.length(); i++) {
-            char want = needle.charAt(i);
-            int found = haystack.indexOf(want, cursor);
-            if (found < 0) {
-                return -1;
-            }
-            if (found == cursor) {
-                streak++;
-                total += 4 + streak;
-            } else {
-                streak = 0;
-                total += 2 - Math.min(2, found - cursor);
-            }
-            cursor = found + 1;
-        }
-        if (haystack.contains(needle)) {
-            total += 24;
-        }
-        return total;
     }
 
     /* ── layout ─────────────────────────────────────────────────────────── */
@@ -351,58 +294,155 @@ public final class AetherClickGuiScreen extends GuiScreen {
         int mouseY = scaledMouseY(h);
 
         int margin = clamp(w / 24, 6, 16);
-        deckW = Math.min(980, w - margin * 2);
+        deckW = Math.min(1040, w - margin * 2);
         deckH = h - margin * 2;
         deckX = (w - deckW) / 2;
         deckY = margin;
 
-        int bodyTop = deckY + HEADER_H + RIBBON_H;
+        int bodyTop = deckY + HEADER_H;
         footerY = deckY + deckH - FOOTER_H;
 
-        listX = deckX + 10;
-        int innerW = deckW - 20;
-        boolean showSpine = innerW >= 430;
+        sidebarX = deckX + 8;
+        sidebarY = bodyTop + 6;
+        sidebarW = deckW >= 560 ? SIDEBAR_W : 0;
+        sidebarH = footerY - sidebarY - 6;
+
+        listX = sidebarW > 0 ? sidebarX + sidebarW + 8 : sidebarX;
+        int innerW = deckX + deckW - listX - 8;
+        boolean showSpine = innerW >= 430 && sidebarW > 0;
         spineW = showSpine ? clamp((int) (innerW * 0.26F), 132, 200) : 0;
         spineX = listX + innerW - spineW;
-        spineY = bodyTop + 6;
-        spineH = footerY - spineY - 6;
+        spineY = sidebarY;
+        spineH = sidebarH;
 
-        listW = showSpine ? innerW - spineW - 8 : innerW;
-        listY = bodyTop + 6;
+        listW = innerW - spineW;
+        listY = sidebarY;
         listH = footerY - listY - 6;
 
         boxes.clear();
+        sidebarHits.clear();
+        pageRowHits.clear();
+        pageActionHits.clear();
         int rowX = listX + 6;
         int rowW = listW - 12;
-        int y = listY - (int) scroll;
-        for (ClientModule module : visible) {
-            boolean isOpen = expanded.contains(module.metadata().id());
-            int height = ROW_H + (isOpen ? accordionHeight(module) : 0);
-            Box box = new Box(module, rowX, y, rowW, height, isOpen);
-            box.header = rect(rowX, y, rowW, ROW_H);
-            box.toggle = rect(rowX + rowW - 58, y + 9, SWITCH_W, SWITCH_H);
-            box.chevron = rect(rowX + rowW - 20, y + 10, 12, 10);
-            if (isOpen) {
-                int accordionTop = y + ROW_H;
-                if (module.metadata().category() == ModuleCategory.HUD) {
-                    box.reset = rect(rowX + rowW - 96, accordionTop + 3, 42, 12);
-                    box.hud = rect(rowX + rowW - 48, accordionTop + 3, 42, 12);
-                } else {
-                    box.reset = rect(rowX + rowW - 48, accordionTop + 3, 42, 12);
+        // Page rows start below the page's title line; the module list does not have one.
+        int y = (nav.showsModuleList() ? listY : listY + 24) - (int) scroll;
+        if (nav.showsModuleList()) {
+            for (ClientModule module : visible) {
+                boolean isOpen = nav.isExpanded(module.metadata().id());
+                int height = ROW_H + (isOpen ? accordionHeight(module) : 0);
+                Box box = new Box(module, rowX, y, rowW, height, isOpen);
+                box.header = rect(rowX, y, rowW, ROW_H);
+                box.toggle = rect(rowX + rowW - 58, y + 9, SWITCH_W, SWITCH_H);
+                box.chevron = rect(rowX + rowW - 20, y + 10, 12, 10);
+                if (isOpen) {
+                    int accordionTop = y + ROW_H;
+                    if (module.metadata().category() == ModuleCategory.HUD) {
+                        box.reset = rect(rowX + rowW - 96, accordionTop + 3, 42, 12);
+                        box.hud = rect(rowX + rowW - 48, accordionTop + 3, 42, 12);
+                    } else {
+                        box.reset = rect(rowX + rowW - 48, accordionTop + 3, 42, 12);
+                    }
+                    int controlTop = accordionContentTop(box);
+                    for (Setting<?> setting : module.settings()) {
+                        box.controls.put(setting.id(), controlRect(setting, rowX, rowW, controlTop));
+                        controlTop += SUB_H;
+                    }
                 }
-                int controlTop = accordionContentTop(box);
-                for (Setting<?> setting : module.settings()) {
-                    box.controls.put(setting.id(), controlRect(setting, rowX, rowW, controlTop));
-                    controlTop += SUB_H;
-                }
+                boxes.add(box);
+                y += height + 3;
             }
-            boxes.add(box);
-            y += height + 3;
+        } else {
+            y = layoutPageRows(rowX, rowW, y);
         }
         contentHeight = (y + (int) scroll) - listY;
         maxScroll = Math.max(0, contentHeight - listH);
         scroll = clamp(scroll, 0, maxScroll);
+        layoutSidebar();
         advanceHover(mouseX, mouseY);
+    }
+
+    /**
+     * Registers the sidebar's hit rectangles during layout, not during painting: the click path
+     * runs {@link #computeLayout} first, and a map cleared by layout and refilled by the paint
+     * pass would hand every click an empty map.
+     */
+    private void layoutSidebar() {
+        sidebarHits.clear();
+        if (sidebarW <= 0) {
+            return;
+        }
+        int x = sidebarX + 8;
+        int w = sidebarW - 16;
+        int y = sidebarY + 8;
+        for (ControlCenterSection section : ControlCenterSection.ordered()) {
+            sidebarHits.put(section.key(), rect(x, y, w, SIDEBAR_ITEM_H - 6));
+            y += SIDEBAR_ITEM_H;
+        }
+        y += 8 + 12; // FILTER caption
+        for (String chip : FILTER_CHIPS) {
+            sidebarHits.put(chip, rect(x, y, w, 15));
+            y += 18;
+        }
+        for (ModuleCategory category : orderedCategories()) {
+            if (client.modules().byCategory(category).isEmpty()) {
+                continue;
+            }
+            if (y + 15 > sidebarY + sidebarH) {
+                break;
+            }
+            sidebarHits.put("cat:" + category.name(), rect(x, y, w, 15));
+            y += 18;
+        }
+    }
+
+    /** Lays out the non-module pages' rows; returns the y after the last row. */
+    private int layoutPageRows(int rowX, int rowW, int y) {
+        switch (nav.section()) {
+            case PROFILES: {
+                for (String name : client.profiles().names()) {
+                    pageRowHits.put(name, rect(rowX, y, rowW, ROW_H));
+                    pageActionHits.put("apply:" + name, rect(rowX + rowW - 52, y + 9, 46, 12));
+                    pageActionHits.put("delete:" + name, rect(rowX + rowW - 100, y + 9, 44, 12));
+                    y += ROW_H + 3;
+                }
+                pageActionHits.put("save", rect(rowX, y, 100, 14));
+                y += 14 + 6;
+                pageActionHits.put("newname", rect(rowX + 106, y - 20, 150, 14));
+                break;
+            }
+            case SCREENSHOTS: {
+                refreshScreenshotList();
+                for (ScreenshotInfo shot : screenshots) {
+                    pageRowHits.put(shot.name(), rect(rowX, y, rowW, SHOT_THUMB));
+                    pageActionHits.put("open:" + shot.name(), rect(rowX + rowW - 104, y + SHOT_THUMB / 2 - 6, 48, 12));
+                    pageActionHits.put("delete:" + shot.name(), rect(rowX + rowW - 52, y + SHOT_THUMB / 2 - 6, 46, 12));
+                    y += SHOT_THUMB + 4;
+                }
+                pageActionHits.put("capture", rect(rowX, y, 130, 14));
+                break;
+            }
+            case SETTINGS: {
+                pageActionHits.put("pref:save_on_close", rect(rowX, y, rowW, ROW_H));
+                y += ROW_H + 3;
+                pageActionHits.put("pref:show_tooltips", rect(rowX, y, rowW, ROW_H));
+                y += ROW_H + 3;
+                break;
+            }
+            default:
+                break;
+        }
+        return y;
+    }
+
+    private void refreshScreenshotList() {
+        long now = System.currentTimeMillis();
+        // Metadata read is throttled: a directory listing per frame would hammer the disk.
+        if (screenshotsReadAtMillis == 0L || now - screenshotsReadAtMillis >= 2000L) {
+            screenshotsReadAtMillis = now;
+            client.screenshots().store().ensureDirectory();
+            screenshots = client.screenshots().store().list();
+        }
     }
 
     private void advanceHover(int mouseX, int mouseY) {
@@ -447,9 +487,9 @@ public final class AetherClickGuiScreen extends GuiScreen {
     }
 
     /**
-     * Absolute y of the first setting row inside an expanded accordion. Layout and
-     * painting both anchor on this, so a control can never be drawn offset from the
-     * rectangle that receives its clicks.
+     * Absolute y of the first setting row inside an expanded accordion. Layout and painting both
+     * anchor on this, so a control can never be drawn offset from the rectangle that receives its
+     * clicks.
      */
     private int accordionContentTop(Box box) {
         return box.y + ROW_H + DESCRIPTION_PAD + descriptionLineCount(box.module) * DESCRIPTION_LINE_H;
@@ -492,16 +532,21 @@ public final class AetherClickGuiScreen extends GuiScreen {
         }
         syncTheme();
         syncBlur();
+        pollScreenshotRequest();
         Object font = Mc189Compat.screenFontRenderer(this);
         computeLayout(w, h);
         sampleFps();
 
         drawBackdrop(w, h);
         drawDeck();
-        drawHeader(font);
-        drawRibbon(font, mouseX, mouseY);
+        drawHeader(font, mouseX, mouseY);
+        drawSidebar(font, mouseX, mouseY);
         pushClip(listX, listY, listW, listH);
-        drawRows(font, mouseX, mouseY);
+        if (nav.showsModuleList()) {
+            drawRows(font, mouseX, mouseY);
+        } else {
+            drawPageRows(font, mouseX, mouseY);
+        }
         popClip();
         if (spineW > 0) {
             drawSpine(font, mouseX, mouseY);
@@ -537,18 +582,22 @@ public final class AetherClickGuiScreen extends GuiScreen {
         Mc189Compat.drawRect(deckX + 1, footerY - 1, deckX + deckW - 1, footerY, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x22));
     }
 
-    private void drawHeader(Object font) {
+    private void drawHeader(Object font, int mouseX, int mouseY) {
         int x = deckX + 12;
         int y = deckY + 12;
         drawMark(x, y + 2, AetherUi.ACCENT);
         text(font, "AETHER", x + 16, y + 1, AetherUi.TEXT_PRIMARY);
-        int titleOffset = width(font, "AETHER") + 8;
-        text(font, "CLICK DECK", x + 16 + titleOffset, y + 1, AetherUi.TEXT_DISABLED);
+        String sectionLabel = nav.section().label();
+        text(font, sectionLabel.toUpperCase(Locale.ENGLISH), x + 16 + width(font, "AETHER") + 8, y + 1, AetherUi.TEXT_DISABLED);
         text(font, "v" + client.version().name(), x + 16, y + 12, AetherUi.TEXT_DISABLED);
 
         int searchW = clamp(deckW / 3, 120, 260);
         int searchX = deckX + deckW - searchW - 96;
         int searchY = deckY + 10;
+        boolean overSearch = mouseX >= searchX && mouseX <= searchX + searchW && mouseY >= searchY && mouseY <= searchY + 20;
+        if (overSearch && !searchFocused) {
+            searchFocused = true;
+        }
         roundRect(searchX, searchY, searchX + searchW, searchY + 20, 4, searchFocused ? AetherUi.withAlpha(AetherUi.SURFACE, 0xF0) : AetherUi.withAlpha(AetherUi.SURFACE, 0xB0));
         outline(searchX, searchY, searchX + searchW, searchY + 20, searchFocused ? AetherUi.ACCENT : AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x22));
         drawSearchGlyph(searchX + 8, searchY + 6, searchFocused ? AetherUi.ACCENT : AetherUi.TEXT_DISABLED);
@@ -568,25 +617,54 @@ public final class AetherClickGuiScreen extends GuiScreen {
         text(font, String.valueOf(Mc189Compat.debugFps()), chipX + 32, searchY + 6, AetherUi.TEXT_PRIMARY);
     }
 
-    private void drawRibbon(Object font, int mouseX, int mouseY) {
-        int y = deckY + HEADER_H + 5;
-        int x = deckX + 12;
-        int maxX = deckX + deckW - 12;
-        for (Tab tab : tabs) {
-            int w = width(font, tab.label) + 18;
-            if (x + w > maxX) {
-                tab.hit = null;
+    private void drawSidebar(Object font, int mouseX, int mouseY) {
+        if (sidebarW <= 0) {
+            return;
+        }
+        roundRect(sidebarX, sidebarY, sidebarX + sidebarW, sidebarY + sidebarH, 4, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x1A));
+        outline(sidebarX, sidebarY, sidebarX + sidebarW, sidebarY + sidebarH, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x1F));
+        int x = sidebarX + 8;
+        int w = sidebarW - 16;
+        int y = sidebarY + 8;
+        for (ControlCenterSection section : ControlCenterSection.ordered()) {
+            Rect hit = sidebarHits.get(section.key());
+            boolean active = section == nav.section();
+            boolean hover = hit != null && hit.contains(mouseX, mouseY);
+            roundRect(x, y, x + w, y + SIDEBAR_ITEM_H - 6, 3, active ? AetherUi.ROW_SELECTED : (hover ? AetherUi.ROW_HOVER : AetherUi.ROW_BG));
+            if (active) {
+                Mc189Compat.drawRect(x, y + 2, x + 2, y + SIDEBAR_ITEM_H - 8, AetherUi.ACCENT);
+            }
+            text(font, section.label(), x + 10, y + 5, active ? AetherUi.TEXT_PRIMARY : (hover ? AetherUi.TEXT_SECONDARY : AetherUi.TEXT_DISABLED));
+            y += SIDEBAR_ITEM_H;
+        }
+
+        y += 8;
+        text(font, "FILTER", x, y, AetherUi.TEXT_DISABLED);
+        y += 12;
+        for (String chip : FILTER_CHIPS) {
+            String label = "!all".equals(chip) ? "All" : ("!live".equals(chip) ? "Live" : "Favorites");
+            boolean activeChip = nav.filterKey().equals(chip);
+            Rect hit = sidebarHits.get(chip);
+            boolean chipHover = hit != null && hit.contains(mouseX, mouseY);
+            roundRect(x, y, x + w, y + 15, 3, activeChip ? AetherUi.ROW_SELECTED : (chipHover ? AetherUi.ROW_HOVER : AetherUi.ROW_BG));
+            text(font, label, x + 10, y + 4, activeChip ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
+            y += 18;
+        }
+        for (ModuleCategory category : orderedCategories()) {
+            if (client.modules().byCategory(category).isEmpty()) {
+                continue;
+            }
+            if (y + 15 > sidebarY + sidebarH) {
                 break;
             }
-            boolean active = tab.id.equals(activeTab);
-            boolean hover = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + 16;
-            roundRect(x, y, x + w, y + 16, 4, active ? AetherUi.ROW_SELECTED : (hover ? AetherUi.ROW_HOVER : AetherUi.ROW_BG));
-            if (active) {
-                Mc189Compat.drawRect(x + 4, y + 15, x + w - 4, y + 16, AetherUi.ACCENT);
-            }
-            text(font, tab.label, x + 9, y + 4, active ? AetherUi.TEXT_PRIMARY : (hover ? AetherUi.TEXT_SECONDARY : AetherUi.TEXT_DISABLED));
-            tab.hit = rect(x, y, w, 16);
-            x += w + 6;
+            String key = "cat:" + category.name();
+            String label = label(category);
+            boolean activeChip = nav.filterKey().equals(key);
+            Rect hit = sidebarHits.get(key);
+            boolean chipHover = hit != null && hit.contains(mouseX, mouseY);
+            roundRect(x, y, x + w, y + 15, 3, activeChip ? AetherUi.ROW_SELECTED : (chipHover ? AetherUi.ROW_HOVER : AetherUi.ROW_BG));
+            text(font, trim(font, label, w - 16), x + 10, y + 4, activeChip ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
+            y += 18;
         }
     }
 
@@ -638,7 +716,7 @@ public final class AetherClickGuiScreen extends GuiScreen {
         text(font, trim(font, module.metadata().name(), nameW), nameX, box.y + 6, on ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_SECONDARY);
         String subtitle = headerHover && !isSelected
             ? module.metadata().description()
-            : (isSelected ? label(module.metadata().category()) + " · " + module.metadata().id() : module.metadata().id());
+            : (isSelected ? label(module.metadata().category()) + " / " + module.metadata().id() : module.metadata().id());
         text(font, trim(font, subtitle, nameW), nameX, box.y + 17, headerHover && !isSelected ? AetherUi.TEXT_SECONDARY : AetherUi.TEXT_DISABLED);
 
         String tag = label(module.metadata().category());
@@ -706,8 +784,9 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     private void drawControl(Object font, Setting<?> setting, Rect rect, int mouseX, int mouseY) {
         boolean hover = rect.contains(mouseX, mouseY);
-        boolean editing = editingSetting == setting;
-        boolean capturing = capturingSetting == setting;
+        ControlFocus focus = nav.focus();
+        boolean editing = focus.is(ControlFocus.Kind.TEXT) && focus.targets(setting);
+        boolean capturing = focus.is(ControlFocus.Kind.KEYBIND) && focus.targets(setting);
         switch (setting.type()) {
             case BOOLEAN: {
                 drawSwitch(rect, Boolean.TRUE.equals(setting.value()));
@@ -720,7 +799,7 @@ public final class AetherClickGuiScreen extends GuiScreen {
                 roundRect(rect.x, rect.y, rect.x + rect.w, rect.y + rect.h, 3, AetherUi.TRACK);
                 int fillW = (int) (pct * rect.w);
                 if (fillW > 0) {
-                    int active = hover || draggingSetting == setting ? AetherUi.ACCENT_ON : AetherUi.ACCENT;
+                    int active = hover || (focus.is(ControlFocus.Kind.SLIDER) && focus.targets(setting)) ? AetherUi.ACCENT_ON : AetherUi.ACCENT;
                     roundRect(rect.x, rect.y, rect.x + Math.max(3, fillW), rect.y + rect.h, 3, active);
                 }
                 Mc189Compat.drawRect(rect.x + fillW - 1, rect.y - 3, rect.x + fillW + 1, rect.y + rect.h + 3, AetherUi.TEXT_PRIMARY);
@@ -750,7 +829,7 @@ public final class AetherClickGuiScreen extends GuiScreen {
                 break;
             }
             case TEXT: {
-                String value = editing ? textBuffer : String.valueOf(setting.value());
+                String value = editing ? focus.text() : String.valueOf(setting.value());
                 roundRect(rect.x, rect.y, rect.x + rect.w, rect.y + rect.h, 3, editing ? AetherUi.withAlpha(AetherUi.SURFACE, 0xF0) : AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x1E));
                 outline(rect.x, rect.y, rect.x + rect.w, rect.y + rect.h, editing ? AetherUi.ACCENT : (hover ? AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x40) : AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x22)));
                 String shown = value == null || value.isEmpty() ? (editing ? "" : "empty") : value;
@@ -792,16 +871,9 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
         int total = client.modules().all().size();
         int enabled = 0;
-        Map<ModuleCategory, Integer> enabledByCategory = new HashMap<ModuleCategory, Integer>();
-        Map<ModuleCategory, Integer> totalByCategory = new HashMap<ModuleCategory, Integer>();
         for (ClientModule module : client.modules().all()) {
-            ModuleCategory category = module.metadata().category();
-            Integer seen = totalByCategory.get(category);
-            totalByCategory.put(category, Integer.valueOf(seen == null ? 1 : seen.intValue() + 1));
             if (module.state() == ModuleState.ENABLED) {
                 enabled++;
-                Integer count = enabledByCategory.get(category);
-                enabledByCategory.put(category, Integer.valueOf(count == null ? 1 : count.intValue() + 1));
             }
         }
         text(font, "ENABLED", x, y, AetherUi.TEXT_DISABLED);
@@ -815,25 +887,8 @@ public final class AetherClickGuiScreen extends GuiScreen {
         }
         y += 14;
 
-        for (ModuleCategory category : orderedCategories()) {
-            Integer seen = totalByCategory.get(category);
-            if (seen == null || seen.intValue() == 0) {
-                continue;
-            }
-            Integer onCount = enabledByCategory.get(category);
-            int active = onCount == null ? 0 : onCount.intValue();
-            text(font, trim(font, label(category), w - 30), x, y, active > 0 ? AetherUi.TEXT_SECONDARY : AetherUi.TEXT_DISABLED);
-            text(font, String.valueOf(active), x + w - width(font, String.valueOf(active)), y, active > 0 ? AetherUi.ACCENT : AetherUi.TEXT_DISABLED);
-            y += 10;
-            roundRect(x, y, x + w, y + 3, 2, AetherUi.TRACK);
-            if (active > 0) {
-                roundRect(x, y, x + Math.max(3, (int) ((float) active / seen.intValue() * w)), y + 3, 2, AetherUi.ACCENT_ON);
-            }
-            y += 9;
-        }
-
         y += 4;
-        text(font, "PROFILE", x, y, AetherUi.TEXT_DISABLED);
+        text(font, "CLIENT", x, y, AetherUi.TEXT_DISABLED);
         y += 12;
         text(font, trim(font, "build " + client.version().name(), w), x, y, AetherUi.TEXT_SECONDARY);
         y += 10;
@@ -847,12 +902,11 @@ public final class AetherClickGuiScreen extends GuiScreen {
         File configFile = client.configFile() == null ? null : client.configFile().toFile();
         text(font, trim(font, configFile == null ? "config n/a" : "config " + configFile.getName(), w), x, y, AetherUi.TEXT_DISABLED);
 
-        if (y + 62 < spineY + spineH) {
-            y = spineY + spineH - 60;
+        if (y + 50 < spineY + spineH) {
+            y = spineY + spineH - 47;
             drawSpineButton(font, x, y, w, "HUD EDITOR", mouseX, mouseY, 0);
             drawSpineButton(font, x, y + 15, w, "COSMETICS", mouseX, mouseY, 1);
-            drawSpineButton(font, x, y + 30, w, "LIST VIEW", mouseX, mouseY, 2);
-            drawSpineButton(font, x, y + 45, w, "SAVE NOW", mouseX, mouseY, 3);
+            drawSpineButton(font, x, y + 30, w, "SAVE NOW", mouseX, mouseY, 2);
         } else {
             for (int i = 0; i < spineButtons.length; i++) {
                 spineButtons[i] = null;
@@ -868,28 +922,131 @@ public final class AetherClickGuiScreen extends GuiScreen {
         text(font, label, x + (w - width(font, label)) / 2, y + 3, hover ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
     }
 
+    /** Draws the non-module pages' rows, reading the same geometry the click path uses. */
+    private void drawPageRows(Object font, int mouseX, int mouseY) {
+        switch (nav.section()) {
+            case PROFILES: {
+                text(font, "PROFILES", listX + 14, listY + 8, AetherUi.TEXT_DISABLED);
+                int y = listY + 24;
+                for (String name : client.profiles().names()) {
+                    Rect row = pageRowHits.get(name);
+                    if (row == null || row.y + row.h < listY - 4 || row.y > listY + listH + 4) {
+                        continue;
+                    }
+                    boolean hover = row.contains(mouseX, mouseY);
+                    int enabledCount = client.profiles().enabledCount(name);
+                    roundRect(row.x, row.y, row.x + row.w, row.y + row.h, 4, hover ? AetherUi.ROW_HOVER : AetherUi.ROW_BG);
+                    text(font, trim(font, name, row.w - 160), row.x + 12, row.y + 6, AetherUi.TEXT_PRIMARY);
+                    text(font, enabledCount + " modules on", row.x + 12, row.y + 17, AetherUi.TEXT_DISABLED);
+                    drawPageAction(font, pageActionHits.get("apply:" + name), "APPLY", mouseX, mouseY, AetherUi.ACCENT);
+                    drawPageAction(font, pageActionHits.get("delete:" + name), "DELETE", mouseX, mouseY, AetherUi.WARN);
+                    y = row.y + ROW_H + 3;
+                }
+                Rect save = pageActionHits.get("save");
+                if (save != null) {
+                    drawPageAction(font, save, "SAVE CURRENT", mouseX, mouseY, AetherUi.ACCENT);
+                }
+                Rect nameField = pageActionHits.get("newname");
+                if (nameField != null) {
+                    boolean editing = nav.focus().is(ControlFocus.Kind.TEXT);
+                    roundRect(nameField.x, nameField.y, nameField.x + nameField.w, nameField.y + nameField.h, 3,
+                        editing ? AetherUi.withAlpha(AetherUi.SURFACE, 0xF0) : AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x1E));
+                    outline(nameField.x, nameField.y, nameField.x + nameField.w, nameField.y + nameField.h,
+                        editing ? AetherUi.ACCENT : AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x22));
+                    String buffer = nav.focus().is(ControlFocus.Kind.TEXT) ? nav.focus().text() : profileDraftName;
+                    if (nav.focus().is(ControlFocus.Kind.TEXT) && (System.currentTimeMillis() / 500L) % 2L == 0L) {
+                        buffer = buffer + "_";
+                    }
+                    text(font, trim(font, buffer.isEmpty() ? "new profile name" : buffer, nameField.w - 10),
+                        nameField.x + 5, nameField.y + 3, AetherUi.TEXT_SECONDARY);
+                }
+                break;
+            }
+            case SCREENSHOTS: {
+                text(font, "SCREENSHOTS", listX + 14, listY + 8, AetherUi.TEXT_DISABLED);
+                int y = listY + 24;
+                if (screenshots.isEmpty()) {
+                    text(font, "No screenshots yet.", listX + 14, y + 4, AetherUi.TEXT_DISABLED);
+                }
+                for (ScreenshotInfo shot : screenshots) {
+                    Rect row = pageRowHits.get(shot.name());
+                    if (row == null || row.y + row.h < listY - 4 || row.y > listY + listH + 4) {
+                        continue;
+                    }
+                    boolean hover = row.contains(mouseX, mouseY);
+                    roundRect(row.x, row.y, row.x + row.w, row.y + row.h, 4, hover ? AetherUi.ROW_HOVER : AetherUi.ROW_BG);
+                    text(font, trim(font, shot.name(), row.w - 180), row.x + 12, row.y + 12, AetherUi.TEXT_PRIMARY);
+                    text(font, shot.timestamp() + " · " + (shot.sizeBytes() / 1024) + " KB", row.x + 12, row.y + 24, AetherUi.TEXT_DISABLED);
+                    text(font, "pixels are never decoded for this list", row.x + 12, row.y + SHOT_THUMB - 16, AetherUi.TEXT_DISABLED);
+                    drawPageAction(font, pageActionHits.get("open:" + shot.name()), "OPEN FOLDER", mouseX, mouseY, AetherUi.ACCENT);
+                    drawPageAction(font, pageActionHits.get("delete:" + shot.name()), "DELETE", mouseX, mouseY, AetherUi.WARN);
+                }
+                Rect capture = pageActionHits.get("capture");
+                if (capture != null) {
+                    drawPageAction(font, capture, client.screenshots().state().isInFlight() ? "ENCODING…" : "TAKE SCREENSHOT", mouseX, mouseY, AetherUi.ACCENT);
+                }
+                break;
+            }
+            case SETTINGS: {
+                text(font, "SETTINGS", listX + 14, listY + 8, AetherUi.TEXT_DISABLED);
+                ClientPreferences prefs = client.preferences();
+                drawPreferenceRow(font, pageActionHits.get("pref:save_on_close"), "Save config when the menu closes",
+                    prefs.saveOnClose(), mouseX, mouseY);
+                drawPreferenceRow(font, pageActionHits.get("pref:show_tooltips"), "Show tooltips",
+                    prefs.showTooltips(), mouseX, mouseY);
+                text(font, "The menu opens on " + prefs.openSection() + " and remembers it.", listX + 20, listY + 24 + ROW_H * 2 + 12, AetherUi.TEXT_DISABLED);
+                break;
+            }
+            default:
+                // Themes and Cosmetics are module pages; SETTINGS etc. handled above.
+                break;
+        }
+    }
+
+    private void drawPageAction(Object font, Rect rect, String label, int mouseX, int mouseY, int accent) {
+        if (rect == null) {
+            return;
+        }
+        boolean hover = rect.contains(mouseX, mouseY);
+        roundRect(rect.x, rect.y, rect.x + rect.w, rect.y + rect.h, 3, hover ? AetherUi.withAlpha(accent, 0x33) : AetherUi.withAlpha(AetherUi.ROW_BG, 0xFF));
+        text(font, trim(font, label, rect.w - 8), rect.x + 6, rect.y + 2, hover ? accent : AetherUi.TEXT_DISABLED);
+    }
+
+    private void drawPreferenceRow(Object font, Rect rect, String label, boolean on, int mouseX, int mouseY) {
+        if (rect == null) {
+            return;
+        }
+        boolean hover = rect.contains(mouseX, mouseY);
+        roundRect(rect.x, rect.y, rect.x + rect.w, rect.y + rect.h, 4, hover ? AetherUi.ROW_HOVER : AetherUi.ROW_BG);
+        text(font, label, rect.x + 12, rect.y + 6, AetherUi.TEXT_PRIMARY);
+        drawSwitch(rect(rect.x + rect.w - SWITCH_W - 12, rect.y + 9, SWITCH_W, SWITCH_H), on);
+    }
+
     private void drawFooter(Object font) {
         int y = footerY + 5;
-        text(font, trim(font, "up/down move   enter toggle   space expand   tab view   / search   esc close", deckW / 2), deckX + 12, y, AetherUi.TEXT_DISABLED);
+        text(font, trim(font, "up/down move   enter toggle   space expand   tab page   / search   esc close", deckW / 2), deckX + 12, y, AetherUi.TEXT_DISABLED);
         String status;
         int color;
-        if (editingSetting != null) {
-            status = "editing " + editingSetting.label();
+        if (nav.focus().is(ControlFocus.Kind.TEXT)) {
+            status = "editing text";
             color = AetherUi.ACCENT;
-        } else if (capturingSetting != null) {
-            status = "binding " + capturingSetting.label();
+        } else if (nav.focus().is(ControlFocus.Kind.KEYBIND)) {
+            status = "binding " + (nav.focus().setting() == null ? "" : nav.focus().setting().label());
             color = AetherUi.ACCENT;
-        } else if (paletteSetting != null) {
+        } else if (nav.focus().is(ControlFocus.Kind.PALETTE)) {
             status = "pick a colour";
             color = AetherUi.ACCENT;
         } else if (System.currentTimeMillis() - lastSaveFlash < 900L) {
             status = "saved";
             color = AetherUi.ACCENT_ON;
+        } else if (screenshotStatus != null && System.currentTimeMillis() - screenshotStatusAtMillis < 2500L) {
+            status = screenshotStatus;
+            color = AetherUi.ACCENT;
         } else if (!query.isEmpty()) {
             status = visible.size() + " match" + (visible.size() == 1 ? "" : "es");
             color = AetherUi.TEXT_SECONDARY;
         } else {
-            status = visible.size() + " modules";
+            status = nav.section().label() + " · " + visible.size() + " modules";
             color = AetherUi.TEXT_DISABLED;
         }
         String trimmed = trim(font, status, deckW / 2);
@@ -897,18 +1054,19 @@ public final class AetherClickGuiScreen extends GuiScreen {
     }
 
     private void drawPalette(Object font, int mouseX, int mouseY) {
-        if (paletteSetting == null) {
+        ControlFocus focus = nav.focus();
+        if (!focus.is(ControlFocus.Kind.PALETTE)) {
             return;
         }
         int w = PALETTE_COLS * PALETTE_CELL + 10;
         int h = 20 + 3 * PALETTE_CELL + 10;
-        int x = clamp(paletteX, deckX + 4, Math.max(deckX + 4, deckX + deckW - w - 4));
-        int y = clamp(paletteY, deckY + 4, Math.max(deckY + 4, deckY + deckH - h - 4));
+        int x = clamp(focus.anchorX(), deckX + 4, Math.max(deckX + 4, deckX + deckW - w - 4));
+        int y = clamp(focus.anchorY(), deckY + 4, Math.max(deckY + 4, deckY + deckH - h - 4));
         roundRect(x - 2, y - 2, x + w + 2, y + h + 2, 5, AetherUi.withAlpha(AetherUi.SHADOW, 0x66));
         roundRect(x, y, x + w, y + h, 4, AetherUi.withAlpha(AetherUi.PANEL, 0xF5));
         outline(x, y, x + w, y + h, AetherUi.ACCENT_SOFT);
-        text(font, "PALETTE " + trim(font, paletteSetting.label(), w - 60), x + 5, y + 5, AetherUi.TEXT_SECONDARY);
-        int current = number(paletteSetting.value());
+        text(font, "PALETTE " + trim(font, focus.setting() == null ? "" : focus.setting().label(), w - 60), x + 5, y + 5, AetherUi.TEXT_SECONDARY);
+        int current = number(focus.setting() == null ? null : focus.setting().value());
         for (int row = 0; row < 2; row++) {
             for (int col = 0; col < PALETTE_COLS; col++) {
                 int color = PALETTE_ROW_1[col];
@@ -955,11 +1113,12 @@ public final class AetherClickGuiScreen extends GuiScreen {
         }
         computeLayout(w, h);
 
-        if (paletteSetting != null) {
+        ControlFocus focus = nav.focus();
+        if (focus.is(ControlFocus.Kind.PALETTE)) {
             if (paletteClick(mouseX, mouseY)) {
                 return;
             }
-            paletteSetting = null;
+            nav.clearFocus();
         }
 
         if (mouseY >= deckY && mouseY <= deckY + HEADER_H) {
@@ -967,16 +1126,29 @@ public final class AetherClickGuiScreen extends GuiScreen {
             int searchX = deckX + deckW - searchW - 96;
             if (mouseX >= searchX && mouseX <= searchX + searchW && mouseY >= deckY + 10 && mouseY <= deckY + 30) {
                 searchFocused = true;
+                nav.beginSearch();
                 return;
             }
         }
 
-        for (Tab tab : tabs) {
-            if (tab.hit != null && tab.hit.contains(mouseX, mouseY)) {
-                activeTab = tab.id;
-                scroll = 0;
-                selected = 0;
-                rebuildRows();
+        if (sidebarW > 0 && mouseX >= sidebarX && mouseX <= sidebarX + sidebarW) {
+            for (Map.Entry<String, Rect> entry : sidebarHits.entrySet()) {
+                if (!entry.getValue().contains(mouseX, mouseY)) {
+                    continue;
+                }
+                String key = entry.getKey();
+                if ("!all".equals(key) || "!live".equals(key) || "!fav".equals(key) || key.startsWith("cat:")) {
+                    nav.filterKey(key);
+                    applyFilterKeyToSearch();
+                    scroll = 0;
+                    selected = 0;
+                    syncVisible();
+                } else {
+                    nav.showSection(ControlCenterSection.fromLabel(key, ControlCenterSection.MODULES));
+                    scroll = 0;
+                    selected = 0;
+                    syncVisible();
+                }
                 return;
             }
         }
@@ -991,8 +1163,6 @@ public final class AetherClickGuiScreen extends GuiScreen {
                     Mc189Compat.displayGuiScreen(new AetherHudEditorScreen(client));
                 } else if (i == 1) {
                     Mc189Compat.displayGuiScreen(new AetherCosmeticsScreen(client, this));
-                } else if (i == 2) {
-                    Mc189Compat.displayGuiScreen(new AetherModMenuScreen(client, this));
                 } else {
                     save();
                 }
@@ -1000,12 +1170,17 @@ public final class AetherClickGuiScreen extends GuiScreen {
             }
         }
 
-        // Rows own the list column and only the list column: a click in the margins, the ribbon,
-        // the spine or the footer must not fall through to a row that happens to share its y range,
-        // and a row scrolled out of the viewport must not be reachable at all even though its
-        // geometry still exists in the layout.
+        // Rows own the list column and only the list column: a click in the margins must not fall
+        // through to a row that happens to share its y range, and a row scrolled out of the
+        // viewport must not be reachable at all even though its geometry still exists.
         if (mouseX < listX || mouseX > listX + listW || mouseY < listY || mouseY > listY + listH) {
             searchFocused = false;
+            nav.endSearch();
+            return;
+        }
+
+        if (!nav.showsModuleList()) {
+            clickPageRow(mouseX, mouseY, button);
             return;
         }
 
@@ -1041,7 +1216,7 @@ public final class AetherClickGuiScreen extends GuiScreen {
             }
             if (box.chevron.contains(mouseX, mouseY)
                     || mouseY >= box.y + ROW_H - 8 && mouseX >= box.x && mouseX <= box.x + box.w) {
-                toggleExpanded(box.module);
+                nav.toggleExpanded(box.module.metadata().id());
                 return;
             }
             if (box.toggle.contains(mouseX, mouseY)) {
@@ -1061,6 +1236,166 @@ public final class AetherClickGuiScreen extends GuiScreen {
         }
 
         searchFocused = false;
+        nav.endSearch();
+    }
+
+    /** Handles a click on the non-module pages. */
+    private void clickPageRow(int mouseX, int mouseY, int button) {
+        switch (nav.section()) {
+            case PROFILES: {
+                ProfileStore profiles = client.profiles();
+                for (Map.Entry<String, Rect> entry : pageActionHits.entrySet()) {
+                    String key = entry.getKey();
+                    Rect rect = entry.getValue();
+                    if (!rect.contains(mouseX, mouseY)) {
+                        continue;
+                    }
+                    if ("save".equals(key)) {
+                        String draft = profileDraftName;
+                        String name = draft == null || draft.trim().isEmpty() ? "profile " + (profiles.size() + 1) : draft;
+                        if (profiles.save(name, client.modules())) {
+                            profileDraftName = "";
+                            nav.clearFocus();
+                            writeLastChange("Saved profile '" + name + "'");
+                            save();
+                        }
+                        return;
+                    }
+                    if (key.startsWith("apply:")) {
+                        String name = key.substring(6);
+                        if (profiles.apply(name, client.modules())) {
+                            activeProfile = name;
+                            writeLastChange("Applied profile '" + name + "'");
+                            syncVisible();
+                            save();
+                        }
+                        return;
+                    }
+                    if (key.startsWith("delete:")) {
+                        String name = key.substring(7);
+                        if (profiles.delete(name)) {
+                            if (name.equals(activeProfile)) {
+                                activeProfile = null;
+                            }
+                            writeLastChange("Deleted profile '" + name + "'");
+                            save();
+                        }
+                        return;
+                    }
+                }
+                for (Map.Entry<String, Rect> entry : pageRowHits.entrySet()) {
+                    if (entry.getValue().contains(mouseX, mouseY)) {
+                        activeProfile = entry.getKey();
+                        return;
+                    }
+                }
+                Rect nameField = pageActionHits.get("newname");
+                if (nameField != null && nameField.contains(mouseX, mouseY)) {
+                    nav.setFocus(ControlFocus.text(null, profileDraftName == null ? "" : profileDraftName));
+                } else if (nav.focus().is(ControlFocus.Kind.TEXT)) {
+                    profileDraftName = nav.focus().text();
+                    nav.clearFocus();
+                }
+                break;
+            }
+            case SCREENSHOTS: {
+                for (Map.Entry<String, Rect> entry : pageActionHits.entrySet()) {
+                    String key = entry.getKey();
+                    Rect rect = entry.getValue();
+                    if (!rect.contains(mouseX, mouseY)) {
+                        continue;
+                    }
+                    if ("capture".equals(key)) {
+                        takeScreenshot();
+                        return;
+                    }
+                    if (key.startsWith("delete:")) {
+                        String name = key.substring(7);
+                        if (client.screenshots().store().delete(name)) {
+                            screenshotsReadAtMillis = 0L;
+                            refreshScreenshotList();
+                        }
+                        return;
+                    }
+                    if (key.startsWith("open:")) {
+                        openScreenshotsFolder();
+                        return;
+                    }
+                }
+                break;
+            }
+            case SETTINGS: {
+                ClientPreferences prefs = client.preferences();
+                if (hit(pageActionHits.get("pref:save_on_close"), mouseX, mouseY)) {
+                    prefs.setSaveOnClose(!prefs.saveOnClose());
+                    save();
+                } else if (hit(pageActionHits.get("pref:show_tooltips"), mouseX, mouseY)) {
+                    prefs.setShowTooltips(!prefs.showTooltips());
+                    save();
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    private static boolean hit(Rect rect, int mouseX, int mouseY) {
+        return rect != null && rect.contains(mouseX, mouseY);
+    }
+
+    /** Captures through the async pipeline; the button never blocks on the encode. */
+    private void takeScreenshot() {
+        if (client.screenshots().state().isInFlight()) {
+            return;
+        }
+        screenshotRequested = true;
+    }
+
+    /**
+     * Runs the screenshot capture at the end of the current frame's drawing: the pixels handed to
+     * the pipeline are the ones the framebuffer actually holds, and the encode happens off-thread.
+     * The request flag keeps the click handler free of any framebuffer work.
+     */
+    private void pollScreenshotRequest() {
+        if (!screenshotRequested) {
+            return;
+        }
+        screenshotRequested = false;
+        if (client.screenshots().state().isInFlight()) {
+            return;
+        }
+        int width = Mc189Compat.displayWidth(Mc189Compat.minecraft());
+        int height = Mc189Compat.displayHeight(Mc189Compat.minecraft());
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        int[] pixels = Mc189Compat.readFramePixels(width, height);
+        if (pixels == null) {
+            screenshotStatus = "screenshot failed";
+            screenshotStatusAtMillis = System.currentTimeMillis();
+            return;
+        }
+        if (client.screenshots().encode(pixels, width, height)) {
+            screenshotStatus = "saving screenshot…";
+            screenshotStatusAtMillis = System.currentTimeMillis();
+        }
+    }
+
+    private void openScreenshotsFolder() {
+        try {
+            File dir = client.screenshots().store().directory().toFile();
+            String os = System.getProperty("os.name", "").toLowerCase(Locale.ENGLISH);
+            if (os.contains("win")) {
+                Runtime.getRuntime().exec(new String[] {"explorer.exe", dir.getAbsolutePath()});
+            } else if (os.contains("mac")) {
+                Runtime.getRuntime().exec(new String[] {"open", dir.getAbsolutePath()});
+            } else {
+                Runtime.getRuntime().exec(new String[] {"xdg-open", dir.getAbsolutePath()});
+            }
+        } catch (IOException ignored) {
+            // Opening a file manager is best-effort; the folder path stays in the footer status.
+        }
     }
 
     private void handleControlClick(ClientModule module, Setting<?> setting, Rect control, int mouseX) {
@@ -1071,24 +1406,17 @@ public final class AetherClickGuiScreen extends GuiScreen {
                 save();
                 break;
             case NUMBER:
-                draggingSetting = setting;
-                dragTrackX = control.x;
-                dragTrackW = control.w;
+                nav.setFocus(ControlFocus.slider(setting, control.x, control.w));
                 applySlider(setting, mouseX);
                 break;
             case COLOR:
-                paletteSetting = setting;
-                paletteX = control.x - (PALETTE_COLS * PALETTE_CELL + 10) / 2;
-                paletteY = control.y + control.h + 4;
+                nav.setFocus(ControlFocus.palette(setting, control.x - (PALETTE_COLS * PALETTE_CELL + 10) / 2, control.y + control.h + 4));
                 break;
             case KEYBIND:
-                capturingSetting = setting;
-                editingSetting = null;
+                nav.setFocus(ControlFocus.keybind(setting));
                 break;
             case TEXT:
-                editingSetting = setting;
-                textBuffer = String.valueOf(setting.value());
-                capturingSetting = null;
+                nav.setFocus(ControlFocus.text(setting, String.valueOf(setting.value())));
                 break;
             case CHOICE:
             default:
@@ -1101,8 +1429,8 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     @Override
     protected void mouseClickMove(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
-        if (draggingSetting != null) {
-            applySlider(draggingSetting, mouseX);
+        if (nav.focus().is(ControlFocus.Kind.SLIDER)) {
+            applySlider(nav.focus().setting(), mouseX);
         }
     }
 
@@ -1112,9 +1440,9 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     @Override
     protected void mouseReleased(int mouseX, int mouseY, int state) {
-        if (draggingSetting != null) {
-            writeLastChange("Setting '" + draggingSetting.label() + "' -> " + draggingSetting.value());
-            draggingSetting = null;
+        if (nav.focus().is(ControlFocus.Kind.SLIDER) && nav.focus().setting() != null) {
+            writeLastChange("Setting '" + nav.focus().setting().label() + "' -> " + nav.focus().setting().value());
+            nav.clearFocus();
             save();
         }
     }
@@ -1125,7 +1453,8 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     private void applySlider(Setting<?> setting, int mouseX) {
         int[] range = range(setting);
-        float pct = dragTrackW <= 0 ? 0F : clamp((float) (mouseX - dragTrackX) / dragTrackW, 0F, 1F);
+        ControlFocus focus = nav.focus();
+        float pct = focus.trackW() <= 0 ? 0F : clamp((float) (mouseX - focus.trackX()) / focus.trackW(), 0F, 1F);
         int value = range[0] + Math.round(pct * (range[1] - range[0]));
         if (range[2] > 0) {
             value = Math.round((float) value / range[2]) * range[2];
@@ -1143,42 +1472,49 @@ public final class AetherClickGuiScreen extends GuiScreen {
     }
 
     private void handleKey(char typedChar, int keyCode) {
-        if (paletteSetting != null && keyCode == KEY_ESCAPE) {
-            paletteSetting = null;
+        ControlFocus focus = nav.focus();
+        if (focus.is(ControlFocus.Kind.PALETTE) && keyCode == KEY_ESCAPE) {
+            nav.clearFocus();
             return;
         }
-        if (capturingSetting != null) {
+        if (focus.is(ControlFocus.Kind.KEYBIND)) {
             if (keyCode == KEY_ESCAPE) {
-                capturingSetting = null;
+                nav.clearFocus();
                 return;
             }
             int bound = keyCode == KEY_DELETE || keyCode == KEY_BACKSPACE ? 0 : keyCode;
-            setValue(capturingSetting, Integer.valueOf(bound));
-            writeLastChange("Bound '" + capturingSetting.label() + "' to " + Mc189Compat.keyName(bound));
-            capturingSetting = null;
+            Setting<?> target = focus.setting();
+            setValue(target, Integer.valueOf(bound));
+            writeLastChange("Bound '" + target.label() + "' to " + Mc189Compat.keyName(bound));
+            nav.clearFocus();
             save();
             return;
         }
-        if (editingSetting != null) {
+        if (focus.is(ControlFocus.Kind.TEXT)) {
             if (keyCode == KEY_ESCAPE) {
-                editingSetting = null;
+                if (focus.setting() == null) {
+                    profileDraftName = focus.text();
+                }
+                nav.clearFocus();
                 return;
             }
             if (keyCode == KEY_RETURN) {
-                setValue(editingSetting, textBuffer);
-                writeLastChange("Setting '" + editingSetting.label() + "' -> " + textBuffer);
-                editingSetting = null;
-                save();
+                if (focus.setting() == null) {
+                    profileDraftName = focus.text();
+                } else {
+                    setValue(focus.setting(), focus.text());
+                    writeLastChange("Setting '" + focus.setting().label() + "' -> " + focus.text());
+                    save();
+                }
+                nav.clearFocus();
                 return;
             }
             if (keyCode == KEY_BACKSPACE) {
-                if (textBuffer.length() > 0) {
-                    textBuffer = textBuffer.substring(0, textBuffer.length() - 1);
-                }
+                focus.backspace();
                 return;
             }
             if (typedChar >= 32 && typedChar < 127) {
-                textBuffer = textBuffer + typedChar;
+                focus.append(typedChar);
             }
             return;
         }
@@ -1187,7 +1523,8 @@ public final class AetherClickGuiScreen extends GuiScreen {
             if (searchFocused || !query.isEmpty()) {
                 searchFocused = false;
                 query = "";
-                rebuildRows();
+                syncVisible();
+                nav.endSearch();
                 return;
             }
             Mc189Compat.displayGuiScreen(parent);
@@ -1198,19 +1535,20 @@ public final class AetherClickGuiScreen extends GuiScreen {
             if (keyCode == KEY_BACKSPACE) {
                 if (query.length() > 0) {
                     query = query.substring(0, query.length() - 1);
-                    rebuildRows();
+                    syncVisible();
                 }
                 return;
             }
             if (keyCode == KEY_RETURN) {
                 searchFocused = false;
+                nav.endSearch();
                 return;
             }
             if (typedChar >= 32 && typedChar < 127) {
                 query = query + typedChar;
                 selected = 0;
                 scroll = 0;
-                rebuildRows();
+                syncVisible();
                 return;
             }
         }
@@ -1241,78 +1579,69 @@ public final class AetherClickGuiScreen extends GuiScreen {
                 scrollToSelected();
                 return;
             case KEY_RETURN:
-                if (selected >= 0 && selected < visible.size()) {
+                if (nav.showsModuleList() && selected >= 0 && selected < visible.size()) {
                     toggleModule(visible.get(selected));
                 }
                 return;
             case KEY_RIGHT:
-                if (selected >= 0 && selected < visible.size() && !expanded.contains(visible.get(selected).metadata().id())) {
-                    toggleExpanded(visible.get(selected));
+                if (nav.showsModuleList() && selected >= 0 && selected < visible.size()
+                        && !nav.isExpanded(visible.get(selected).metadata().id())) {
+                    nav.toggleExpanded(visible.get(selected).metadata().id());
                 }
                 return;
             case KEY_LEFT:
-                if (selected >= 0 && selected < visible.size() && expanded.contains(visible.get(selected).metadata().id())) {
-                    toggleExpanded(visible.get(selected));
+                if (nav.showsModuleList() && selected >= 0 && selected < visible.size()
+                        && nav.isExpanded(visible.get(selected).metadata().id())) {
+                    nav.toggleExpanded(visible.get(selected).metadata().id());
                 }
                 return;
             case KEY_TAB:
-                cycleTab(GuiScreen.isShiftKeyDown() ? -1 : 1);
+                nav.cycleSection(GuiScreen.isShiftKeyDown() ? -1 : 1);
+                scroll = 0;
+                selected = 0;
+                syncVisible();
                 return;
             default:
                 break;
         }
 
         if (typedChar == ' ') {
-            if (selected >= 0 && selected < visible.size()) {
-                toggleExpanded(visible.get(selected));
+            if (nav.showsModuleList() && selected >= 0 && selected < visible.size()) {
+                nav.toggleExpanded(visible.get(selected).metadata().id());
             }
             return;
         }
         if (typedChar == '/') {
             searchFocused = true;
+            nav.beginSearch();
             return;
         }
         if (typedChar == 'r' || typedChar == 'R') {
-            if (selected >= 0 && selected < visible.size()) {
+            if (nav.showsModuleList() && selected >= 0 && selected < visible.size()) {
                 resetModule(visible.get(selected));
             }
             return;
         }
         if (typedChar == 'e' || typedChar == 'E') {
+            List<String> ids = new ArrayList<String>();
             for (ClientModule module : visible) {
-                expanded.add(module.metadata().id());
+                ids.add(module.metadata().id());
             }
+            nav.expand(ids);
             return;
         }
         if (typedChar == 'c' || typedChar == 'C') {
-            expanded.clear();
+            nav.collapseAll();
             return;
         }
         if (typedChar >= 32 && typedChar < 127) {
             searchFocused = true;
+            nav.beginSearch();
             query = query + typedChar;
             selected = 0;
             scroll = 0;
-            rebuildRows();
+            syncVisible();
         }
-    }
-
-    private void cycleTab(int direction) {
-        if (tabs.isEmpty()) {
-            return;
-        }
-        int index = 0;
-        for (int i = 0; i < tabs.size(); i++) {
-            if (tabs.get(i).id.equals(activeTab)) {
-                index = i;
-                break;
-            }
-        }
-        index = (index + direction + tabs.size() * 2) % tabs.size();
-        activeTab = tabs.get(index).id;
-        selected = 0;
-        scroll = 0;
-        rebuildRows();
     }
 
     private void move(int delta) {
@@ -1344,10 +1673,11 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     /** @return true when the click was consumed by the palette popover. */
     private boolean paletteClick(int mouseX, int mouseY) {
+        ControlFocus focus = nav.focus();
         int w = PALETTE_COLS * PALETTE_CELL + 10;
         int h = 20 + 3 * PALETTE_CELL + 10;
-        int x = clamp(paletteX, deckX + 4, Math.max(deckX + 4, deckX + deckW - w - 4));
-        int y = clamp(paletteY, deckY + 4, Math.max(deckY + 4, deckY + deckH - h - 4));
+        int x = clamp(focus.anchorX(), deckX + 4, Math.max(deckX + 4, deckX + deckW - w - 4));
+        int y = clamp(focus.anchorY(), deckY + 4, Math.max(deckY + 4, deckY + deckH - h - 4));
         for (int row = 0; row < 2; row++) {
             for (int col = 0; col < PALETTE_COLS; col++) {
                 int cx = x + 5 + col * PALETTE_CELL;
@@ -1369,19 +1699,22 @@ public final class AetherClickGuiScreen extends GuiScreen {
             if (mouseX < cx || mouseX > cx + PALETTE_CELL - 2 || mouseY < cy || mouseY > cy + PALETTE_CELL - 2) {
                 continue;
             }
-            applyPaletteColor((PALETTE_ALPHA[col] & 0xFF000000) | (number(paletteSetting.value()) & 0x00FFFFFF));
+            applyPaletteColor((PALETTE_ALPHA[col] & 0xFF000000) | (number(focus.setting() == null ? null : focus.setting().value()) & 0x00FFFFFF));
             return true;
         }
         return mouseX >= x - 2 && mouseX <= x + w + 2 && mouseY >= y - 2 && mouseY <= y + h + 2;
     }
 
     private void applyPaletteColor(int color) {
-        if (paletteSetting == null) {
+        ControlFocus focus = nav.focus();
+        if (!focus.is(ControlFocus.Kind.PALETTE) || focus.setting() == null) {
+            nav.clearFocus();
             return;
         }
-        setValue(paletteSetting, Integer.valueOf(color));
-        writeLastChange("Setting '" + paletteSetting.label() + "' -> #" + String.format("%08X", Integer.valueOf(color)));
-        paletteSetting = null;
+        Setting<?> target = focus.setting();
+        setValue(target, Integer.valueOf(color));
+        writeLastChange("Setting '" + target.label() + "' -> #" + String.format("%08X", Integer.valueOf(color)));
+        nav.clearFocus();
         save();
     }
 
@@ -1404,8 +1737,8 @@ public final class AetherClickGuiScreen extends GuiScreen {
             }
         } else if (wheel != 0) {
             scrollBy(-wheel / 24F * 22F);
-        } else if (draggingSetting != null) {
-            applySlider(draggingSetting, mouseX);
+        } else if (nav.focus().is(ControlFocus.Kind.SLIDER)) {
+            applySlider(nav.focus().setting(), mouseX);
         }
     }
 
@@ -1424,15 +1757,9 @@ public final class AetherClickGuiScreen extends GuiScreen {
         client.modules().setEnabled(module.metadata().id(), enable);
         writeLastChange("Toggled module '" + module.metadata().name() + "' -> " + (enable ? "ENABLED" : "DISABLED"));
         save();
-        if ("!live".equals(activeTab)) {
-            rebuildRows();
-        }
-    }
-
-    private void toggleExpanded(ClientModule module) {
-        String id = module.metadata().id();
-        if (!expanded.remove(id)) {
-            expanded.add(id);
+        search.invalidate();
+        if (nav.filterKey().equals("!live")) {
+            syncVisible();
         }
     }
 
@@ -1498,17 +1825,6 @@ public final class AetherClickGuiScreen extends GuiScreen {
     }
 
     /* ── types ──────────────────────────────────────────────────────────── */
-
-    private static final class Tab {
-        final String id;
-        final String label;
-        Rect hit;
-
-        Tab(String id, String label) {
-            this.id = id;
-            this.label = label;
-        }
-    }
 
     private static final class Box {
         final ClientModule module;
@@ -1845,6 +2161,16 @@ public final class AetherClickGuiScreen extends GuiScreen {
         }
     }
 
+    private static List<ModuleCategory> orderedCategories() {
+        List<ModuleCategory> order = new ArrayList<ModuleCategory>();
+        Collections.addAll(order,
+            ModuleCategory.HUD, ModuleCategory.PVP, ModuleCategory.GRAPHICS, ModuleCategory.RENDER,
+            ModuleCategory.INTERFACE, ModuleCategory.PERFORMANCE, ModuleCategory.COSMETICS,
+            ModuleCategory.THEMES, ModuleCategory.MOVEMENT, ModuleCategory.AUDIO,
+            ModuleCategory.ACCESSIBILITY, ModuleCategory.GENERAL);
+        return order;
+    }
+
     /**
      * Mirrors the legacy manager: every deck change rewrites lastchange.txt so the
      * repository keeps a readable trail of the most recent GUI action.
@@ -1857,10 +2183,10 @@ public final class AetherClickGuiScreen extends GuiScreen {
             String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
             PrintWriter writer = new PrintWriter(new FileWriter(changeFile, false));
             try {
-                writer.println("=== Aether Click Deck - Last Change ===");
+                writer.println("=== Aether Control Center - Last Change ===");
                 writer.println("Timestamp: " + timestamp);
                 writer.println("Action:    " + description);
-                writer.println("=======================================");
+                writer.println("===========================================");
             } finally {
                 writer.close();
             }

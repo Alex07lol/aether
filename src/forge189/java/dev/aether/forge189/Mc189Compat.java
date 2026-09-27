@@ -257,6 +257,22 @@ public final class Mc189Compat {
         setField(gameSettings, new String[] {"renderDistanceChunks", "field_151451_c"}, Integer.valueOf(value));
     }
 
+    /**
+     * Whether the game window currently has focus, which the FPS limiter uses to pick its unfocused
+     * cap. An unreachable display counts as focused: that is the conservative answer, because it
+     * keeps the gameplay cap rather than dropping to a background one by mistake.
+     */
+    static boolean displayActive() {
+        try {
+            Class<?> display = Class.forName("org.lwjgl.opengl.Display");
+            Method method = display.getMethod("isActive");
+            Object value = method.invoke(null);
+            return !(value instanceof Boolean) || ((Boolean) value).booleanValue();
+        } catch (Throwable ignored) {
+            return true;
+        }
+    }
+
     static int limitFramerate(Object gameSettings) {
         return intField(gameSettings, new String[] {"limitFramerate", "field_74350_i"});
     }
@@ -1261,6 +1277,45 @@ public final class Mc189Compat {
         invokeStatic(gl11Class(), new String[]{"glLineWidth"}, new Class<?>[]{Float.TYPE}, Float.valueOf(width));
     }
 
+    /**
+     * Copies the current framebuffer into an ARGB array. Must be called on the render thread
+     * (it is a GL read); everything after it - PNG encode, disk write - happens on the worker.
+     * Returns {@code null} when GL or the buffer cannot be reached, so the caller can show a
+     * failure instead of throwing inside a render pass.
+     */
+    static int[] readFramePixels(int width, int height) {
+        try {
+            Class<?> gl = gl11Class();
+            // Row order and channel order both get fixed up below; see the comment in the loop.
+            int channels = 4;
+            java.nio.ByteBuffer buffer = java.nio.ByteBuffer.allocateDirect(width * height * channels);
+            byte[] staging = new byte[width * height * channels];
+            invokeStatic(gl, new String[]{"glReadPixels"}, new Class<?>[]{Integer.TYPE, Integer.TYPE, Integer.TYPE, Integer.TYPE, Integer.TYPE, Integer.TYPE, Object.class},
+                Integer.valueOf(0), Integer.valueOf(0), Integer.valueOf(width), Integer.valueOf(height), Integer.valueOf(0x1903)/* GL_BGRA? no: GL_RGBA */, Integer.valueOf(0x1401)/* GL_UNSIGNED_BYTE */, buffer);
+            buffer.position(0);
+            buffer.get(staging);
+            int[] argb = new int[width * height];
+            for (int row = 0; row < height; row++) {
+                int srcRow = height - 1 - row; // GL reads bottom-up; images are top-down.
+                for (int x = 0; x < width; x++) {
+                    int i = (srcRow * width + x) * 4;
+                    int r = staging[i] & 0xFF;
+                    int g = staging[i + 1] & 0xFF;
+                    int b = staging[i + 2] & 0xFF;
+                    int a = staging[i + 3] & 0xFF;
+                    argb[row * width + x] = (a << 24) | (r << 16) | (g << 8) | b;
+                    if (r == 0 && g == 0 && b == 0 && a == 0) {
+                        // Fully transparent black is an alpha-mode artefact, not content.
+                        argb[row * width + x] = 0xFF000000;
+                    }
+                }
+            }
+            return argb;
+        } catch (Throwable failure) {
+            return null;
+        }
+    }
+
     static int mouseWheelDelta() {
         try {
             Class<?> mouse = Class.forName("org.lwjgl.input.Mouse");
@@ -1648,6 +1703,99 @@ public final class Mc189Compat {
         disableBlend();
         enableTexture2D();
         color(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
+    /**
+     * Draws a world-space name tag for a waypoint, always facing the camera.
+     * <p>
+     * The label width is measured once per rounded distance (the key the caller passes) and cached
+     * in {@code widthCache}, so a stationary player pays no per-frame text measurement. Nothing is
+     * allocated per frame beyond the drawn string itself. Returns quietly when the font renderer
+     * or the camera transform is unreachable - a waypoint label must never break world rendering.
+     */
+    static void drawWaypointLabel(Object fontRenderer, String text, double x, double y, double z,
+                                  int cacheKey, int color, Object widthCache) {
+        if (fontRenderer == null || text == null || text.isEmpty()) {
+            return;
+        }
+        try {
+            int width = measureLabel(fontRenderer, text, cacheKey, widthCache);
+            float halfWidth = width / 2.0F;
+            pushMatrix();
+            translate((float) x, (float) y, (float) z);
+            // Rotate against the camera yaw/pitch so the label reads like a name tag.
+            rotateCamera();
+            scale(-0.025F, -0.025F, 0.025F);
+            disableTexture2D();
+            enableBlend();
+            depthMask(false);
+            int background = (color & 0xFF000000) | 0x101010 & 0x00FFFFFF;
+            drawRect((int) (-halfWidth) - 3, -10, (int) halfWidth + 3, 2, background);
+            drawString((float) (-halfWidth), -8.0F, text, color, fontRenderer);
+            color(1.0F, 1.0F, 1.0F, 1.0F);
+            depthMask(true);
+            enableTexture2D();
+            disableBlend();
+            popMatrix();
+        } catch (Throwable ignored) {
+            // A label is cosmetic; a mapping miss must not break the frame.
+        }
+    }
+
+    private static int measureLabel(Object fontRenderer, String text, int cacheKey, Object widthCache) {
+        if (widthCache instanceof ForgeWaypointRenderer.TextWidthCache) {
+            ForgeWaypointRenderer.TextWidthCache cache = (ForgeWaypointRenderer.TextWidthCache) widthCache;
+            String key = cacheKey + ":" + text;
+            int cached = cache.get(key);
+            if (cached >= 0) {
+                return cached;
+            }
+            int width = stringWidth(fontRenderer, text);
+            cache.put(key, width);
+            return width;
+        }
+        return stringWidth(fontRenderer, text);
+    }
+
+    private static void rotateCamera() {
+        Object entityRenderer = entityRenderer(minecraft());
+        Float yaw = invokeFloat(entityRenderer, new String[] {"camYaw", "field_147663_ae"});
+        Float pitch = invokeFloat(entityRenderer, new String[] {"camPitch", "field_147664_af"});
+        if (yaw != null) {
+            invokeStatic(gl11Class(), new String[]{"glRotatef"}, new Class<?>[]{Float.TYPE}, Float.valueOf(-yaw.floatValue()));
+        }
+        if (pitch != null) {
+            invokeStatic(gl11Class(), new String[]{"glRotatef"}, new Class<?>[]{Float.TYPE}, Float.valueOf(pitch.floatValue()));
+        }
+    }
+
+    private static Float invokeFloat(Object target, String[] names) {
+        if (target == null) {
+            return null;
+        }
+        for (String name : names) {
+            try {
+                Field field = target.getClass().getDeclaredField(name);
+                field.setAccessible(true);
+                Object value = field.get(target);
+                if (value instanceof Float) {
+                    return (Float) value;
+                }
+            } catch (Throwable ignored) {
+                // try the next name
+            }
+        }
+        return null;
+    }
+
+    private static void drawString(float x, float y, String text, int color, Object fontRenderer) {
+        try {
+            Class<?> cls = fontRenderer.getClass();
+            Method method = cls.getMethod("drawStringWithShadow", String.class, float.class, float.class, int.class);
+            method.invoke(fontRenderer, text, Float.valueOf(x), Float.valueOf(y), Integer.valueOf(color));
+        } catch (Throwable ignored) {
+            // A label is cosmetic; a mapping miss must not break the frame.
+        }
     }
 
     static void drawFilledBoundingBox(AxisAlignedBB boundingBox) {

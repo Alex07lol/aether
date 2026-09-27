@@ -12,5 +12,6 @@ public class SnaplookModule extends AbstractModule {
             .build());
 
         addKeybind("keybind", "Keybind", 33);
+        addChoice("activation", "Activation", "Hold").choices("Hold", "Toggle");
     }
 }

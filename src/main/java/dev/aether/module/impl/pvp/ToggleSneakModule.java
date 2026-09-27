@@ -17,6 +17,7 @@ public class ToggleSneakModule extends AbstractModule {
             .build());
 
         addKeybind("keybind", "Keybind", 42);
+        addChoice("behaviour", "Behaviour", "Toggled").choices("Toggled", "Held", "Vanilla");
         addChoice("mode", "Mode", "Modern").choices("Modern", "Legacy");
         addBool("show_status", "Show Status", true);
         addBool("show_background", "Show Background", true);

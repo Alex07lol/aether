@@ -7,10 +7,15 @@ import dev.aether.forge189.mixin.ItemRendererMixin;
 import dev.aether.forge189.mixin.RendererLivingEntityMixin;
 import dev.aether.forge189.mixin.WorldMixin;
 import dev.aether.graphics.FreelookMath;
+import dev.aether.graphics.FreelookView;
 import dev.aether.graphics.HurtCamMath;
+import dev.aether.graphics.WeatherValues;
 import dev.aether.graphics.ZoomMath;
-import dev.aether.module.state.ToggleKey;
+import dev.aether.module.state.ActivationLatch;
+import dev.aether.module.state.ActivationMode;
+import dev.aether.module.state.ForceKeyMachine;
 import dev.aether.module.state.ValueHold;
+import dev.aether.runtime.FpsLimiter;
 import dev.aether.module.impl.interface_.ChatCustomizationModule;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleState;
@@ -29,6 +34,7 @@ import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.client.event.EntityViewRenderEvent;
 import net.minecraftforge.client.event.MouseEvent;
 import net.minecraftforge.client.event.DrawBlockHighlightEvent;
+import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.client.event.RenderLivingEvent;
 import net.minecraftforge.client.event.RenderWorldLastEvent;
 import net.minecraftforge.event.entity.player.AttackEntityEvent;
@@ -56,6 +62,7 @@ final class ForgeClientEventBridge {
     private final ForgeCosmeticRenderer cosmetics;
     private final ForgeNameTagRenderer nametags;
     private final ForgeNotifications notifications;
+    private final ForgeWaypointRenderer waypoints;
     /**
      * Held vanilla values. One {@link ValueHold} per value the client is allowed to override, so
      * every "put it back" path captures exactly once and restores exactly once - the three bugs
@@ -69,17 +76,18 @@ final class ForgeClientEventBridge {
     private final ValueHold<Integer> cloudsHold = new ValueHold<Integer>("clouds");
     private final ValueHold<Integer> freelookPerspectiveHold = new ValueHold<Integer>("freelook perspective");
     private final ValueHold<Integer> snaplookPerspectiveHold = new ValueHold<Integer>("snaplook perspective");
-    private final ToggleKey toggleSprint = new ToggleKey();
-    private final ToggleKey toggleSneak = new ToggleKey();
-    /** True while the module owns the sprint/sneak key, so it is only handed back once. */
-    private boolean sprintKeyForced;
-    private boolean sneakKeyForced;
+    private final ValueHold<Integer> framerateHold = new ValueHold<Integer>("framerate");
+    /** Key ownership for the two "hold it for me" modules: one machine each, same rules. */
+    private final ForceKeyMachine sprintKey = new ForceKeyMachine();
+    private final ForceKeyMachine sneakKey = new ForceKeyMachine();
+    /** Hold-or-toggle input for the two camera keys. */
+    private final ActivationLatch freelookLatch = new ActivationLatch(ActivationMode.HOLD);
+    private final ActivationLatch snaplookLatch = new ActivationLatch(ActivationMode.HOLD);
+    /** Freelook's own camera orientation; the player's rotation is never stored here. */
+    private final FreelookView freelookView = new FreelookView();
     private long zoomPersistAtMillis;
     private int comboCount;
     private long lastComboMillis;
-    private boolean freelookActive;
-    private float freelookYaw;
-    private float freelookPitch;
     private long nextMemoryCleanupMillis;
     private boolean modMenuKeyDown;
 
@@ -89,6 +97,7 @@ final class ForgeClientEventBridge {
         this.cosmetics = new ForgeCosmeticRenderer(client);
         this.nametags = new ForgeNameTagRenderer(client);
         this.notifications = new ForgeNotifications(client);
+        this.waypoints = new ForgeWaypointRenderer(client);
     }
 
     @SubscribeEvent
@@ -130,7 +139,7 @@ final class ForgeClientEventBridge {
 
     @SubscribeEvent
     public void onMouse(MouseEvent event) {
-        if (!this.freelookActive || event.dx == 0 && event.dy == 0) {
+        if (!this.freelookView.isActive() || event.dx == 0 && event.dy == 0) {
             return;
         }
         String moduleId = freelookModuleId();
@@ -140,10 +149,9 @@ final class ForgeClientEventBridge {
         // Vanilla's own sensitivity curve, scaled by the module's dial: at the default slider and
         // a sensitivity of 100 the camera turns exactly as fast as the player's head would.
         float mouseSensitivity = Mc189Compat.mouseSensitivity(Mc189Compat.gameSettings(Mc189Compat.minecraft()));
-        float scale = FreelookMath.moduleScale(configuredInt(moduleId, "sensitivity"));
-        this.freelookYaw = FreelookMath.yawAfter(this.freelookYaw, event.dx, mouseSensitivity, scale);
-        this.freelookPitch = FreelookMath.pitchAfter(this.freelookPitch, event.dy, mouseSensitivity, scale,
-            configuredBool(moduleId, "invert_y"));
+        this.freelookView.look(event.dx, event.dy, mouseSensitivity,
+            FreelookMath.moduleScale(configuredInt(moduleId, "sensitivity")),
+            configuredBool(moduleId, "invert_x"), configuredBool(moduleId, "invert_y"));
         // The player is frozen inside the mixin as well; cancelling here is the primary guard so
         // vanilla never even reads the delta.
         event.setCanceled(true);
@@ -151,11 +159,11 @@ final class ForgeClientEventBridge {
 
     @SubscribeEvent
     public void onCameraSetup(EntityViewRenderEvent.CameraSetup event) {
-        if (!this.freelookActive) {
+        if (!this.freelookView.isActive()) {
             return;
         }
-        event.yaw = this.freelookYaw;
-        event.pitch = this.freelookPitch;
+        event.yaw = this.freelookView.yaw();
+        event.pitch = this.freelookView.pitch();
         event.roll = 0.0F;
     }
 
@@ -241,6 +249,23 @@ final class ForgeClientEventBridge {
     public void onRenderWorldLast(RenderWorldLastEvent event) {
         this.cosmetics.onRenderWorldLast(event.partialTicks);
         this.nametags.onRenderWorldLast(event.partialTicks);
+        this.waypoints.onRenderWorldLast(event.partialTicks);
+    }
+
+    /**
+     * Hides vanilla's crosshair while the custom crosshair module is drawing its own, so the two can
+     * never overlap. The module's own pass draws into the same element, and vanilla's crosshair comes
+     * back the moment the module is switched off (or F1 hides the HUD).
+     */
+    @SubscribeEvent
+    public void onRenderOverlayPre(RenderGameOverlayEvent.Pre event) {
+        if (event.type != RenderGameOverlayEvent.ElementType.CROSSHAIRS || !enabled("graphics.custom_crosshair")) {
+            return;
+        }
+        if (Mc189Compat.hideGui(Mc189Compat.gameSettings(Mc189Compat.minecraft()))) {
+            return;
+        }
+        event.setCanceled(true);
     }
 
     @SubscribeEvent
@@ -383,31 +408,28 @@ final class ForgeClientEventBridge {
         Object minecraft = Mc189Compat.minecraft();
         Object gameSettings = Mc189Compat.gameSettings(minecraft);
         if (!enabled("pvp.toggle_sprint")) {
-            this.toggleSprint.reset();
-            if (this.sprintKeyForced) {
-                this.sprintKeyForced = false;
-                if (gameSettings != null) {
-                    Mc189Compat.setKeyBindState(Mc189Compat.keySprint(gameSettings), false);
-                }
+            if (this.sprintKey.reset() && gameSettings != null) {
+                Mc189Compat.setKeyBindState(Mc189Compat.keySprint(gameSettings), false);
             }
             return;
         }
+        this.sprintKey.setMode(ForceKeyMachine.Mode.from(
+            configuredString("pvp.toggle_sprint", "behaviour"), ForceKeyMachine.Mode.TOGGLED));
         boolean keyDown = Mc189Compat.currentScreen(minecraft) == null
             && Mc189Compat.keyboardKeyDown(configuredInt("pvp.toggle_sprint", "keybind"));
-        if (this.toggleSprint.update(keyDown)) {
-            this.notifications.push("Toggle Sprint " + (this.toggleSprint.active() ? "ON" : "OFF"));
+        Boolean publish = this.sprintKey.update(keyDown);
+        if (this.sprintKey.justToggled()) {
+            this.notifications.push("Toggle Sprint " + (this.sprintKey.toggled() ? "ON" : "OFF"));
         }
 
         Object player = Mc189Compat.player(minecraft);
         if (gameSettings == null || player == null) {
             return;
         }
-        boolean wanted = this.toggleSprint.active();
-        if (this.sprintKeyForced != wanted) {
-            this.sprintKeyForced = wanted;
-            Mc189Compat.setKeyBindState(Mc189Compat.keySprint(gameSettings), wanted);
+        if (publish != null) {
+            Mc189Compat.setKeyBindState(Mc189Compat.keySprint(gameSettings), publish.booleanValue());
         }
-        if (wanted && !Mc189Compat.sprinting(player)
+        if (this.sprintKey.toggled() && !Mc189Compat.sprinting(player)
                 && Mc189Compat.keyDown(Mc189Compat.keyForward(gameSettings))
                 && !Mc189Compat.sneaking(player)) {
             Mc189Compat.setSprinting(player, true);
@@ -428,30 +450,27 @@ final class ForgeClientEventBridge {
         Object minecraft = Mc189Compat.minecraft();
         Object gameSettings = Mc189Compat.gameSettings(minecraft);
         if (!enabled("pvp.toggle_sneak")) {
-            this.toggleSneak.reset();
-            if (this.sneakKeyForced) {
-                this.sneakKeyForced = false;
-                if (gameSettings != null) {
-                    Mc189Compat.setKeyBindState(Mc189Compat.keyBindSneak(gameSettings), false);
-                }
+            if (this.sneakKey.reset() && gameSettings != null) {
+                Mc189Compat.setKeyBindState(Mc189Compat.keyBindSneak(gameSettings), false);
             }
             return;
         }
+        this.sneakKey.setMode(ForceKeyMachine.Mode.from(
+            configuredString("pvp.toggle_sneak", "behaviour"), ForceKeyMachine.Mode.TOGGLED));
 
         // Never toggle while a screen is open, or typing in chat would flip sneak.
         boolean keyDown = Mc189Compat.currentScreen(minecraft) == null
             && Mc189Compat.keyboardKeyDown(configuredInt("pvp.toggle_sneak", "keybind"));
-        if (this.toggleSneak.update(keyDown)) {
-            this.notifications.push("Toggle Sneak " + (this.toggleSneak.active() ? "ON" : "OFF"));
+        Boolean publish = this.sneakKey.update(keyDown);
+        if (this.sneakKey.justToggled()) {
+            this.notifications.push("Toggle Sneak " + (this.sneakKey.toggled() ? "ON" : "OFF"));
         }
 
         if (gameSettings == null || Mc189Compat.player(minecraft) == null) {
             return;
         }
-        boolean wanted = this.toggleSneak.active();
-        if (this.sneakKeyForced != wanted) {
-            this.sneakKeyForced = wanted;
-            Mc189Compat.setKeyBindState(Mc189Compat.keyBindSneak(gameSettings), wanted);
+        if (publish != null) {
+            Mc189Compat.setKeyBindState(Mc189Compat.keyBindSneak(gameSettings), publish.booleanValue());
         }
     }
 
@@ -510,11 +529,11 @@ final class ForgeClientEventBridge {
     }
 
     boolean toggleSprintActive() {
-        return this.toggleSprint.active();
+        return this.sprintKey.toggled();
     }
 
     boolean toggleSneakActive() {
-        return this.toggleSneak.active();
+        return this.sneakKey.toggled();
     }
 
     int comboCount() {
@@ -530,28 +549,40 @@ final class ForgeClientEventBridge {
     }
 
     /**
-     * Snaplook holds the camera behind the player while its key is down. The perspective the player
-     * was already using is captured once and restored once, so releasing the key returns to that
-     * perspective - a player who was already in third person does not get dropped into first person
-     * by a module that was only supposed to peek.
+     * Snaplook holds the camera behind the player while its key is down, or toggles it when the
+     * module is configured that way. The perspective the player was already using is captured once
+     * and restored once, so a player who was already in third person is not dropped into first
+     * person by a module that was only supposed to peek.
      */
     private void applySnaplook() {
         Object minecraft = Mc189Compat.minecraft();
         Object gameSettings = Mc189Compat.gameSettings(minecraft);
         if (gameSettings == null) {
+            this.snaplookLatch.reset();
             this.snaplookPerspectiveHold.forget();
             return;
         }
-        boolean active = enabled("pvp.snaplook")
-            && Mc189Compat.currentScreen(minecraft) == null
-            && Mc189Compat.keyboardKeyDown(configuredInt("pvp.snaplook", "keybind"));
-        if (active) {
-            this.snaplookPerspectiveHold.capture(Integer.valueOf(Mc189Compat.thirdPersonView(gameSettings)));
-            if (Mc189Compat.thirdPersonView(gameSettings) != 1) {
-                Mc189Compat.setThirdPersonView(gameSettings, 1);
-            }
+        if (!enabled("pvp.snaplook")) {
+            // Disabling releases the latch and the perspective, exactly like letting go of the key.
+            this.snaplookLatch.reset();
+            restoreSnaplook(gameSettings);
             return;
         }
+        this.snaplookLatch.setMode(ActivationMode.from(
+            configuredString("pvp.snaplook", "activation"), ActivationMode.HOLD));
+        boolean keyDown = Mc189Compat.currentScreen(minecraft) == null
+            && Mc189Compat.keyboardKeyDown(configuredInt("pvp.snaplook", "keybind"));
+        if (!this.snaplookLatch.update(keyDown)) {
+            restoreSnaplook(gameSettings);
+            return;
+        }
+        this.snaplookPerspectiveHold.capture(Integer.valueOf(Mc189Compat.thirdPersonView(gameSettings)));
+        if (Mc189Compat.thirdPersonView(gameSettings) != 1) {
+            Mc189Compat.setThirdPersonView(gameSettings, 1);
+        }
+    }
+
+    private void restoreSnaplook(Object gameSettings) {
         Integer restore = this.snaplookPerspectiveHold.release();
         if (restore != null && Mc189Compat.thirdPersonView(gameSettings) != restore.intValue()) {
             Mc189Compat.setThirdPersonView(gameSettings, restore.intValue());
@@ -564,6 +595,7 @@ final class ForgeClientEventBridge {
         if (gameSettings != null) {
             applyFullbright(gameSettings);
             applyFpsOptimizer(gameSettings);
+            applyFpsLimiter(gameSettings);
         }
         // Zoom and freelook publish their own render-time state instead of writing game settings.
         applyZoom();
@@ -723,8 +755,49 @@ final class ForgeClientEventBridge {
      * weather on the very next frame - there is no captured state and nothing to lose.
      */
     private void applyWeatherToggle(Object minecraft) {
-        WorldMixin.rainVisualSuppressed = enabled("graphics.weather_toggle")
-            && Mc189Compat.world(minecraft) != null;
+        WorldMixin.weatherOverrideActive = false;
+        if (!enabled("graphics.weather_toggle") || Mc189Compat.world(minecraft) == null) {
+            return;
+        }
+        WeatherValues.Mode mode = WeatherValues.Mode.from(
+            configuredString("graphics.weather_toggle", "mode"), WeatherValues.Mode.SERVER);
+        if (!WeatherValues.overrides(mode)) {
+            // "Server" is the module's off switch: draw the real weather, override nothing.
+            return;
+        }
+        Float rain = WeatherValues.rainStrength(mode,
+            settingRangeValue("graphics.weather_toggle", "rain_strength"));
+        Float thunder = WeatherValues.thunderStrength(mode,
+            settingRangeValue("graphics.weather_toggle", "thunder_strength"));
+        WorldMixin.weatherRainStrength = rain == null ? 0.0F : rain.floatValue();
+        WorldMixin.weatherThunderStrength = thunder == null ? 0.0F : thunder.floatValue();
+        WorldMixin.weatherOverrideActive = true;
+    }
+
+    /**
+     * Drives vanilla's own frame cap. The player's value is captured once and handed back once, and
+     * the cap is only written when it actually changes, so the game loop keeps using the setting it
+     * already knows instead of being rewritten every tick.
+     */
+    private void applyFpsLimiter(Object gameSettings) {
+        if (gameSettings == null) {
+            return;
+        }
+        if (!enabled("performance.fps_limiter")) {
+            Integer restore = this.framerateHold.release();
+            if (restore != null && Mc189Compat.limitFramerate(gameSettings) != restore.intValue()) {
+                Mc189Compat.setLimitFramerate(gameSettings, restore.intValue());
+            }
+            return;
+        }
+        int wanted = FpsLimiter.resolve(
+            settingRangeValue("performance.fps_limiter", "target_fps"),
+            settingRangeValue("performance.fps_limiter", "unfocused_fps"),
+            Mc189Compat.displayActive());
+        this.framerateHold.capture(Integer.valueOf(Mc189Compat.limitFramerate(gameSettings)));
+        if (Mc189Compat.limitFramerate(gameSettings) != wanted) {
+            Mc189Compat.setLimitFramerate(gameSettings, wanted);
+        }
     }
 
     /**
@@ -812,24 +885,31 @@ final class ForgeClientEventBridge {
         String moduleId = freelookModuleId();
         Object minecraft = Mc189Compat.minecraft();
         Object gameSettings = Mc189Compat.gameSettings(minecraft);
-        if (gameSettings == null) {
-            EntityPlayerSPMixin.freelookFreezesRotation = false;
-            return;
-        }
-        boolean active = moduleId != null
-            && Mc189Compat.currentScreen(minecraft) == null
-            && Mc189Compat.keyboardKeyDown(configuredInt(moduleId, "keybind"));
-        if (!active) {
+        if (gameSettings == null || moduleId == null) {
+            // The module is off (or there is no game to render into): end the hold and forget the key.
+            this.freelookLatch.reset();
             stopFreelook(gameSettings);
             return;
         }
-        if (!this.freelookActive) {
+        this.freelookLatch.setMode(ActivationMode.from(
+            configuredString(moduleId, "activation"), ActivationMode.HOLD));
+        boolean keyDown = Mc189Compat.currentScreen(minecraft) == null
+            && Mc189Compat.keyboardKeyDown(configuredInt(moduleId, "keybind"));
+        if (!this.freelookLatch.update(keyDown)) {
+            stopFreelook(gameSettings);
+            return;
+        }
+        if (!this.freelookView.isActive()) {
             startFreelook(gameSettings, minecraft);
         }
-        if (EntityPlayerSPMixin.freelookFreezesRotation != this.freelookActive) {
-            EntityPlayerSPMixin.freelookFreezesRotation = this.freelookActive;
+        if (!this.freelookView.isActive()) {
+            // No player to seed the camera from; nothing to hold this tick.
+            return;
         }
-        if (this.freelookActive && Mc189Compat.thirdPersonView(gameSettings) != 1) {
+        if (!EntityPlayerSPMixin.freelookFreezesRotation) {
+            EntityPlayerSPMixin.freelookFreezesRotation = true;
+        }
+        if (Mc189Compat.thirdPersonView(gameSettings) != 1) {
             Mc189Compat.setThirdPersonView(gameSettings, 1);
         }
     }
@@ -840,23 +920,20 @@ final class ForgeClientEventBridge {
             return;
         }
         this.freelookPerspectiveHold.capture(Integer.valueOf(Mc189Compat.thirdPersonView(gameSettings)));
-        // The camera starts where the player is already looking: vanilla orients its third-person
-        // camera from the player's yaw plus 180 degrees, and the pitch is the player's own pitch.
-        this.freelookYaw = FreelookMath.thirdPersonCameraYaw(Mc189Compat.rotationYaw(player));
-        this.freelookPitch = FreelookMath.clamp(Mc189Compat.rotationPitch(player),
-            -FreelookMath.PITCH_LIMIT, FreelookMath.PITCH_LIMIT);
-        this.freelookActive = true;
+        // The camera starts where the player is already looking: FreelookView applies vanilla's
+        // third-person base (the player's yaw plus 180 degrees) and the player's own pitch.
+        this.freelookView.start(Mc189Compat.rotationYaw(player), Mc189Compat.rotationPitch(player));
     }
 
     private void stopFreelook(Object gameSettings) {
-        if (this.freelookActive) {
-            this.freelookActive = false;
-            // The camera angle belongs to the hold: a fresh hold recaptures from the player again.
-            this.freelookYaw = 0.0F;
-            this.freelookPitch = 0.0F;
+        if (this.freelookView.isActive()) {
+            this.freelookView.stop();
         }
         if (EntityPlayerSPMixin.freelookFreezesRotation) {
             EntityPlayerSPMixin.freelookFreezesRotation = false;
+        }
+        if (gameSettings == null) {
+            return;
         }
         Integer restore = this.freelookPerspectiveHold.release();
         if (restore != null && Mc189Compat.thirdPersonView(gameSettings) != restore.intValue()) {

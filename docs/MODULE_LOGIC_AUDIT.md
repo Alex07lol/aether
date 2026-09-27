@@ -479,3 +479,84 @@ environment gets to exercising the GUI.
 fired by a real game and no module was observed in game; the six new suites test the maths
 and state machines the adapter calls, and the Click Deck self-test drives the screen against
 the stubs.
+
+---
+
+# Addendum: Aether 2.0 pass (same day)
+
+Scope of the second pass: the Control Center rebuild of the click GUI, the activation
+machines behind the camera/key modules, the profile/preference stores, the waypoint
+system and the async screenshot pipeline. Companion: `docs/CONTROL_CENTER.md`.
+
+## 11. What this pass changed
+
+### 11.1 Control Center (AetherClickGuiScreen)
+
+The deck's ribbon of view chips became a sidebar of six real pages (Modules,
+Profiles, Themes, Cosmetics, Screenshots, Settings) driven by a core state machine:
+
+- `ControlCenterState` (core, unit-tested) replaces the loose booleans. Impossible
+  combinations - "settings open with no module named", "keybind capture running
+  while a text editor is open" - are no longer representable; every transition
+  drops the state that would contradict it.
+- `ControlFocus` replaces the four nullable per-control fields (drag, palette,
+  capture, text editor) with one object that has exactly one kind at a time.
+- Search and filtering go through the cached `ModuleSearch`; the deck's private
+  `rebuildRows`/`matchesTab`/`score` copy is deleted. Sections reuse the same
+  machinery against different sources (all modules vs Themes vs Cosmetics), so a
+  section cannot drift from the list behaviour.
+- One layout pass still feeds both painting and hit-testing; the sidebar's hit
+  rectangles are registered in layout (the self-test caught the "cleared in layout,
+  filled in paint" ordering bug that would have blanked every click).
+
+### 11.2 Activation machines (carried over from the first half of this pass)
+
+- `ActivationMode` + `ActivationLatch` give Freelook and Snaplook a hold/toggle
+  choice (`activation` setting) with one press = one edge.
+- `ForceKeyMachine` gives ToggleSprint/ToggleSneak the VANILLA/HELD/TOGGLED
+  lifecycle: edge-triggered toggling, publishing only on transitions, key released
+  on disable. The old per-module booleans are gone.
+- `FreelookView` owns only the camera orientation and reseeds on every activation,
+  so a stale yaw cannot survive a disable/enable cycle.
+
+### 11.3 Persistence
+
+- `ClientPreferences` (`preference.save_on_close|show_tooltips|open_section`) is
+  loaded and saved by `AetherClient` - one config file, one save path, no second
+  configuration system.
+- `ProfileStore` stores named snapshots under `profile.<name>.<key>` with
+  case-insensitive keys; applying runs `ModuleRegistry.applyConfig`, so a profile
+  cannot restore an out-of-range value.
+
+### 11.4 New features (real hooks, not switches)
+
+- **Waypoints** (`dev.aether.waypoint`, `ForgeWaypointRenderer`): model
+  (name/world/x/y/z/colour/enabled), manager persisting into the shared config
+  document, renderer hooked on `RenderWorldLastEvent` that draws only the current
+  dimension's enabled waypoints, culls beyond 512 blocks, caches label widths per
+  rounded distance and restores GL state in a `finally` block.
+- **Async screenshots** (`dev.aether.screenshot`, `ScreenshotModule`): the render
+  thread copies framebuffer pixels once (`Mc189Compat.readFramePixels`), a single
+  daemon worker encodes the PNG and writes it, and the UI only shows state
+  (`isInFlight`, `lastSavedFile`, `lastError`). GL never leaves the render thread;
+  the encode never touches it. One capture at a time; the registered
+  `performance.screenshot` module gates the pipeline.
+
+## 12. Lifecycle notes for the new code
+
+| Component | On disable / close |
+| --- | --- |
+| Control Center | `onGuiClosed` releases the focus, records an interrupted slider's final value, unloads the blur shader; a pending screenshot encode finishes on the worker regardless. |
+| Screenshot worker | daemon thread; `ScreenshotManager.shutdown()` is called on server stop so no encode is lost mid-write. |
+| Waypoints | pure data + a stateless draw pass; nothing is captured from the world and nothing needs restoring. |
+
+## 13. Remaining concerns
+
+- No Forge runtime here: `readFramePixels` (glReadPixels through reflection), the
+  waypoint label transform and the mixin targets are all soft-failing by design but
+  are unverified in game.
+- The screenshot notification is wired through the existing toast stack only in the
+  sense that the state is available; the HUD-side "screenshot saved" toast should be
+  connected in a follow-up (the state fields exist for it).
+- Waypoints have no chat command yet; creation is manager-level (tests cover it) but
+  no in-game command parses `/aether waypoint add` - deferred, not forgotten.

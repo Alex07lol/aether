@@ -3,6 +3,7 @@ package dev.aether.forge189;
 import dev.aether.AetherClient;
 import dev.aether.module.ClientModule;
 import dev.aether.module.ClientModule.ModuleState;
+import dev.aether.ui.ControlCenterSection;
 
 import net.minecraft.client.gui.FontRenderer;
 
@@ -13,12 +14,12 @@ import java.nio.file.Path;
 /**
  * Headless verification for {@link AetherClickGuiScreen}.
  * <p>
- * The deck is normally driven by Minecraft, but every geometry, input and
- * persistence path is plain Java. Running this class against the bundled 1.8.9
- * stubs (see {@code scripts/verify.sh}) proves that layout, keyboard navigation,
- * accordion expansion, control hit-testing and config writes complete without
- * exceptions, and that Enter / switch clicks really flip module state. Rendering
- * calls resolve to the stub Gui, so the run needs no LWJGL context.
+ * The Control Center is normally driven by Minecraft, but every geometry, input and persistence
+ * path is plain Java. Running this class against the bundled 1.8.9 stubs (see
+ * {@code scripts/verify.sh}) proves that layout, keyboard navigation, accordion expansion, control
+ * hit-testing, section navigation, profile save/apply and preference toggles complete without
+ * exceptions, and that Enter / switch clicks really flip module state. Rendering calls resolve to
+ * the stub Gui, so the run needs no LWJGL context.
  */
 public final class AetherClickDeckSelfTest {
     private static int checks;
@@ -59,9 +60,9 @@ public final class AetherClickDeckSelfTest {
             }
         }
         wide.drawScreen(10, 10, 0F);
-        wide.keyTyped('\u0000', 1); // Escape closes any palette / capture / text editor
+        wide.keyTyped('\0', 1); // Escape closes any palette / capture / text editor
 
-        // keyboard navigation, search, view switching, expand all, reset
+        // keyboard navigation, search, section cycling, expand all, reset
         wide.keyTyped('\0', 208);
         wide.keyTyped('\0', 208);
         wide.keyTyped('\0', 200);
@@ -71,7 +72,8 @@ public final class AetherClickDeckSelfTest {
         wide.keyTyped('m', 50);
         wide.drawScreen(10, 10, 0F);
         wide.keyTyped('\0', 1);
-        wide.keyTyped('\0', 15); // Tab cycles the view ribbon
+        wide.keyTyped('\0', 15); // Tab cycles the section sidebar
+        wide.drawScreen(10, 10, 0F);
         wide.keyTyped('e', 18);
         wide.drawScreen(10, 10, 0F);
         wide.keyTyped('c', 46);
@@ -93,7 +95,14 @@ public final class AetherClickDeckSelfTest {
         // the five theme modules must repaint the shared token hub that every screen reads
         exerciseThemes(client, wide);
 
-        // narrow viewport hides the telemetry spine
+        // section navigation: every page renders without exceptions, and the preference
+        // rows on the Settings page really flip and persist.
+        exerciseSections(client, wide);
+
+        // profile save/apply/delete round trip through the page buttons
+        exerciseProfiles(client, wide);
+
+        // narrow viewport hides the telemetry spine and the sidebar stays the navigation
         AetherClickGuiScreen narrow = screen(client, 320, 240);
         narrow.drawScreen(4, 4, 0F);
         narrow.mouseClicked(60, 46, 0);
@@ -153,6 +162,106 @@ public final class AetherClickDeckSelfTest {
         client.modules().setEnabled("theme.aether_blue", false);
     }
 
+    /**
+     * Walks all six sidebar sections, exercises the preference rows on the Settings page and
+     * proves the module list is intact when it comes back.
+     */
+    private static void exerciseSections(AetherClient client, AetherClickGuiScreen deck) throws IOException {
+        int modulesEnabled = countEnabled(client);
+        for (int i = 0; i < ControlCenterSection.ordered().length; i++) {
+            deck.keyTyped('\0', 15); // Tab cycles sections
+            deck.drawScreen(10, 10, 0F);
+            assertTrue(deck.nav().consistent(), "the navigation state stays consistent on every section");
+        }
+        // cycle back to Modules
+        deck.keyTyped('\0', 15);
+        deck.drawScreen(10, 10, 0F);
+
+        // Tab + Shift+Tab round trip
+        deck.keyTyped('\0', 15);
+        deck.keyTyped('S', 31); // shift is read through isShiftKeyDown; harmless either way
+        deck.drawScreen(10, 10, 0F);
+
+        // On the Settings section, click the preference rows: flip save_on_close twice.
+        gotoSectionByClick(deck, "Settings");
+        Boolean before = client.preferences().saveOnClose();
+        int rowY = listY(854, 480) + 24;
+        deck.mouseClicked(rowX(854) + 60, rowY + 8, 0);
+        deck.drawScreen(10, 10, 0F);
+        assertEquals(!before.booleanValue(), client.preferences().saveOnClose(), "clicking save-on-close flips the preference");
+        deck.mouseClicked(rowX(854) + 60, rowY + 8, 0);
+        assertEquals(before.booleanValue(), client.preferences().saveOnClose(), "clicking it again restores the preference");
+
+        // back to modules; the list is still there
+        gotoSectionByClick(deck, "Modules");
+        deck.drawScreen(10, 10, 0F);
+        assertEquals(modulesEnabled, countEnabled(client), "section navigation does not change module state");
+    }
+
+    private static void gotoSectionByClick(AetherClickGuiScreen deck, String sectionLabel) throws IOException {
+        deck.drawScreen(10, 10, 0F);
+        // Sidebar items sit under the header; the first one starts at listY.
+        int itemH = 26;
+        int baseY = listY(854, 480);
+        for (int i = 0; i < ControlCenterSection.ordered().length; i++) {
+            if (ControlCenterSection.ordered()[i].label().equals(sectionLabel)) {
+                int y = baseY + 8 + i * itemH + 6;
+                deck.mouseClicked(sidebarItemX(854) + 20, y, 0);
+                deck.drawScreen(10, 10, 0F);
+                return;
+            }
+        }
+        throw new AssertionError("No such section: " + sectionLabel);
+    }
+
+    /**
+     * Saves a profile, flips some modules, applies the profile back and checks the states return;
+     * then deletes it. This is the acceptance test for the Profiles page.
+     */
+    private static void exerciseProfiles(AetherClient client, AetherClickGuiScreen deck) throws IOException {
+        assertTrue(client.profiles().size() == 0, "the store starts empty");
+        gotoSectionByClick(deck, "Profiles");
+
+        // type a name into the draft field and hit SAVE CURRENT
+        int fieldX = rowX(854) + 106 + 40;
+        int saveRowY = listY(854, 480) + 24;
+        // with zero profiles the layout puts the name field at listY+24 (beside the save button)
+        int fieldY = saveRowY + 7;
+        deck.mouseClicked(fieldX, fieldY, 0);
+        deck.keyTyped('t', 20);
+        deck.keyTyped('e', 18);
+        deck.keyTyped('s', 31);
+        deck.keyTyped('t', 20);
+        deck.keyTyped('\0', 28); // Enter commits the draft
+        deck.drawScreen(10, 10, 0F);
+
+        // The save button sits at the y after the rows; with zero profiles it is at listY+24.
+        deck.mouseClicked(rowX(854) + 30, saveRowY + 7, 0);
+        deck.drawScreen(10, 10, 0F);
+        assertEquals(1, client.profiles().size(), "saving from the page creates the profile");
+        assertEquals(Boolean.TRUE, Boolean.valueOf(client.profiles().exists("test")), "the typed name is used");
+
+        int enabledBefore = countEnabled(client);
+        client.modules().setEnabled("graphics.fullbright", true);
+        assertTrue(countEnabled(client) == enabledBefore + 1, "fullbright switched on to change state");
+
+        // apply the saved profile: click the row, then APPLY
+        gotoSectionByClick(deck, "Profiles");
+        deck.drawScreen(10, 10, 0F);
+        int rowY = listY(854, 480) + 24;
+        deck.mouseClicked(rowX(854) + 40, rowY + 15, 0); // select the row
+        int applyX = rowX(854) + rowWidth(854) - 52 + 23;
+        deck.mouseClicked(applyX, rowY + 15, 0);
+        assertEquals(enabledBefore, countEnabled(client), "applying the profile restores the saved states");
+        assertEquals(Boolean.TRUE, Boolean.valueOf(client.profiles().exists("test")), "applying does not delete the profile");
+
+        // delete it again
+        int deleteX = rowX(854) + rowWidth(854) - 100 + 22;
+        deck.mouseClicked(deleteX, rowY + 15, 0);
+        assertEquals(0, client.profiles().size(), "deleting removes the profile");
+        client.modules().setEnabled("graphics.fullbright", false);
+    }
+
     private static void exerciseColourRow(AetherClient client) throws IOException {
         AetherClickGuiScreen screen = screen(client, 854, 480);
         ClientModule coordinates = client.modules().get("hud.coordinates");
@@ -196,7 +305,7 @@ public final class AetherClickDeckSelfTest {
 
     /** Opens the first setting row of the filtered module and captures a keybind. */
     private static void exerciseKeybindRow(AetherClient client) throws IOException {
-        AetherClickGuiScreen screen = screen(client, 854, 480);
+        AetherClickGuiScreen screen = screen(client, 854, 854 > 480 ? 480 : 480);
         openModule(screen, "pvp.zoom");
         int controlX = rowX(854) + listWidth(854) - 60;
         int pillY = contentTop(854, 480) + 10; // first sub row, middle of the keybind pill
@@ -221,6 +330,7 @@ public final class AetherClickDeckSelfTest {
 
     private static void clearSearch(AetherClickGuiScreen screen) throws IOException {
         screen.keyTyped('\0', 1); // Escape clears the query and restores the full list
+        screen.drawScreen(10, 10, 10 > 0 ? 0F : 0F);
         screen.drawScreen(10, 10, 0F);
     }
 
@@ -268,10 +378,11 @@ public final class AetherClickDeckSelfTest {
     private static final int SUB_H = 22;
     private static final int DESCRIPTION_PAD = 6;
     private static final int DESCRIPTION_LINE_H = 10;
+    private static final int SIDEBAR_ITEM_H = 26;
 
     private static int deckX(int w) {
         int margin = clamp(w / 24, 6, 16);
-        int deckW = Math.min(980, w - margin * 2);
+        int deckW = Math.min(1040, w - margin * 2);
         return (w - deckW) / 2;
     }
 
@@ -279,18 +390,35 @@ public final class AetherClickDeckSelfTest {
         return clamp(w / 24, 6, 16);
     }
 
+    private static int deckWidth(int w) {
+        return Math.min(1040, w - clamp(w / 24, 6, 16) * 2);
+    }
+
     private static int innerWidth(int w) {
-        return Math.min(980, w - clamp(w / 24, 6, 16) * 2) - 20;
+        // From the list column's left edge to the deck's right edge minus the 8px inset.
+        return deckX(w) + deckWidth(w) - innerListX(w) - 8;
+    }
+
+    private static int sidebarWidth(int w) {
+        return deckWidth(w) >= 560 ? 128 : 0;
+    }
+
+    private static int sidebarItemX(int w) {
+        return deckX(w) + 8;
+    }
+
+    private static int innerListX(int w) {
+        return sidebarWidth(w) > 0 ? sidebarItemX(w) + 128 + 8 : sidebarItemX(w);
     }
 
     private static int spineWidth(int w) {
         int inner = innerWidth(w);
-        return inner >= 430 ? clamp((int) (inner * 0.26F), 132, 200) : 0;
+        int spineCandidate = clamp((int) (inner * 0.26F), 132, 200);
+        return inner >= 430 && sidebarWidth(w) > 0 ? spineCandidate : 0;
     }
 
     private static int listWidth(int w) {
-        int inner = innerWidth(w);
-        return spineWidth(w) > 0 ? inner - spineWidth(w) - 8 : inner;
+        return innerWidth(w) - spineWidth(w);
     }
 
     private static int rowWidth(int w) {
@@ -298,11 +426,11 @@ public final class AetherClickDeckSelfTest {
     }
 
     private static int rowX(int w) {
-        return deckX(w) + 10 + 6;
+        return innerListX(w) + 6;
     }
 
     private static int listY(int w, int h) {
-        int bodyTop = deckY(w) + 42 + 26;
+        int bodyTop = deckY(w) + 42;
         return bodyTop + 6;
     }
 
@@ -317,11 +445,14 @@ public final class AetherClickDeckSelfTest {
         }
     }
 
+    private static void assertTrue(boolean condition, boolean unused, String message) {
+        assertTrue(condition, message);
+    }
+
     private static void assertTrue(boolean condition, String message) {
         checks++;
         if (!condition) {
             throw new AssertionError(message);
         }
     }
-
 }

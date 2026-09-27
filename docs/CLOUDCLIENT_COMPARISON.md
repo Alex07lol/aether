@@ -135,3 +135,78 @@ with a different interaction model:
 6. ~~Wire the remaining `STUB` modules.~~ Done: name tags, chat timestamps,
    notifications and nick hiding have real hooks, cosmetics draw in world, and
    the six modules with no possible hook were deleted.
+
+---
+
+# Addendum: Aether 2.0 pass (same day)
+
+## Click GUI: deck -> Control Center
+
+The Click Deck described above kept its body (rows, accordions, keyboard model, one
+layout pass, culling) and gained the navigation layer CloudClient's `ModMenu` has and
+the deck lacked: a persistent page sidebar. The differences from CloudClient's menu
+are deliberate and recorded in `docs/CONTROL_CENTER.md`:
+
+- CloudClient's card grid became a page-per-purpose model; Aether keeps rows and
+  accordions because they beat a properties panel for keyboard use.
+- CloudClient has no profiles, screenshots, waypoint or client-preference surfaces;
+  Aether's Profiles/Screenshots/Settings pages are backed by real stores
+  (`ProfileStore`, `ScreenshotStore`, `ClientPreferences`), not by menu state.
+- CloudClient's `Type` filter (All/Hud/Mechanic/Visual/Tweaks) is replaced by the
+  real category system plus composable Live/Favorites/query filters.
+
+## What this pass adopted from the reference clients (ideas, not code)
+
+| Source | Idea adopted | Where it landed |
+| --- | --- | --- |
+| Glide | Freelook hold/toggle activation, invert yaw/pitch | `ActivationMode`/`ActivationLatch`, `pvp.freelook` settings |
+| Glide | ToggleSprint's VANILLA/HELD/TOGGLED lifecycle, tap-vs-hold distinction | `ForceKeyMachine` (unit-tested), ToggleSprint/ToggleSneak `behaviour` setting |
+| Glide | Render-time FOV override (zoom never touches the saved FOV) | `EntityRendererMixin.getFOVModifier` return override (first half of this pass) |
+| Glide | Visual-only time/weather override | `WorldMixin` celestial-angle + rain/thrength returns (first half) |
+| Glide | FPS limiter with a separate unfocused cap | `performance.fps_limiter` + `FpsLimiter` |
+| Glide | Async screenshot pipeline (GL on render thread, encode off-thread) | `dev.aether.screenshot` + the Screenshots page |
+| Glide | Waypoints | `dev.aether.waypoint` + `ForgeWaypointRenderer` |
+| Glide | Control-center navigation (sidebar of pages, separate global settings) | `ControlCenterSection`/`ControlCenterState` + the Settings page |
+| Cloud | Behaviour parity checks for every camera/key module | recorded per module in `docs/MODULE_LOGIC_AUDIT.md` |
+
+## Comparison table (final)
+
+Legend: KEEP = Aether already had it and it stays; IMPROVE = rebuilt on Aether's
+architecture this pass; ADD = new this pass; DEFER = deliberately postponed;
+REJECT = deliberately not ported.
+
+| Feature | Aether before | Cloud reference | Glide reference | Decision | Reason |
+| --- | --- | --- | --- | --- | --- |
+| Freelook | camera/player rotation split, hold only | Freelook mod | hold+toggle, invert axes, perspective restore | IMPROVE | hold/toggle + invert axes added on Aether's latch/view model; perspective capture/restore already `ValueHold`-based |
+| Snaplook | perspective hold | Snaplook mod | same | KEEP | restoration was already exact (`ValueHold`) |
+| Zoom | mutated `gameSettings.fovSetting` | FOV slider | render-time FOV event | IMPROVE | render-time override via mixin; the saved FOV is never written |
+| ToggleSprint | boolean soup, forced key every tick | ToggleSprint | 4-state machine | IMPROVE | `ForceKeyMachine`: edge-triggered, publishes only on change, releases on disable |
+| ToggleSneak | same | ToggleSneak | toggle reset on disable | IMPROVE | same machine; GUI guard kept |
+| Fullbright | gamma write per tick | gamma slider | EventGamma | KEEP | compare-once-per-tick write + capture-once restore already satisfies the render-time goal |
+| NoHurtCam | binary + scaled dial | NoHurtCam | binary | KEEP | Aether's 0-100 scaling is strictly richer than both references |
+| HitColor | static flags | HitColor | similar | KEEP | render-time hook, no stale flags |
+| BlockOverlay | fill/outline/alpha/width + defensive restore | BlockOverlay | + animation/depth/alpha extras | KEEP / DEFER | Aether's cleanup is safer; the animated-box extra is cosmetic and deferred |
+| Animations (1.7) | targeted `ItemRendererMixin` | giant renderer overwrite | overwrite + patches | KEEP | targeted mixins over overwrites; behaviour parity tested in `FirstPersonAnimsTest` |
+| NameTags | replacement renderer with vanilla passthrough | NameTag | NameTag | KEEP | isolated replacement beats a global overwrite |
+| Scoreboard | real replacement renderer | - | Scoreboard+ | KEEP | entry limits/filtering/shadow already configurable |
+| TimeChanger | visual offset via celestial-angle mixin | sets world time | render hook | IMPROVE | moved off `setWorldTime` to a visual-only return override (first half of this pass) |
+| Weather | world rain writes | - | CLEAR/RAIN/STORM/SNOW + strengths | IMPROVE | render-time rain/thunder strength overrides; SNOW rejected (biome property, not a strength) |
+| Particles | explicit modes | ParticleMultiplier | multiplier | KEEP | no duplication created |
+| Crosshair | vanilla-hide + custom render hook | shape+layout manager | styles/scale/colour | KEEP / DEFER | the hook and settings exist; per-element layout editor deferred (needs a real design pass, not a port) |
+| FPS limiter | - | - | gameplay/background caps | ADD | drives vanilla's own cap; separate unfocused cap |
+| FPS optimizer | settings-based | - | risky entity-list tricks | KEEP | Aether's version changes only video settings; the unsafe tricks are REJECT |
+| Screenshots | - | - | async screenshot | ADD | async pipeline + Screenshots page; clipboard support REJECTED (desktop-dependent, low value) |
+| Waypoints | - | - | full waypoint system | ADD | minimal model/manager/renderer; beam rendering and minimap integration DEFERRED |
+| Profiles | - | - | profiles | ADD | config-document snapshots through the registry's own normalisation |
+| Cosmetics page | separate cosmetics screen | - | cosmetics control page | KEEP | the spine button still opens `AetherCosmeticsScreen`; the Cosmetics section lists the cosmetic modules - no duplicated config |
+| Global settings page | - | style switch | global settings | ADD | `ClientPreferences` under `preference.*`, not a second config system |
+| Control Center | Click Deck (ribbon) | ModMenu sidebar | GuiModMenu | IMPROVE | sidebar + state machine on the deck's proven body |
+| Minimap | - | - | minimap | REJECT | large render surface, heavy config, overlaps HUD modules; needs its own justification |
+| Spotify/chat translation/Godbridge/FPS spoofer | - | - | present | REJECT | out of scope by the feature policy (§56) |
+
+## Follow-ups this pass leaves open
+
+1. Connect the screenshot completion state to the toast stack (fields exist).
+2. Crosshair per-element layout editor (Cloud idea) - design first.
+3. Block-overlay animated box (Glide extra) - cosmetic, needs a timing source.
+4. Waypoint chat command + beam rendering.
