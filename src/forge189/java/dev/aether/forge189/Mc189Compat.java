@@ -1106,19 +1106,19 @@ public final class Mc189Compat {
         }
     }
 
-    static void enableBlend() {
+    public static void enableBlend() {
         if (invokeStatic(glStateManagerClass(), new String[] {"enableBlend", "func_179147_l"}) == null) {
             invokeStatic(gl11Class(), new String[] {"glEnable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(3042));
         }
     }
 
-    static void disableBlend() {
+    public static void disableBlend() {
         if (invokeStatic(glStateManagerClass(), new String[] {"disableBlend", "func_179084_k"}) == null) {
             invokeStatic(gl11Class(), new String[] {"glDisable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(3042));
         }
     }
 
-    static void tryBlendFuncSeparate(int srcFactor, int dstFactor, int srcFactorAlpha, int dstFactorAlpha) {
+    public static void tryBlendFuncSeparate(int srcFactor, int dstFactor, int srcFactorAlpha, int dstFactorAlpha) {
         if (invokeStatic(glStateManagerClass(), new String[] {"tryBlendFuncSeparate", "func_179120_a"},
             new Class<?>[] {Integer.TYPE, Integer.TYPE, Integer.TYPE, Integer.TYPE},
             Integer.valueOf(srcFactor), Integer.valueOf(dstFactor), Integer.valueOf(srcFactorAlpha), Integer.valueOf(dstFactorAlpha)) == null) {
@@ -1132,13 +1132,13 @@ public final class Mc189Compat {
         }
     }
 
-    static void disableTexture2D() {
+    public static void disableTexture2D() {
         if (invokeStatic(glStateManagerClass(), new String[] {"disableTexture2D", "func_179090_x"}) == null) {
             invokeStatic(gl11Class(), new String[] {"glDisable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(3553));
         }
     }
 
-    static void enableTexture2D() {
+    public static void enableTexture2D() {
         if (invokeStatic(glStateManagerClass(), new String[] {"enableTexture2D", "func_179098_w"}) == null) {
             invokeStatic(gl11Class(), new String[] {"glEnable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(3553));
         }
@@ -1151,7 +1151,7 @@ public final class Mc189Compat {
         }
     }
 
-    static void color(float red, float green, float blue, float alpha) {
+    public static void color(float red, float green, float blue, float alpha) {
         if (invokeStatic(glStateManagerClass(), new String[] {"color", "func_179131_c", "func_179124_c"},
             new Class<?>[] {Float.TYPE, Float.TYPE, Float.TYPE, Float.TYPE},
             Float.valueOf(red), Float.valueOf(green), Float.valueOf(blue), Float.valueOf(alpha)) == null) {
@@ -1743,17 +1743,7 @@ public final class Mc189Compat {
     }
 
     private static int measureLabel(Object fontRenderer, String text, int cacheKey, Object widthCache) {
-        if (widthCache instanceof ForgeWaypointRenderer.TextWidthCache) {
-            ForgeWaypointRenderer.TextWidthCache cache = (ForgeWaypointRenderer.TextWidthCache) widthCache;
-            String key = cacheKey + ":" + text;
-            int cached = cache.get(key);
-            if (cached >= 0) {
-                return cached;
-            }
-            int width = stringWidth(fontRenderer, text);
-            cache.put(key, width);
-            return width;
-        }
+        // Simplified version - no custom cache support in stub environment
         return stringWidth(fontRenderer, text);
     }
 

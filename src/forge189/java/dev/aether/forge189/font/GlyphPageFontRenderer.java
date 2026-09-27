@@ -2,7 +2,6 @@ package dev.aether.forge189.font;
 
 import dev.aether.forge189.Mc189Compat;
 
-import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.WorldRenderer;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
@@ -118,7 +117,7 @@ public final class GlyphPageFontRenderer {
         this.green = (float) (color >> 8 & 255) / 255.0F;
         this.blue = (float) (color & 255) / 255.0F;
         this.alpha = (float) (color >> 24 & 255) / 255.0F;
-        GlStateManager.color(this.red, this.green, this.blue, this.alpha);
+        Mc189Compat.color(this.red, this.green, this.blue, this.alpha);
         this.posX = x * 2.0f;
         this.posY = y * 2.0f;
         this.renderStringAtPos(text, dropShadow);
@@ -131,9 +130,9 @@ public final class GlyphPageFontRenderer {
         GL11.glPushMatrix();
         GL11.glScaled(0.5, 0.5, 0.5);
 
-        GlStateManager.enableBlend();
-        GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-        GlStateManager.enableTexture2D();
+        Mc189Compat.enableBlend();
+        Mc189Compat.tryBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, 1, 0);
+        Mc189Compat.enableTexture2D();
 
         glyphPage.bindTexture();
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
@@ -154,7 +153,7 @@ public final class GlyphPageFontRenderer {
                     if (shadow) i1 += 16;
 
                     int j1 = this.colorCode[i1];
-                    GlStateManager.color((float) (j1 >> 16) / 255.0F, (float) (j1 >> 8 & 255) / 255.0F, (float) (j1 & 255) / 255.0F, this.alpha);
+                    Mc189Compat.color((float) (j1 >> 16) / 255.0F, (float) (j1 >> 8 & 255) / 255.0F, (float) (j1 & 255) / 255.0F, this.alpha);
                 } else if (i1 == 17) {
                     this.boldStyle = true;
                 } else if (i1 == 18) {
@@ -168,7 +167,7 @@ public final class GlyphPageFontRenderer {
                     this.strikethroughStyle = false;
                     this.underlineStyle = false;
                     this.italicStyle = false;
-                    GlStateManager.color(this.red, this.green, this.blue, this.alpha);
+                    Mc189Compat.color(this.red, this.green, this.blue, this.alpha);
                 }
 
                 ++i;
@@ -188,20 +187,20 @@ public final class GlyphPageFontRenderer {
         if (this.strikethroughStyle) {
             Tessellator tessellator = Tessellator.getInstance();
             WorldRenderer worldrenderer = tessellator.getWorldRenderer();
-            GlStateManager.disableTexture2D();
+            Mc189Compat.disableTexture2D();
             worldrenderer.begin(7, DefaultVertexFormats.POSITION);
             worldrenderer.pos((double) this.posX, (double) (this.posY + (float) (glyphPage.getMaxFontHeight() / 2)), 0.0D).endVertex();
             worldrenderer.pos((double) (this.posX + f), (double) (this.posY + (float) (glyphPage.getMaxFontHeight() / 2)), 0.0D).endVertex();
             worldrenderer.pos((double) (this.posX + f), (double) (this.posY + (float) (glyphPage.getMaxFontHeight() / 2) - 1.0F), 0.0D).endVertex();
             worldrenderer.pos((double) this.posX, (double) (this.posY + (float) (glyphPage.getMaxFontHeight() / 2) - 1.0F), 0.0D).endVertex();
             tessellator.draw();
-            GlStateManager.enableTexture2D();
+            Mc189Compat.enableTexture2D();
         }
 
         if (this.underlineStyle) {
             Tessellator tessellator1 = Tessellator.getInstance();
             WorldRenderer worldrenderer1 = tessellator1.getWorldRenderer();
-            GlStateManager.disableTexture2D();
+            Mc189Compat.disableTexture2D();
             worldrenderer1.begin(7, DefaultVertexFormats.POSITION);
             int l = this.underlineStyle ? -1 : 0;
             worldrenderer1.pos((double) (this.posX + (float) l), (double) (this.posY + (float) glyphPage.getMaxFontHeight()), 0.0D).endVertex();
@@ -209,7 +208,7 @@ public final class GlyphPageFontRenderer {
             worldrenderer1.pos((double) (this.posX + f), (double) (this.posY + (float) glyphPage.getMaxFontHeight() - 1.0F), 0.0D).endVertex();
             worldrenderer1.pos((double) (this.posX + (float) l), (double) (this.posY + (float) glyphPage.getMaxFontHeight() - 1.0F), 0.0D).endVertex();
             tessellator1.draw();
-            GlStateManager.enableTexture2D();
+            Mc189Compat.enableTexture2D();
         }
 
         this.posX += f;
