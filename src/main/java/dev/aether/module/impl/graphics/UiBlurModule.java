@@ -11,6 +11,6 @@ public class UiBlurModule extends AbstractModule {
             .description("Controls the Click GUI overlay dim and blur effect.")
             .build());
 
-        addNumber("amount", "Amount", 52);
+        addNumber("amount", "Amount", 52, 0, 100, 4);
     }
 }

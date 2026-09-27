@@ -5,14 +5,16 @@ import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleMetadata;
 
 public class NotificationsModule extends AbstractModule {
+    public static final String ID = "interface.notifications";
+
     public NotificationsModule() {
-        super(ModuleMetadata.builder("interface.notifications", "Notifications")
+        super(ModuleMetadata.builder(ID, "Notifications")
             .category(ModuleCategory.INTERFACE)
             .description("Displays in-game toast notifications for events, messages, and module state changes.")
             .build());
 
         addBool("show_toasts", "Show Toasts", true);
-        addNumber("display_time", "Display Time", 3);
-        addNumber("max_notifications", "Max Notifications", 5);
+        addNumber("display_time", "Display Time", 3, 1, 10, 1);
+        addNumber("max_notifications", "Max Notifications", 5, 1, 10, 1);
     }
 }

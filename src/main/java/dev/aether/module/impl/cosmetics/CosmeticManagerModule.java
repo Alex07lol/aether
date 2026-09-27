@@ -5,10 +5,12 @@ import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleMetadata;
 
 public class CosmeticManagerModule extends AbstractModule {
+    public static final String ID = "cosmetics.manager";
+
     public CosmeticManagerModule() {
-        super(ModuleMetadata.builder("cosmetics.manager", "Cosmetic Manager")
+        super(ModuleMetadata.builder(ID, "Cosmetic Manager")
             .category(ModuleCategory.COSMETICS)
-            .description("Opens cape and cosmetic import tools.")
+            .description("Opens the cosmetics screen when switched on.")
             .build());
     }
 }

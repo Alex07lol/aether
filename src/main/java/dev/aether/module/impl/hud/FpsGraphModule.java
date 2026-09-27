@@ -13,9 +13,9 @@ public class FpsGraphModule extends AbstractModule {
             .build());
 
         addBool("show_background", "Show Background", true);
-        addChoice("graph_mode", "Graph Mode", "Sparkline");
-        addNumber("graph_width", "Graph Width", 80);
-        addNumber("graph_height", "Graph Height", 24);
+        addChoice("graph_mode", "Graph Mode", "Sparkline").choices("Sparkline", "Bar Chart");
+        addNumber("graph_width", "Graph Width", 80, 40, 240, 5);
+        addNumber("graph_height", "Graph Height", 24, 12, 64, 2);
         addColor("line_color", "Line Color", 0xFF52BEEB);
         addColor("background_color", "Background Color", 0x6F000000);
     }

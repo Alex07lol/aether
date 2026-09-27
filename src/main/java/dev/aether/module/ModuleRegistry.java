@@ -52,11 +52,47 @@ public final class ModuleRegistry {
     }
 
     public void setEnabled(String id, boolean enabled) {
+        ClientModule module = get(id);
         if (enabled) {
-            get(id).enable();
+            disableOtherMembersOfGroup(module);
+            module.enable();
         } else {
-            get(id).disable();
+            module.disable();
         }
+    }
+
+    /**
+     * Enforces mutual exclusion for modules that declare the same group. Used by the
+     * theme modules so exactly one palette can be active at a time; screens and the
+     * click GUI never need to know the rule exists.
+     */
+    private void disableOtherMembersOfGroup(ClientModule module) {
+        String group = module.metadata().group();
+        if (group == null) {
+            return;
+        }
+        for (ClientModule candidate : modules.values()) {
+            if (candidate == module) {
+                continue;
+            }
+            if (group.equals(candidate.metadata().group()) && candidate.state() == ModuleState.ENABLED) {
+                candidate.disable();
+            }
+        }
+    }
+
+    /** @return every registered module that shares the given group, in registration order. */
+    public List<ClientModule> byGroup(String group) {
+        List<ClientModule> result = new ArrayList<ClientModule>();
+        if (group == null) {
+            return Collections.unmodifiableList(result);
+        }
+        for (ClientModule module : modules.values()) {
+            if (group.equals(module.metadata().group())) {
+                result.add(module);
+            }
+        }
+        return Collections.unmodifiableList(result);
     }
 
     public ConfigDocument toConfig() {

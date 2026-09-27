@@ -59,12 +59,13 @@ public final class AetherAccountManagerScreen extends GuiScreen {
     }
 
     private void render(int mouseX, int mouseY) {
+        AetherUi.syncTheme();
         int width = Mc189Compat.screenWidth(this);
         int height = Mc189Compat.screenHeight(this);
         Object font = Mc189Compat.screenFontRenderer(this);
         buttons.clear();
 
-        Mc189Compat.drawRect(0, 0, width, height, 0x660B0E14);
+        Mc189Compat.drawRect(0, 0, width, height, AetherUi.withAlpha(AetherUi.SURFACE, 0x66));
         int panelWidth = clamp(width - 28, 300, 430);
         int panelHeight = 184;
         int left = width / 2 - panelWidth / 2;
@@ -72,11 +73,11 @@ public final class AetherAccountManagerScreen extends GuiScreen {
         int right = left + panelWidth;
         int bottom = top + panelHeight;
 
-        Mc189Compat.drawRect(left, top, right, bottom, AetherUi.COLOR_PANEL);
-        AetherUi.centered(font, "Account Manager", left, top + 14, panelWidth, AetherUi.COLOR_TEXT_PRIMARY);
+        Mc189Compat.drawRect(left, top, right, bottom, AetherUi.PANEL);
+        AetherUi.centered(font, "Account Manager", left, top + 14, panelWidth, AetherUi.TEXT_PRIMARY);
         AetherUi.avatar(font, left + 20, top + 42, Mc189Compat.username());
-        AetherUi.text(font, "Current account", left + 56, top + 43, AetherUi.COLOR_TEXT_SECONDARY);
-        AetherUi.text(font, AetherUi.trim(font, Mc189Compat.username(), panelWidth - 90), left + 56, top + 57, AetherUi.COLOR_TEXT_PRIMARY);
+        AetherUi.text(font, "Current account", left + 56, top + 43, AetherUi.TEXT_SECONDARY);
+        AetherUi.text(font, AetherUi.trim(font, Mc189Compat.username(), panelWidth - 90), left + 56, top + 57, AetherUi.TEXT_PRIMARY);
 
         int y = top + 84;
         drawLine(font, left + 20, y, "Session source", "Minecraft launcher / active profile", panelWidth);
@@ -112,15 +113,15 @@ public final class AetherAccountManagerScreen extends GuiScreen {
 
     private void drawModernButton(Object font, AetherButton button, int mouseX, int mouseY) {
         boolean hover = button.contains(mouseX, mouseY);
-        int fill = hover ? AetherUi.COLOR_CARD_HOVER : AetherUi.COLOR_CARD;
-        int text = hover ? AetherUi.COLOR_TEXT_PRIMARY : AetherUi.COLOR_TEXT_SECONDARY;
+        int fill = hover ? AetherUi.CARD_HOVER : AetherUi.CARD;
+        int text = hover ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_SECONDARY;
         Mc189Compat.drawRect(button.x(), button.y(), button.x() + button.width(), button.y() + button.height(), fill);
         AetherUi.centered(font, button.label(), button.x(), button.y() + (button.height() - 8) / 2, button.width(), text);
     }
 
     private void drawLine(Object font, int x, int y, String label, String value, int panelWidth) {
-        AetherUi.text(font, label, x, y, AetherUi.COLOR_TEXT_SECONDARY);
-        AetherUi.text(font, AetherUi.trim(font, value, panelWidth - 150), x + 108, y, AetherUi.COLOR_TEXT_PRIMARY);
+        AetherUi.text(font, label, x, y, AetherUi.TEXT_SECONDARY);
+        AetherUi.text(font, AetherUi.trim(font, value, panelWidth - 150), x + 108, y, AetherUi.TEXT_PRIMARY);
     }
 
     private void addButton(String label, int x, int y, int width, int height, ScreenAction action) {
@@ -160,9 +161,9 @@ public final class AetherAccountManagerScreen extends GuiScreen {
         int width = Math.min(210, Math.max(116, Mc189Compat.stringWidth(font, notice) + 18));
         int left = panelRight - width - 14;
         int top = panelTop + 42;
-        Mc189Compat.drawRect(left, top, left + width, top + 20, AetherUi.COLOR_PANEL);
-        Mc189Compat.drawRect(left, top, left + 2, top + 20, AetherUi.MODERN_UI_ACCENT);
-        AetherUi.text(font, AetherUi.trim(font, notice, width - 12), left + 7, top + 7, AetherUi.COLOR_TEXT_PRIMARY);
+        Mc189Compat.drawRect(left, top, left + width, top + 20, AetherUi.PANEL);
+        Mc189Compat.drawRect(left, top, left + 2, top + 20, AetherUi.ACCENT);
+        AetherUi.text(font, AetherUi.trim(font, notice, width - 12), left + 7, top + 7, AetherUi.TEXT_PRIMARY);
     }
 
     private static int clamp(int value, int min, int max) {

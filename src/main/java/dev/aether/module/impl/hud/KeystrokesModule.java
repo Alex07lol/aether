@@ -17,11 +17,11 @@ public class KeystrokesModule extends AbstractModule {
         addBool("show_movement_keys", "Show Movement Keys", true);
         addBool("show_spacebar", "Show Spacebar", false);
         addBool("arrows", "Replace Names With Arrows", false);
-        addNumber("box_size", "Movement Key Size", 18);
-        addNumber("click_size", "Click Key Size", 18);
-        addNumber("spacebar_height", "Spacebar Height", 15);
-        addNumber("gap", "Gap", 1);
-        addNumber("fade_time", "Fade Time", 75);
+        addNumber("box_size", "Movement Key Size", 18, 14, 34, 1);
+        addNumber("click_size", "Click Key Size", 18, 14, 34, 1);
+        addNumber("spacebar_height", "Spacebar Height", 15, 8, 24, 1);
+        addNumber("gap", "Gap", 1, 0, 12, 1);
+        addNumber("fade_time", "Fade Time", 75, 0, 500, 5);
         addColor("text_color", "Text Color", 0xFFFFFFFF);
         addColor("background_color", "Background Color", 0x6F000000);
         addColor("pressed_color", "Pressed Color", 0xCC52BEEB);

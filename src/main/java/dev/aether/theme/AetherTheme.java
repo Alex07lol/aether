@@ -9,6 +9,10 @@ public final class AetherTheme {
         this.palette = palette;
     }
 
+    public static AetherTheme of(String name, ThemePalette palette) {
+        return new AetherTheme(name == null ? "Custom" : name, palette);
+    }
+
     public static AetherTheme defaultTheme() {
         return new AetherTheme("Aether Frost", new ThemePalette(
             ColorRgb.of(245, 251, 255),

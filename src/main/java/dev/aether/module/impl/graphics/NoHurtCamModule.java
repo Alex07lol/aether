@@ -11,6 +11,6 @@ public class NoHurtCamModule extends AbstractModule {
             .description("Controls how much damage shakes the camera.")
             .build());
 
-        addNumber("shake_amount", "Shake Amount", 0);
+        addNumber("shake_amount", "Shake Amount", 0, 0, 100, 5);
     }
 }

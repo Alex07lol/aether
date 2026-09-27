@@ -9,10 +9,16 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 final class ForgeHudEventBridge {
     private final AetherClient client;
     private final ForgeHudRenderer renderer;
+    private ForgeClientEventBridge eventBridge;
 
     ForgeHudEventBridge(AetherClient client, ForgeHudRenderer renderer) {
         this.client = client;
         this.renderer = renderer;
+    }
+
+    /** Notifications live on the client bridge, which is registered after this bridge. */
+    void bind(ForgeClientEventBridge eventBridge) {
+        this.eventBridge = eventBridge;
     }
 
     @SubscribeEvent
@@ -26,6 +32,12 @@ final class ForgeHudEventBridge {
             boolean scoreboardCustom = client.modules().get("interface.scoreboard_customization").state() == ClientModule.ModuleState.ENABLED;
             Mc189Compat.setScoreboardDisabled(scoreboardCustom);
             renderer.render();
+            if (this.eventBridge != null) {
+                this.eventBridge.notifications().render(
+                    Mc189Compat.fontRenderer(Mc189Compat.minecraft()),
+                    Mc189Compat.scaledWidth(event.resolution)
+                );
+            }
             if (scoreboardCustom) {
                 renderer.renderScoreboard();
             }

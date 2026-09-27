@@ -12,7 +12,7 @@ public class FreelookModule extends AbstractModule {
             .build());
 
         addKeybind("keybind", "Keybind", 56);
-        addNumber("sensitivity", "Sensitivity", 100);
+        addNumber("sensitivity", "Sensitivity", 100, 10, 300, 10);
         addBool("invert_y", "Invert Y", false);
     }
 }

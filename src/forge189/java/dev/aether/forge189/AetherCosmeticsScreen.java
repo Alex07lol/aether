@@ -2,6 +2,7 @@ package dev.aether.forge189;
 
 import dev.aether.AetherClient;
 import dev.aether.cosmetic.CosmeticAsset;
+import dev.aether.cosmetic.CosmeticType;
 import dev.aether.cosmetic.CosmeticValidationResult;
 import net.minecraft.client.gui.GuiScreen;
 
@@ -67,6 +68,7 @@ public final class AetherCosmeticsScreen extends GuiScreen {
     }
 
     private void render(int mouseX, int mouseY) {
+        AetherUi.syncTheme();
         int width = Mc189Compat.screenWidth(this);
         int height = Mc189Compat.screenHeight(this);
         Object font = Mc189Compat.screenFontRenderer(this);
@@ -79,8 +81,8 @@ public final class AetherCosmeticsScreen extends GuiScreen {
         AetherUi.panel(left, top, right, bottom);
 
         AetherUi.text(font, "Cosmetics", left + 14, top + 12, AetherUi.ACCENT_DARK);
-        AetherUi.text(font, "Storage: " + client.cosmetics().storageDirectory().toString(), left + 14, top + 30, AetherUi.TEXT_MUTED);
-        AetherUi.text(font, "Drop imports: " + client.cosmetics().importDirectory().toString(), left + 14, top + 42, AetherUi.TEXT_MUTED);
+        AetherUi.text(font, "Storage: " + client.cosmetics().storageDirectory().toString(), left + 14, top + 30, AetherUi.TEXT_SECONDARY);
+        AetherUi.text(font, "Drop imports: " + client.cosmetics().importDirectory().toString(), left + 14, top + 42, AetherUi.TEXT_SECONDARY);
 
         layoutButtons(left + 14, bottom - 32);
         for (AetherButton button : buttons) {
@@ -103,20 +105,26 @@ public final class AetherCosmeticsScreen extends GuiScreen {
         int previewLeft = left + 256;
         AetherUi.panel(previewLeft, listTop, right - 14, bottom - 44);
         AetherUi.centered(font, "Preview", previewLeft, listTop + 12, right - 14 - previewLeft, AetherUi.ACCENT_DARK);
-        CosmeticAsset selected = client.cosmetics().selected();
+        // The preview panel always shows the cape slot, which is the one with an importable image.
+        CosmeticAsset selected = client.cosmetics().selectedFor(CosmeticType.STATIC_CAPE);
         String selectedName = selected == null ? "No cosmetic selected" : selected.name();
-        AetherUi.centered(font, selectedName, previewLeft, listTop + 34, right - 14 - previewLeft, AetherUi.TEXT_DARK);
+        AetherUi.centered(font, selectedName, previewLeft, listTop + 34, right - 14 - previewLeft, AetherUi.TEXT_PRIMARY);
         drawPreview(font, selected, previewLeft, listTop + 56, right - 14, bottom - 74);
-        AetherUi.centered(font, status, previewLeft, bottom - 64, right - 14 - previewLeft, AetherUi.TEXT_MUTED);
+        AetherUi.centered(font, status, previewLeft, bottom - 64, right - 14 - previewLeft, AetherUi.TEXT_SECONDARY);
     }
 
     private void drawCosmeticRow(Object font, CosmeticRow row, int mouseX, int mouseY) {
-        CosmeticAsset selected = client.cosmetics().selected();
+        // Each row belongs to a slot, so a cape and a halo can both read as selected.
+        CosmeticAsset selected = client.cosmetics().selectedFor(row.asset().type());
         boolean active = selected != null && selected.id().equals(row.asset().id());
         boolean hover = row.contains(mouseX, mouseY);
-        Mc189Compat.drawRect(row.x(), row.y(), row.x() + row.width(), row.y() + row.height(), active ? 0xCC52BEEB : hover ? 0xAAFFFFFF : 0x66FFFFFF);
-        AetherUi.text(font, row.asset().name(), row.x() + 8, row.y() + 6, active ? 0xFFFFFFFF : AetherUi.TEXT_DARK);
-        AetherUi.text(font, row.asset().type().name(), row.x() + row.width() - 82, row.y() + 6, active ? 0xFFFFFFFF : AetherUi.TEXT_MUTED);
+        Mc189Compat.drawRect(row.x(), row.y(), row.x() + row.width(), row.y() + row.height(),
+            active ? AetherUi.withAlpha(AetherUi.ACCENT, 0xCC)
+                : hover ? AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0xAA) : AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x66));
+        AetherUi.text(font, row.asset().name(), row.x() + 8, row.y() + 6,
+            active ? AetherUi.readableOn(AetherUi.ACCENT) : AetherUi.TEXT_PRIMARY);
+        AetherUi.text(font, row.asset().type().name(), row.x() + row.width() - 82, row.y() + 6,
+            active ? AetherUi.readableOn(AetherUi.ACCENT) : AetherUi.TEXT_SECONDARY);
     }
 
     private void layoutButtons(final int x, final int y) {
@@ -229,7 +237,7 @@ public final class AetherCosmeticsScreen extends GuiScreen {
     private void drawPreview(Object font, CosmeticAsset selected, int left, int top, int right, int bottom) {
         int width = right - left;
         if (selected == null) {
-            AetherUi.centered(font, "Select a cosmetic to preview.", left, top + 24, width, AetherUi.TEXT_MUTED);
+            AetherUi.centered(font, "Select a cosmetic to preview.", left, top + 24, width, AetherUi.TEXT_SECONDARY);
             return;
         }
         if (selected.localFile() != null) {
@@ -238,7 +246,7 @@ public final class AetherCosmeticsScreen extends GuiScreen {
                 drawImageGrid(previewImage, left + 16, top + 6, right - 16, bottom - 6);
                 return;
             }
-            AetherUi.centered(font, previewError == null ? "Preview unavailable." : previewError, left, top + 24, width, AetherUi.TEXT_MUTED);
+            AetherUi.centered(font, previewError == null ? "Preview unavailable." : previewError, left, top + 24, width, AetherUi.TEXT_SECONDARY);
             return;
         }
         drawBuiltInPreview(selected, left, top, right, bottom);
@@ -269,14 +277,16 @@ public final class AetherCosmeticsScreen extends GuiScreen {
         int drawHeight = rows * cell;
         int startX = left + (right - left - drawWidth) / 2;
         int startY = top + (bottom - top - drawHeight) / 2;
-        Mc189Compat.drawRect(startX - 2, startY - 2, startX + drawWidth + 2, startY + drawHeight + 2, 0x88FFFFFF);
+        Mc189Compat.drawRect(startX - 2, startY - 2, startX + drawWidth + 2, startY + drawHeight + 2, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x88));
         for (int y = 0; y < rows; y++) {
             for (int x = 0; x < columns; x++) {
                 int sourceX = Math.min(image.getWidth() - 1, x * image.getWidth() / columns);
                 int sourceY = Math.min(image.getHeight() - 1, y * image.getHeight() / rows);
                 int argb = image.getRGB(sourceX, sourceY);
                 int alpha = (argb >>> 24) & 0xFF;
-                int fill = alpha < 16 ? ((x + y) % 2 == 0 ? 0x66FFFFFF : 0x44D5EFFF) : (0xFF000000 | (argb & 0x00FFFFFF));
+                int fill = alpha < 16
+                    ? ((x + y) % 2 == 0 ? AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x66) : AetherUi.withAlpha(AetherUi.SURFACE, 0x44))
+                    : (0xFF000000 | (argb & 0x00FFFFFF));
                 Mc189Compat.drawRect(startX + x * cell, startY + y * cell, startX + (x + 1) * cell, startY + (y + 1) * cell, fill);
             }
         }
@@ -285,23 +295,27 @@ public final class AetherCosmeticsScreen extends GuiScreen {
     private void drawBuiltInPreview(CosmeticAsset selected, int left, int top, int right, int bottom) {
         int centerX = (left + right) / 2;
         int centerY = (top + bottom) / 2;
+        // The placeholder art follows the theme too, so a preview never clashes with the UI.
+        int accent = AetherUi.withAlpha(AetherUi.ACCENT, 0xCC);
+        int cloth = AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0xCC);
+        int clothSoft = AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0xAA);
         if (selected.type().name().equals("HALO")) {
-            Mc189Compat.drawRect(centerX - 28, centerY - 18, centerX + 28, centerY - 12, 0xCC52BEEB);
-            Mc189Compat.drawRect(centerX - 18, centerY - 28, centerX + 18, centerY - 22, 0xCCFFFFFF);
-            Mc189Compat.drawRect(centerX - 20, centerY - 2, centerX + 20, centerY + 42, 0xAAFFFFFF);
+            Mc189Compat.drawRect(centerX - 28, centerY - 18, centerX + 28, centerY - 12, accent);
+            Mc189Compat.drawRect(centerX - 18, centerY - 28, centerX + 18, centerY - 22, cloth);
+            Mc189Compat.drawRect(centerX - 20, centerY - 2, centerX + 20, centerY + 42, clothSoft);
             return;
         }
         if (selected.type().name().equals("TRAIL")) {
             for (int i = 0; i < 6; i++) {
                 int size = 5 + i;
-                Mc189Compat.drawRect(centerX - 42 + i * 14, centerY + i * 4, centerX - 42 + i * 14 + size, centerY + i * 4 + size, 0xAA52BEEB);
+                Mc189Compat.drawRect(centerX - 42 + i * 14, centerY + i * 4, centerX - 42 + i * 14 + size, centerY + i * 4 + size, AetherUi.withAlpha(AetherUi.ACCENT, 0xAA));
             }
-            Mc189Compat.drawRect(centerX + 18, centerY - 24, centerX + 42, centerY + 36, 0xCCFFFFFF);
+            Mc189Compat.drawRect(centerX + 18, centerY - 24, centerX + 42, centerY + 36, cloth);
             return;
         }
-        Mc189Compat.drawRect(centerX - 24, centerY - 34, centerX + 24, centerY + 42, 0xCC52BEEB);
-        Mc189Compat.drawRect(centerX - 18, centerY - 28, centerX + 18, centerY + 36, 0xCCF5FBFF);
-        Mc189Compat.drawRect(centerX - 18, centerY - 28, centerX + 18, centerY - 18, 0xAA1B8FB8);
+        Mc189Compat.drawRect(centerX - 24, centerY - 34, centerX + 24, centerY + 42, accent);
+        Mc189Compat.drawRect(centerX - 18, centerY - 28, centerX + 18, centerY + 36, AetherUi.withAlpha(AetherUi.GLASS, 0xCC));
+        Mc189Compat.drawRect(centerX - 18, centerY - 28, centerX + 18, centerY - 18, AetherUi.withAlpha(AetherUi.ACCENT_DARK, 0xAA));
     }
 
     private static final class CosmeticRow {

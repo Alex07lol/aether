@@ -15,6 +15,7 @@ import dev.aether.module.impl.hud.ServerAddressModule;
 
 import dev.aether.module.impl.hud.ArmorStatusModule;
 import dev.aether.module.impl.hud.BlockInfoModule;
+import dev.aether.module.impl.hud.DayCounterModule;
 import dev.aether.module.impl.hud.DirectionModule;
 import dev.aether.module.impl.hud.FpsGraphModule;
 import dev.aether.module.impl.hud.SpeedIndicatorModule;
@@ -41,5 +42,6 @@ final class HudModules {
         modules.register(new BlockInfoModule());
         modules.register(new ArmorStatusModule());
         modules.register(new FpsGraphModule());
+        modules.register(new DayCounterModule());
     }
 }

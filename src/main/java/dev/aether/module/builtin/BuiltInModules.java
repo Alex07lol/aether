@@ -14,6 +14,7 @@ public final class BuiltInModules {
         GraphicsModules.register(modules);
         InterfaceModules.register(modules);
         ThemeModules.register(modules);
+        CosmeticModules.register(modules);
         registerHudLayout(hudLayout);
     }
 
@@ -24,6 +25,9 @@ public final class BuiltInModules {
         hudLayout.add("hud.cps", 8, 68);
         hudLayout.add("pvp.toggle_sprint", 8, 80);
         hudLayout.add("hud.memory", 8, 92);
+        hudLayout.add("hud.combo", 8, 104);
+        hudLayout.add("pvp.toggle_sneak", 8, 128);
+        hudLayout.add("hud.day_counter", 8, 232);
 
         hudLayout.add("hud.clock", 8, 116);
         hudLayout.add("developer.overlay", 8, 136);

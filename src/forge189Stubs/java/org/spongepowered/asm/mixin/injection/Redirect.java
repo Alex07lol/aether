@@ -10,4 +10,5 @@ import java.lang.annotation.Target;
 public @interface Redirect {
     String[] method() default {};
     At at() default @At("");
+    int require() default -1;
 }

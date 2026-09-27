@@ -12,7 +12,7 @@ public class ToggleSprintModule extends AbstractModule {
             .build());
 
         addKeybind("keybind", "Keybind", 29);
-        addChoice("mode", "Mode", "Modern");
+        addChoice("mode", "Mode", "Modern").choices("Modern", "Legacy");
         addBool("show_status", "Show Status", true);
         addBool("show_background", "Show Background", true);
         addColor("text_color", "Text Color", 0xFFFFFFFF);

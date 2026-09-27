@@ -47,43 +47,47 @@ public final class AetherQuickNavScreen extends GuiScreen {
     }
 
     private void renderScreen(int mouseX, int mouseY, float partialTicks) {
+        AetherUi.syncTheme();
         int sw = Mc189Compat.screenWidth(this);
         int sh = Mc189Compat.screenHeight(this);
         Object font = Mc189Compat.screenFontRenderer(this);
 
+        // Every colour here comes from the shared theme tokens, so the quick nav follows the
+        // active theme module exactly like the click deck does.
+        int panelEdge = AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x40);
+        int accentLight = AetherUi.blend(AetherUi.ACCENT, 0xFFFFFFFF, 0.35F);
+
         // ── scrim ──────────────────────────────────────────────────────
-        Mc189Compat.drawRect(0, 0, sw, sh, 0xAA050810);
+        Mc189Compat.drawRect(0, 0, sw, sh, AetherUi.withAlpha(AetherUi.SURFACE, 0xAA));
 
         // ── card ───────────────────────────────────────────────────────
         int cx = (sw - CW) / 2;
         int cy = (sh - CH) / 2;
 
         // outer shadow (3 layers, progressively lighter)
-        Mc189Compat.drawRect(cx - 3, cy - 3, cx + CW + 3, cy + CH + 3, 0x28000000);
-        Mc189Compat.drawRect(cx - 2, cy - 2, cx + CW + 2, cy + CH + 2, 0x38000000);
-        Mc189Compat.drawRect(cx - 1, cy - 1, cx + CW + 1, cy + CH + 1, 0x50000000);
+        Mc189Compat.drawRect(cx - 3, cy - 3, cx + CW + 3, cy + CH + 3, AetherUi.withAlpha(AetherUi.SHADOW, 0x28));
+        Mc189Compat.drawRect(cx - 2, cy - 2, cx + CW + 2, cy + CH + 2, AetherUi.withAlpha(AetherUi.SHADOW, 0x38));
+        Mc189Compat.drawRect(cx - 1, cy - 1, cx + CW + 1, cy + CH + 1, AetherUi.withAlpha(AetherUi.SHADOW, 0x50));
 
         // card body
-        Mc189Compat.drawRect(cx, cy, cx + CW, cy + CH, 0xFF0E1220);
+        Mc189Compat.drawRect(cx, cy, cx + CW, cy + CH, AetherUi.SURFACE);
 
-        // top accent bar: solid blue 3px, then 1px lighter line
-        Mc189Compat.drawRect(cx,      cy,     cx + CW, cy + 3, 0xFF2563EB);
-        Mc189Compat.drawRect(cx,      cy + 3, cx + CW, cy + 4, 0xFF3B82F6);
+        // top accent bar: solid accent 3px, then 1px lighter line
+        Mc189Compat.drawRect(cx,      cy,     cx + CW, cy + 3, AetherUi.ACCENT);
+        Mc189Compat.drawRect(cx,      cy + 3, cx + CW, cy + 4, accentLight);
 
         // border: 1px on the 3 other sides
-        Mc189Compat.drawRect(cx,          cy + 4, cx + 1,      cy + CH, 0x40FFFFFF);
-        Mc189Compat.drawRect(cx + CW - 1, cy + 4, cx + CW,     cy + CH, 0x40FFFFFF);
-        Mc189Compat.drawRect(cx,          cy + CH - 1, cx + CW, cy + CH, 0x40FFFFFF);
+        Mc189Compat.drawRect(cx,          cy + 4, cx + 1,      cy + CH, panelEdge);
+        Mc189Compat.drawRect(cx + CW - 1, cy + 4, cx + CW,     cy + CH, panelEdge);
+        Mc189Compat.drawRect(cx,          cy + CH - 1, cx + CW, cy + CH, panelEdge);
 
         // ── header text ────────────────────────────────────────────────
-        // "AETHER" in bright white, centred
-        AetherUi.centered(font, "AETHER", cx, cy + 9,  CW, 0xFFFFFFFF);
-        // small subtitle
-        AetherUi.centered(font, "Quick Navigation", cx, cy + 20, CW, 0xFF4A6FA5);
+        AetherUi.centered(font, "AETHER", cx, cy + 9,  CW, AetherUi.TEXT_PRIMARY);
+        AetherUi.centered(font, "Quick Navigation", cx, cy + 20, CW, AetherUi.TEXT_DISABLED);
 
         // thin separator
         int sepY = cy + 33;
-        Mc189Compat.drawRect(cx + 40, sepY, cx + CW - 40, sepY + 1, 0x30FFFFFF);
+        Mc189Compat.drawRect(cx + 40, sepY, cx + CW - 40, sepY + 1, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x30));
 
         // ── circle button positions ─────────────────────────────────────
         int leftCX  = cx + CW / 4;
@@ -95,42 +99,64 @@ public final class AetherQuickNavScreen extends GuiScreen {
 
         // ── left button: Mod Menu ───────────────────────────────────────
         // outer glow ring on hover (radius+4, very transparent)
+        int idleFill = AetherUi.withAlpha(AetherUi.ACCENT_DARK, 0xE0);
+        int idleRing = AetherUi.withAlpha(AetherUi.ACCENT, 0x88);
+        int idleIcon = AetherUi.withAlpha(AetherUi.TEXT_PRIMARY, 0xAA);
+
         if (hL) {
-            drawSolidCircle(leftCX, btnCY, RADIUS + 5, 0x1A2563EB);
-            drawSolidCircle(leftCX, btnCY, RADIUS + 3, 0x2A3B82F6);
+            drawSolidCircle(leftCX, btnCY, RADIUS + 5, AetherUi.withAlpha(AetherUi.ACCENT, 0x1A));
+            drawSolidCircle(leftCX, btnCY, RADIUS + 3, AetherUi.withAlpha(AetherUi.ACCENT, 0x2A));
         }
         // filled circle
-        drawSolidCircle(leftCX, btnCY, RADIUS, hL ? 0xFF1D4ED8 : 0xFF162040);
+        drawSolidCircle(leftCX, btnCY, RADIUS, hL ? AetherUi.ACCENT : idleFill);
         // 1-px outline ring
-        drawCircleOutline(leftCX, btnCY, RADIUS, hL ? 0xFF60A5FA : 0xFF1E3A6E);
+        drawCircleOutline(leftCX, btnCY, RADIUS, hL ? accentLight : idleRing);
 
         // icon (12×12 gear, centred in circle)
-        int iconColor = hL ? 0xFFFFFFFF : 0xFF6EA3DE;
+        int iconColor = hL ? AetherUi.readableOn(AetherUi.ACCENT) : idleIcon;
         AetherUi.drawClientIcon(leftCX - 6, btnCY - 10, iconColor);
 
         // label inside circle, below icon
-        AetherUi.centered(font, "Mods", leftCX - RADIUS, btnCY + 4, RADIUS * 2, hL ? 0xFFFFFFFF : 0xFFACC4E8);
+        AetherUi.centered(font, "Mods", leftCX - RADIUS, btnCY + 4, RADIUS * 2,
+            hL ? AetherUi.readableOn(AetherUi.ACCENT) : AetherUi.TEXT_PRIMARY);
 
         // label below circle
-        AetherUi.centered(font, "Mod Menu", leftCX - 40, btnCY + RADIUS + 7, 80, hL ? 0xFFDDE4F5 : 0xFF3D547A);
+        AetherUi.centered(font, "Mod Menu", leftCX - 40, btnCY + RADIUS + 7, 80,
+            hL ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
 
         // ── right button: HUD Editor ────────────────────────────────────
         if (hR) {
-            drawSolidCircle(rightCX, btnCY, RADIUS + 5, 0x1A0891B2);
-            drawSolidCircle(rightCX, btnCY, RADIUS + 3, 0x2A22D3EE);
+            drawSolidCircle(rightCX, btnCY, RADIUS + 5, AetherUi.withAlpha(AetherUi.ACCENT, 0x1A));
+            drawSolidCircle(rightCX, btnCY, RADIUS + 3, AetherUi.withAlpha(AetherUi.ACCENT, 0x2A));
         }
-        drawSolidCircle(rightCX, btnCY, RADIUS, hR ? 0xFF0E7490 : 0xFF0D2030);
-        drawCircleOutline(rightCX, btnCY, RADIUS, hR ? 0xFF38BDF8 : 0xFF0F4060);
+        drawSolidCircle(rightCX, btnCY, RADIUS, hR ? AetherUi.ACCENT : idleFill);
+        drawCircleOutline(rightCX, btnCY, RADIUS, hR ? accentLight : idleRing);
 
-        int iconColorR = hR ? 0xFFFFFFFF : 0xFF5BB8D4;
+        int iconColorR = hR ? AetherUi.readableOn(AetherUi.ACCENT) : idleIcon;
         AetherUi.drawHudIcon(rightCX - 6, btnCY - 10, iconColorR);
 
-        AetherUi.centered(font, "HUD", rightCX - RADIUS, btnCY + 4, RADIUS * 2, hR ? 0xFFFFFFFF : 0xFF7DD3FC);
+        AetherUi.centered(font, "HUD", rightCX - RADIUS, btnCY + 4, RADIUS * 2,
+            hR ? AetherUi.readableOn(AetherUi.ACCENT) : AetherUi.TEXT_PRIMARY);
 
-        AetherUi.centered(font, "HUD Editor", rightCX - 40, btnCY + RADIUS + 7, 80, hR ? 0xFFDDE4F5 : 0xFF254A60);
+        AetherUi.centered(font, "HUD Editor", rightCX - 40, btnCY + RADIUS + 7, 80,
+            hR ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
 
         // ── footer ─────────────────────────────────────────────────────
-        AetherUi.centered(font, "ESC or Right Shift to close", cx, cy + CH - 8, CW, 0xFF1E2D45);
+        int[] legacy = legacyChip(cx, cy, font);
+        boolean legacyHover = mouseX >= legacy[0] && mouseX <= legacy[0] + legacy[2]
+                && mouseY >= legacy[1] && mouseY <= legacy[1] + legacy[3];
+        Mc189Compat.drawRect(legacy[0], legacy[1], legacy[0] + legacy[2], legacy[1] + legacy[3],
+                legacyHover ? AetherUi.withAlpha(AetherUi.ACCENT, 0x33) : AetherUi.ROW_BG);
+        AetherUi.centered(font, "Classic list view", legacy[0], legacy[1] + 4, legacy[2],
+                legacyHover ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
+        AetherUi.centered(font, "ESC or Right Shift to close", cx, cy + CH - 10, CW, AetherUi.TEXT_DISABLED);
+    }
+
+    /** Footer chip that keeps the older three-panel manager one click away. */
+    private static int[] legacyChip(int cx, int cy, Object font) {
+        String label = "Classic list view";
+        int w = Mc189Compat.stringWidth(font, label) + 16;
+        return new int[] {cx + CW / 2 - w / 2, cy + CH - 34, w, 16};
     }
 
     // ── filled circle via scanlines (guaranteed to work with drawRect) ───
@@ -184,6 +210,12 @@ public final class AetherQuickNavScreen extends GuiScreen {
         int btnCY   = cy + 83;
 
         if (dist(mouseX, mouseY, leftCX, btnCY) <= RADIUS) {
+            Mc189Compat.displayGuiScreen(new AetherClickGuiScreen(client, this));
+            return;
+        }
+        int[] legacy = legacyChip(cx, cy, Mc189Compat.screenFontRenderer(this));
+        if (mouseX >= legacy[0] && mouseX <= legacy[0] + legacy[2]
+                && mouseY >= legacy[1] && mouseY <= legacy[1] + legacy[3]) {
             Mc189Compat.displayGuiScreen(new AetherModMenuScreen(client, this));
             return;
         }

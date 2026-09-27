@@ -4,19 +4,24 @@ import dev.aether.module.AbstractModule;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleMetadata;
 
+/**
+ * Prefixes incoming chat with a coloured timestamp.
+ * <p>
+ * The colour is picked from the full ARGB palette in the GUI and mapped to the closest of
+ * Minecraft's sixteen legacy chat colours when the line is rewritten, because 1.8 chat cannot
+ * render a custom RGB value.
+ */
 public class ChatCustomizationModule extends AbstractModule {
+    public static final String ID = "interface.chat_customization";
+
     public ChatCustomizationModule() {
-        super(ModuleMetadata.builder("interface.chat_customization", "Chat Customization")
+        super(ModuleMetadata.builder(ID, "Chat Timestamps")
             .category(ModuleCategory.INTERFACE)
-            .description("Improves chat readability with customizable background, colors, and timestamps.")
+            .description("Adds a coloured timestamp to every incoming chat line.")
             .build());
 
-        addBool("show_background", "Show Background", true);
-        addBool("text_shadow", "Text Shadow", true);
-        addBool("timestamps", "Timestamps", false);
-        addNumber("opacity", "Opacity", 70);
-        addColor("text_color", "Text Color", 0xFFFFFFFF);
-        addColor("background_color", "Background Color", 0x6F000000);
+        addBool("timestamps", "Timestamps", true);
         addColor("timestamp_color", "Timestamp Color", 0xFF52BEEB);
+        addBool("twenty_four_hour", "24 Hour Clock", true);
     }
 }

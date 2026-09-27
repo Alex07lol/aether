@@ -60,6 +60,7 @@ public final class AetherMainMenuScreen extends GuiScreen {
     }
 
     private void render(int mouseX, int mouseY) {
+        AetherUi.syncTheme();
         int width = Mc189Compat.screenWidth(this);
         int height = Mc189Compat.screenHeight(this);
         Object font = Mc189Compat.screenFontRenderer(this);
@@ -105,7 +106,7 @@ public final class AetherMainMenuScreen extends GuiScreen {
 
         addIconButton("mod_menu", "icon/main_mod_menu.png", left, top, size, new ScreenAction() {
             public void run() {
-                Mc189Compat.displayGuiScreen(new AetherModMenuScreen(client, AetherMainMenuScreen.this));
+                Mc189Compat.displayGuiScreen(new AetherClickGuiScreen(client, AetherMainMenuScreen.this));
             }
         });
         addIconButton("resource_packs", "icon/main_resource_pack.png", left + size + gap, top, size, new ScreenAction() {
@@ -141,9 +142,10 @@ public final class AetherMainMenuScreen extends GuiScreen {
 
     private void drawIconButton(Object font, AetherButton button, int mouseX, int mouseY) {
         boolean hover = button.contains(mouseX, mouseY);
-        int fill = hover ? AetherUi.withAlpha(AetherUi.COLOR_CARD_HOVER, 145) : AetherUi.withAlpha(AetherUi.COLOR_CARD, 95);
+        int fill = hover ? AetherUi.withAlpha(AetherUi.CARD_HOVER, 145) : AetherUi.withAlpha(AetherUi.CARD, 95);
         Mc189Compat.drawRect(button.x(), button.y(), button.x() + button.width(), button.y() + button.height(), fill);
-        Mc189Compat.drawRect(button.x(), button.y(), button.x() + button.width(), button.y() + 1, 0x55FFFFFF);
+        Mc189Compat.drawRect(button.x(), button.y(), button.x() + button.width(), button.y() + 1,
+            hover ? AetherUi.ACCENT : AetherUi.PANEL_EDGE);
         String[] parts = button.label().split(":", 3);
         String path = parts.length == 3 ? parts[2] : "icon/info.png";
         int iconSize = Math.max(14, button.width() - 8);
@@ -152,9 +154,10 @@ public final class AetherMainMenuScreen extends GuiScreen {
 
     private void drawModernButton(Object font, AetherButton button, int mouseX, int mouseY) {
         boolean hover = button.contains(mouseX, mouseY);
-        int fill = hover ? AetherUi.withAlpha(AetherUi.COLOR_CARD_HOVER, 160) : AetherUi.withAlpha(AetherUi.COLOR_CARD, 128);
-        int text = AetherUi.COLOR_TEXT_PRIMARY;
+        int fill = hover ? AetherUi.withAlpha(AetherUi.CARD_HOVER, 160) : AetherUi.withAlpha(AetherUi.CARD, 128);
+        int text = hover ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_SECONDARY;
         Mc189Compat.drawRect(button.x(), button.y(), button.x() + button.width(), button.y() + button.height(), fill);
+        Mc189Compat.drawRect(button.x(), button.y(), button.x() + 2, button.y() + button.height(), hover ? AetherUi.ACCENT : AetherUi.withAlpha(AetherUi.ACCENT, 0x88));
         AetherUi.centered(font, button.label(), button.x(), button.y() + (button.height() - 8) / 2, button.width(), text);
     }
 
@@ -167,7 +170,7 @@ public final class AetherMainMenuScreen extends GuiScreen {
     }
 
     private void drawFooter(Object font, int width, int height) {
-        AetherUi.text(font, "Copyright Mojang Studios. Do not distribute!", width - Mc189Compat.stringWidth(font, "Copyright Mojang Studios. Do not distribute!") - 4, height - 14, AetherUi.COLOR_TEXT_SECONDARY);
+        AetherUi.text(font, "Copyright Mojang Studios. Do not distribute!", width - Mc189Compat.stringWidth(font, "Copyright Mojang Studios. Do not distribute!") - 4, height - 14, AetherUi.TEXT_SECONDARY);
     }
 
     private void click(int mouseX, int mouseY, int clickedButton) {

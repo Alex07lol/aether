@@ -12,7 +12,7 @@ public class CoordinatesModule extends AbstractModule {
             .favoriteByDefault(true)
             .build());
 
-        addChoice("mode", "Mode", "Horizontal");
+        addChoice("mode", "Mode", "Horizontal").choices("Horizontal", "Vertical");
         addBool("show_coordinates", "Show Coordinates", true);
         addBool("hide_y", "Hide Y Coordinate", false);
         addBool("show_direction", "Direction", true);

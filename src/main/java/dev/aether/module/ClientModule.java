@@ -41,6 +41,7 @@ public interface ClientModule {
         private final ModuleCategory category;
         private final String description;
         private final boolean favoriteByDefault;
+        private final String group;
 
         private ModuleMetadata(Builder builder) {
             this.id = builder.id;
@@ -48,6 +49,7 @@ public interface ClientModule {
             this.category = builder.category;
             this.description = builder.description;
             this.favoriteByDefault = builder.favoriteByDefault;
+            this.group = builder.group;
         }
 
         public static Builder builder(String id, String name) {
@@ -74,12 +76,22 @@ public interface ClientModule {
             return favoriteByDefault;
         }
 
+        /**
+         * Optional mutual-exclusion group. Modules that share a group behave like a
+         * radio: enabling one disables the rest, which is how the theme modules keep a
+         * single active palette without every screen re-implementing the rule.
+         */
+        public String group() {
+            return group;
+        }
+
         public static final class Builder {
             private final String id;
             private final String name;
             private ModuleCategory category = ModuleCategory.GENERAL;
             private String description = "";
             private boolean favoriteByDefault;
+            private String group;
 
             private Builder(String id, String name) {
                 if (id == null || id.trim().isEmpty()) {
@@ -104,6 +116,11 @@ public interface ClientModule {
 
             public Builder favoriteByDefault(boolean favoriteByDefault) {
                 this.favoriteByDefault = favoriteByDefault;
+                return this;
+            }
+
+            public Builder group(String group) {
+                this.group = group == null || group.trim().isEmpty() ? null : group.trim();
                 return this;
             }
 

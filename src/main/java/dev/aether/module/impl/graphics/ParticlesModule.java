@@ -11,8 +11,8 @@ public class ParticlesModule extends AbstractModule {
             .description("Customizes local hit particle feedback.")
             .build());
 
-        addNumber("particle_amount", "Particle Amount", 5);
-        addChoice("show_criticals", "Show Criticals", "Vanilla");
-        addChoice("show_sharpness", "Show Sharpness", "Vanilla");
+        addNumber("particle_amount", "Particle Amount", 5, 0, 10, 1);
+        addChoice("show_criticals", "Show Criticals", "Vanilla").choices("Vanilla", "Always", "Never");
+        addChoice("show_sharpness", "Show Sharpness", "Vanilla").choices("Vanilla", "Always", "Never");
     }
 }

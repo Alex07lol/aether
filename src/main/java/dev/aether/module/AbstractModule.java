@@ -59,6 +59,11 @@ public abstract class AbstractModule implements ClientModule {
         return s;
     }
 
+    /** Numeric setting that carries its own slider bounds, so no screen needs a range table. */
+    protected final Setting<Integer> addNumber(String id, String label, int defaultValue, int min, int max, int step) {
+        return addNumber(id, label, defaultValue).range(min, max, step);
+    }
+
     protected final Setting<String> addText(String id, String label, String defaultValue) {
         Setting<String> s = new Setting<String>(id, label, Setting.SettingType.TEXT, defaultValue);
         addSetting(s);
@@ -69,6 +74,11 @@ public abstract class AbstractModule implements ClientModule {
         Setting<String> s = new Setting<String>(id, label, Setting.SettingType.CHOICE, defaultValue);
         addSetting(s);
         return s;
+    }
+
+    /** Choice setting that carries its own option list, so no screen needs a choice table. */
+    protected final Setting<String> addChoice(String id, String label, String defaultValue, String... options) {
+        return addChoice(id, label, defaultValue).choices(options);
     }
 
     protected final Setting<Integer> addColor(String id, String label, int defaultValue) {

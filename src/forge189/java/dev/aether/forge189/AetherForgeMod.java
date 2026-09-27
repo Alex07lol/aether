@@ -38,9 +38,17 @@ public final class AetherForgeMod {
         ForgeKeyBindings keyBindings = new ForgeKeyBindings();
         keyBindings.register();
 
-        ForgeHudRenderer hudRenderer = new ForgeHudRenderer(client);
+        // Every screen and the HUD render their colours from the shared AetherUi token hub,
+        // so it needs the client before the first frame is drawn.
+        AetherUi.bind(client);
+
+        // The renderer needs the bridge to read live combat/toggle state (combo counter,
+        // toggled sprint and sneak), so the bridge has to exist first.
         ForgeClientEventBridge clientEventBridge = new ForgeClientEventBridge(client, keyBindings);
-        MinecraftForge.EVENT_BUS.register(new ForgeHudEventBridge(client, hudRenderer));
+        ForgeHudRenderer hudRenderer = new ForgeHudRenderer(client, clientEventBridge);
+        ForgeHudEventBridge hudEventBridge = new ForgeHudEventBridge(client, hudRenderer);
+        hudEventBridge.bind(clientEventBridge);
+        MinecraftForge.EVENT_BUS.register(hudEventBridge);
         MinecraftForge.EVENT_BUS.register(new ForgeGuiEventBridge(client));
         MinecraftForge.EVENT_BUS.register(clientEventBridge);
         FMLCommonHandler.instance().bus().register(clientEventBridge);

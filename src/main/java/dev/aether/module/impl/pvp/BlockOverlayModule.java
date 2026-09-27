@@ -13,7 +13,7 @@ public class BlockOverlayModule extends AbstractModule {
 
         addBool("outline", "Outline", true);
         addBool("fill", "Fill", true);
-        addNumber("thickness", "Thickness", 2);
+        addNumber("thickness", "Thickness", 2, 1, 8, 1);
         addColor("outline_color", "Outline Color", 0x8852BEEB);
         addColor("fill_color", "Fill Color", 0x4452BEEB);
     }

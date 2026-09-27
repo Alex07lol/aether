@@ -1,7 +1,11 @@
 package dev.aether.forge189;
 
 import dev.aether.AetherClient;
+import dev.aether.forge189.mixin.EntityRendererMixin;
 import dev.aether.forge189.mixin.ItemRendererMixin;
+import dev.aether.forge189.mixin.RendererLivingEntityMixin;
+import dev.aether.module.impl.interface_.ChatCustomizationModule;
+import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleState;
 import dev.aether.module.setting.Setting;
 import dev.aether.platform.ClientTickEvent;
@@ -12,20 +16,35 @@ import net.minecraft.client.renderer.WorldRenderer;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.util.AxisAlignedBB;
+import net.minecraft.util.IChatComponent;
 import net.minecraft.util.MovingObjectPosition;
+import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.client.event.EntityViewRenderEvent;
 import net.minecraftforge.client.event.MouseEvent;
 import net.minecraftforge.client.event.DrawBlockHighlightEvent;
 import net.minecraftforge.client.event.RenderLivingEvent;
+import net.minecraftforge.client.event.RenderWorldLastEvent;
 import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
-import net.minecraftforge.fml.common.gameevent.TickEvent.RenderTickEvent;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 final class ForgeClientEventBridge {
+    private static final int[] LEGACY_COLOURS = {
+        0x000000, 0x0000AA, 0x00AA00, 0x00AAAA, 0xAA0000, 0xAA00AA, 0xFFAA00, 0xAAAAAA,
+        0x555555, 0x5555FF, 0x55FF55, 0x55FFFF, 0xFF5555, 0xFF55FF, 0xFFFF55, 0xFFFFFF
+    };
+    private static final String LEGACY_CODES = "0123456789abcdef";
+
     private final AetherClient client;
     private final ForgeKeyBindings keyBindings;
+    private final ForgeCosmeticRenderer cosmetics;
+    private final ForgeNameTagRenderer nametags;
+    private final ForgeNotifications notifications;
     private Float originalGamma;
     private Integer originalParticles;
     private Boolean originalFancyGraphics;
@@ -36,19 +55,22 @@ final class ForgeClientEventBridge {
     private Integer originalPerspective;
     private boolean toggleSprintActive;
     private boolean toggleSprintKeyDown;
+    private boolean toggleSneakActive;
+    private boolean toggleSneakKeyDown;
+    private int comboCount;
+    private long lastComboMillis;
     private boolean freelookActive;
     private float freelookYaw;
     private float freelookPitch;
     private long nextMemoryCleanupMillis;
-    private Object hurtCameraEntity;
-    private Integer originalHurtTime;
-    private Integer originalMaxHurtTime;
-    private Float originalAttackedAtYaw;
     private boolean modMenuKeyDown;
 
     ForgeClientEventBridge(AetherClient client, ForgeKeyBindings keyBindings) {
         this.client = client;
         this.keyBindings = keyBindings;
+        this.cosmetics = new ForgeCosmeticRenderer(client);
+        this.nametags = new ForgeNameTagRenderer(client);
+        this.notifications = new ForgeNotifications(client);
     }
 
     @SubscribeEvent
@@ -58,18 +80,14 @@ final class ForgeClientEventBridge {
         }
         client.eventBus().publish(new ClientTickEvent(Mc189Compat.tickTimeMillis()));
         applyToggleSprint();
+        applyToggleSneak();
         applySnaplook();
         applyClientEffects();
         checkModMenuKey();
-    }
-
-    @SubscribeEvent
-    public void onRenderTick(RenderTickEvent event) {
-        if (event.phase == TickEvent.Phase.START) {
-            applyNoHurtCam();
-        } else if (event.phase == TickEvent.Phase.END) {
-            restoreNoHurtCam();
-        }
+        applyHudEditorRequest();
+        applyThemeSelectorRequest();
+        applyCosmeticManagerRequest();
+        this.cosmetics.onClientTick();
     }
 
     @SubscribeEvent
@@ -115,6 +133,7 @@ final class ForgeClientEventBridge {
     @SubscribeEvent
     public void onAttackEntity(AttackEntityEvent event) {
         applyAttackParticles(event.target);
+        registerComboHit();
     }
 
     @SubscribeEvent
@@ -190,6 +209,66 @@ final class ForgeClientEventBridge {
     }
 
     @SubscribeEvent
+    public void onRenderWorldLast(RenderWorldLastEvent event) {
+        this.cosmetics.onRenderWorldLast(event.partialTicks);
+        this.nametags.onRenderWorldLast(event.partialTicks);
+    }
+
+    @SubscribeEvent
+    public void onRenderNameTag(RenderLivingEvent.Specials.Pre event) {
+        // Cancelling the vanilla pass is what makes the custom scale/colour/background visible.
+        if (this.nametags.suppressesVanillaTag(event.entity)) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public void onChatReceived(ClientChatReceivedEvent event) {
+        if (event.type != 0 || event.message == null || !enabled(ChatCustomizationModule.ID)) {
+            return;
+        }
+        if (!settingBool(ChatCustomizationModule.ID, "timestamps", true)) {
+            return;
+        }
+        String line = Mc189Compat.chatFormattedText(event.message);
+        if (line == null || line.isEmpty()) {
+            return;
+        }
+        Object stamped = Mc189Compat.chatComponent(timestampPrefix() + line);
+        if (stamped instanceof IChatComponent) {
+            event.message = (IChatComponent) stamped;
+        }
+    }
+
+    private String timestampPrefix() {
+        String pattern = settingBool(ChatCustomizationModule.ID, "twenty_four_hour", true) ? "HH:mm" : "hh:mm a";
+        String clock = new SimpleDateFormat(pattern, Locale.ROOT).format(new Date());
+        char colour = legacyColourCode(settingColor(ChatCustomizationModule.ID, "timestamp_color", 0xFF52BEEB));
+        return "\u00A78[\u00A7" + colour + clock + "\u00A78] \u00A7r";
+    }
+
+    /** 1.8 chat cannot render ARGB, so the picker colour is matched to the nearest legacy colour. */
+    private static char legacyColourCode(int argb) {
+        int red = argb >> 16 & 255;
+        int green = argb >> 8 & 255;
+        int blue = argb & 255;
+        int best = 15;
+        int bestDistance = Integer.MAX_VALUE;
+        for (int i = 0; i < LEGACY_COLOURS.length; i++) {
+            int candidate = LEGACY_COLOURS[i];
+            int dr = red - (candidate >> 16 & 255);
+            int dg = green - (candidate >> 8 & 255);
+            int db = blue - (candidate & 255);
+            int distance = dr * dr + dg * dg + db * db;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = i;
+            }
+        }
+        return LEGACY_CODES.charAt(best);
+    }
+
+    @SubscribeEvent
     public void onRenderLivingPost(RenderLivingEvent.Post<EntityLivingBase> event) {
         if (enabled("graphics.hit_color") && Mc189Compat.hurtTime(event.entity) > 0) {
             int color = settingColor("graphics.hit_color", "color", 0xFFFF5555);
@@ -230,7 +309,7 @@ final class ForgeClientEventBridge {
         boolean isDown = Mc189Compat.keyPressed(keyBindings.modMenu()) || Mc189Compat.keyboardKeyDown(code);
         if (isDown && !this.modMenuKeyDown) {
             client.eventBus().publish(new KeyInputEvent("mod_menu", code));
-            Mc189Compat.displayGuiScreen(new AetherQuickNavScreen(client));
+            Mc189Compat.displayGuiScreen(new AetherClickGuiScreen(client));
         }
         this.modMenuKeyDown = isDown;
     }
@@ -252,6 +331,7 @@ final class ForgeClientEventBridge {
         boolean keyDown = Mc189Compat.keyboardKeyDown(settingInt("pvp.toggle_sprint", "keybind", 29));
         if (keyDown && !this.toggleSprintKeyDown) {
             this.toggleSprintActive = !this.toggleSprintActive;
+            this.notifications.push("Toggle Sprint " + (this.toggleSprintActive ? "ON" : "OFF"));
         }
         this.toggleSprintKeyDown = keyDown;
 
@@ -265,6 +345,110 @@ final class ForgeClientEventBridge {
         }
     }
 
+
+    /** Mirrors {@link #applyToggleSprint()} for the sneak key. */
+    private void applyToggleSneak() {
+        Object minecraft = Mc189Compat.minecraft();
+        Object gameSettings = Mc189Compat.gameSettings(minecraft);
+        if (!enabled("pvp.toggle_sneak")) {
+            // Same rule as toggle sprint: only clear the forced state on the way out,
+            // otherwise vanilla sneaking breaks because we keep overwriting its key.
+            if (this.toggleSneakActive && gameSettings != null) {
+                Mc189Compat.setKeyBindState(Mc189Compat.keyBindSneak(gameSettings), false);
+            }
+            this.toggleSneakActive = false;
+            this.toggleSneakKeyDown = false;
+            return;
+        }
+
+        // Never toggle while a screen is open, or typing in chat would flip sneak.
+        boolean keyDown = Mc189Compat.currentScreen(minecraft) == null
+            && Mc189Compat.keyboardKeyDown(settingInt("pvp.toggle_sneak", "keybind", 42));
+        if (keyDown && !this.toggleSneakKeyDown) {
+            this.toggleSneakActive = !this.toggleSneakActive;
+            this.notifications.push("Toggle Sneak " + (this.toggleSneakActive ? "ON" : "OFF"));
+        }
+        this.toggleSneakKeyDown = keyDown;
+
+        if (gameSettings == null || Mc189Compat.player(minecraft) == null) {
+            return;
+        }
+        Mc189Compat.setKeyBindState(Mc189Compat.keyBindSneak(gameSettings), this.toggleSneakActive);
+    }
+
+    private void registerComboHit() {
+        if (!enabled("hud.combo")) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        int resetMillis = clamp(settingInt("hud.combo", "reset_time", 2000), 250, 10000);
+        this.comboCount = now - this.lastComboMillis <= (long) resetMillis ? this.comboCount + 1 : 1;
+        this.lastComboMillis = now;
+        if (this.comboCount % 5 == 0) {
+            this.notifications.push("Combo x" + this.comboCount);
+        }
+    }
+
+    /**
+     * The HUD editor module doubles as a button: enabling it opens the editor and
+     * immediately switches itself back off, so the deck's toggle never stays pinned.
+     */
+    private void applyHudEditorRequest() {
+        if (!enabled("interface.hud_editor")) {
+            return;
+        }
+        Mc189Compat.displayGuiScreen(new AetherHudEditorScreen(client));
+        client.modules().setEnabled("interface.hud_editor", false);
+        saveQuietly();
+    }
+
+    /**
+     * Same one-shot pattern for the theme selector: it opens the deck on the Interface
+     * category, which is where the five theme modules live.
+     */
+    private void applyThemeSelectorRequest() {
+        if (!enabled("interface.theme_selector")) {
+            return;
+        }
+        AetherClickGuiScreen screen = new AetherClickGuiScreen(client);
+        screen.focusCategory(ModuleCategory.INTERFACE);
+        Mc189Compat.displayGuiScreen(screen);
+        client.modules().setEnabled("interface.theme_selector", false);
+        saveQuietly();
+    }
+
+    /**
+     * The cosmetic manager is a one-shot launcher too: switching it on opens the cosmetics
+     * screen (where capes are imported and slots are chosen) and the switch falls back off.
+     */
+    private void applyCosmeticManagerRequest() {
+        if (!enabled("cosmetics.manager")) {
+            return;
+        }
+        Mc189Compat.displayGuiScreen(new AetherCosmeticsScreen(client, null));
+        client.modules().setEnabled("cosmetics.manager", false);
+        saveQuietly();
+    }
+
+    boolean toggleSprintActive() {
+        return this.toggleSprintActive;
+    }
+
+    boolean toggleSneakActive() {
+        return this.toggleSneakActive;
+    }
+
+    int comboCount() {
+        return this.comboCount;
+    }
+
+    ForgeNotifications notifications() {
+        return this.notifications;
+    }
+
+    boolean comboActive(int maxGapMillis) {
+        return this.comboCount > 0 && System.currentTimeMillis() - this.lastComboMillis <= (long) maxGapMillis;
+    }
 
     private boolean snaplookActive;
 
@@ -299,7 +483,47 @@ final class ForgeClientEventBridge {
         }
         applyWeatherToggle(minecraft);
         applyTimeChanger(minecraft);
+        applySkyCustomization(gameSettings);
         applyAnimationState();
+        applyNoHurtCamState();
+        applyHitColor();
+    }
+
+    /**
+     * Sky customization owns the cloud style. Vanilla means "leave game settings alone", so the
+     * player's own video settings win until they pick a cloud override.
+     */
+    private void applySkyCustomization(Object gameSettings) {
+        if (gameSettings == null) {
+            return;
+        }
+        String clouds = enabled("graphics.sky_customization")
+            ? settingString("graphics.sky_customization", "clouds", "Vanilla")
+            : "Vanilla";
+        int wanted;
+        if ("Off".equalsIgnoreCase(clouds)) {
+            wanted = 0;
+        } else if ("Fast".equalsIgnoreCase(clouds)) {
+            wanted = 1;
+        } else if ("Fancy".equalsIgnoreCase(clouds)) {
+            wanted = 2;
+        } else {
+            restoreClouds(gameSettings);
+            return;
+        }
+        if (this.originalClouds == null) {
+            this.originalClouds = Integer.valueOf(Mc189Compat.clouds(gameSettings));
+        }
+        Mc189Compat.setClouds(gameSettings, wanted);
+    }
+
+    @SubscribeEvent
+    public void onFogDensity(EntityViewRenderEvent.FogDensity event) {
+        if (enabled("graphics.sky_customization") && settingBool("graphics.sky_customization", "hide_fog", false)) {
+            // Density 0 with the event cancelled clears the distance, water and lava fog.
+            event.density = 0.0F;
+            event.setCanceled(true);
+        }
     }
 
     private void applyFullbright(Object gameSettings) {
@@ -449,11 +673,46 @@ final class ForgeClientEventBridge {
         }
     }
 
+    /**
+     * Publishes the animation module's four toggles to the item renderer mixin. Each toggle
+     * drives one pose: block swing, eat/drink swing, bow draw curve and the held fishing rod.
+     */
     private void applyAnimationState() {
-        boolean animationEnabled = enabled("graphics.animation");
-        if (ItemRendererMixin.animationEnabled != animationEnabled) {
-            ItemRendererMixin.animationEnabled = animationEnabled;
+        boolean moduleEnabled = enabled("graphics.animation");
+        ItemRendererMixin.blockAnimationEnabled =
+            moduleEnabled && settingBool("graphics.animation", "block_animation", true);
+        ItemRendererMixin.eatDrinkAnimationEnabled =
+            moduleEnabled && settingBool("graphics.animation", "eat_drink_animation", true);
+        ItemRendererMixin.bowAnimationEnabled =
+            moduleEnabled && settingBool("graphics.animation", "bow_animation", true);
+        ItemRendererMixin.fishingRodAnimationEnabled =
+            moduleEnabled && settingBool("graphics.animation", "rod_animation", true);
+        if (moduleEnabled) {
+            applyActionSwing();
         }
+    }
+
+    /**
+     * 1.7 loops the arm swing for the whole eat/drink/bow/block action instead of playing it
+     * once, which is the part of CloudClient's animation mod that is not a pose change. Vanilla
+     * ends a swing on its own, so restarting only when it has ended keeps the bob continuous
+     * without touching vanilla's swing bookkeeping mid-animation.
+     */
+    private void applyActionSwing() {
+        Object player = Mc189Compat.player(Mc189Compat.minecraft());
+        if (player == null || !Mc189Compat.usingItem(player) || Mc189Compat.isSwingInProgress(player)) {
+            return;
+        }
+        String action = Mc189Compat.itemUseAction(Mc189Compat.itemInUse(player));
+        boolean animate = "BLOCK".equals(action) && settingBool("graphics.animation", "block_animation", true)
+            || ("EAT".equals(action) || "DRINK".equals(action))
+                && settingBool("graphics.animation", "eat_drink_animation", true)
+            || "BOW".equals(action) && settingBool("graphics.animation", "bow_animation", true);
+        if (!animate) {
+            return;
+        }
+        Mc189Compat.setSwingProgressInt(player, 0);
+        Mc189Compat.setSwingInProgress(player, true);
     }
 
     private void applyFreelook(Object gameSettings) {
@@ -524,49 +783,35 @@ final class ForgeClientEventBridge {
         saveQuietly();
     }
 
-    private void applyNoHurtCam() {
-        if (!enabled("graphics.no_hurt_cam")) {
-            return;
-        }
-        int shake = clamp(settingInt("graphics.no_hurt_cam", "shake_amount", 100), 0, 100);
-        if (shake >= 100) {
-            return;
-        }
-        Object minecraft = Mc189Compat.minecraft();
-        Object entity = Mc189Compat.renderViewEntity(minecraft);
-        if (entity == null) {
-            entity = Mc189Compat.player(minecraft);
-        }
-        if (entity == null) {
-            return;
-        }
-        float scale = shake / 100.0F;
-        this.hurtCameraEntity = entity;
-        this.originalHurtTime = Integer.valueOf(Mc189Compat.hurtTime(entity));
-        this.originalMaxHurtTime = Integer.valueOf(Mc189Compat.maxHurtTime(entity));
-        this.originalAttackedAtYaw = Float.valueOf(Mc189Compat.attackedAtYaw(entity));
-        Mc189Compat.setHurtTime(entity, Math.round(this.originalHurtTime.intValue() * scale));
-        Mc189Compat.setMaxHurtTime(entity, Math.round(this.originalMaxHurtTime.intValue() * scale));
-        Mc189Compat.setAttackedAtYaw(entity, this.originalAttackedAtYaw.floatValue() * scale);
+    /**
+     * Publishes {@code graphics.no_hurt_cam} to the entity renderer mixin, which scales the
+     * camera shake itself. The hurt timers stay untouched, so nothing else that reads them
+     * (the hurt overlay, other renderers, other mods) sees a rewritten timer.
+     */
+    private void applyNoHurtCamState() {
+        boolean active = enabled("graphics.no_hurt_cam");
+        EntityRendererMixin.hurtCameraScaled = active;
+        EntityRendererMixin.hurtCameraScale = active
+            ? clamp(settingInt("graphics.no_hurt_cam", "shake_amount", 100), 0, 100) / 100.0F
+            : 1.0F;
     }
 
-    private void restoreNoHurtCam() {
-        if (this.hurtCameraEntity == null) {
+    /**
+     * Publishes {@code graphics.hit_color} to the renderer mixin that tints the damage overlay.
+     * The colour's alpha channel is the tint strength, so the deck's colour palette doubles as
+     * the opacity control; the hit outline drawn in {@code onRenderLivingPost} uses the same RGB.
+     */
+    private void applyHitColor() {
+        boolean active = enabled("graphics.hit_color");
+        RendererLivingEntityMixin.customHitColorEnabled = active;
+        if (!active) {
             return;
         }
-        if (this.originalHurtTime != null) {
-            Mc189Compat.setHurtTime(this.hurtCameraEntity, this.originalHurtTime.intValue());
-        }
-        if (this.originalMaxHurtTime != null) {
-            Mc189Compat.setMaxHurtTime(this.hurtCameraEntity, this.originalMaxHurtTime.intValue());
-        }
-        if (this.originalAttackedAtYaw != null) {
-            Mc189Compat.setAttackedAtYaw(this.hurtCameraEntity, this.originalAttackedAtYaw.floatValue());
-        }
-        this.hurtCameraEntity = null;
-        this.originalHurtTime = null;
-        this.originalMaxHurtTime = null;
-        this.originalAttackedAtYaw = null;
+        int color = settingColor("graphics.hit_color", "color", 0xFFFF5555);
+        RendererLivingEntityMixin.hitColorRed = (color >> 16 & 255) / 255.0F;
+        RendererLivingEntityMixin.hitColorGreen = (color >> 8 & 255) / 255.0F;
+        RendererLivingEntityMixin.hitColorBlue = (color & 255) / 255.0F;
+        RendererLivingEntityMixin.hitColorAlpha = (color >>> 24 & 255) / 255.0F;
     }
 
     private void applyAttackParticles(Object target) {

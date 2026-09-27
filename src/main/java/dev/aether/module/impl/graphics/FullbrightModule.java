@@ -12,6 +12,6 @@ public class FullbrightModule extends AbstractModule {
             .favoriteByDefault(true)
             .build());
 
-        addNumber("brightness", "Brightness", 100);
+        addNumber("brightness", "Brightness", 100, 0, 100, 5);
     }
 }

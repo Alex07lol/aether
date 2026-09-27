@@ -62,7 +62,7 @@ public final class AetherModMenuScreen extends GuiScreen {
 
     private static final Map<ModuleCategory, Integer> CATEGORY_ICON_COLORS = new EnumMap<>(ModuleCategory.class);
     static {
-        CATEGORY_ICON_COLORS.put(ModuleCategory.GENERAL,       0xFF4A5568);
+        CATEGORY_ICON_COLORS.put(ModuleCategory.GENERAL,       AetherUi.TEXT_DISABLED);
         CATEGORY_ICON_COLORS.put(ModuleCategory.PERFORMANCE,   0xFFD69E2E);
         CATEGORY_ICON_COLORS.put(ModuleCategory.GRAPHICS,      0xFF2D5AA0);
         CATEGORY_ICON_COLORS.put(ModuleCategory.RENDER,        0xFF3182CE);
@@ -77,40 +77,12 @@ public final class AetherModMenuScreen extends GuiScreen {
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Number slider properties (reused from reference)                   */
+    /*  Swatches                                                           */
     /* ------------------------------------------------------------------ */
 
-    private static class NumberProperty {
-        final int min, max, step;
-        NumberProperty(int min, int max, int step) { this.min = min; this.max = max; this.step = step; }
-    }
-
-    private static final Map<String, NumberProperty> NUMBER_PROPERTIES = new HashMap<>();
-    static {
-        NUMBER_PROPERTIES.put("fps_limit",          new NumberProperty(30, 1000, 10));
-        NUMBER_PROPERTIES.put("zoom_percent",       new NumberProperty(5, 100, 5));
-        NUMBER_PROPERTIES.put("min_zoom_percent",   new NumberProperty(5, 100, 5));
-        NUMBER_PROPERTIES.put("max_zoom_percent",   new NumberProperty(5, 100, 5));
-        NUMBER_PROPERTIES.put("strength",           new NumberProperty(0, 100, 5));
-        NUMBER_PROPERTIES.put("amount",             new NumberProperty(0, 100, 5));
-        NUMBER_PROPERTIES.put("shake_amount",       new NumberProperty(0, 100, 5));
-        NUMBER_PROPERTIES.put("box_size",           new NumberProperty(14, 34, 1));
-        NUMBER_PROPERTIES.put("click_size",         new NumberProperty(14, 34, 1));
-        NUMBER_PROPERTIES.put("spacebar_height",    new NumberProperty(8, 24, 1));
-        NUMBER_PROPERTIES.put("gap",                new NumberProperty(0, 8, 1));
-        NUMBER_PROPERTIES.put("scroll_step",        new NumberProperty(1, 25, 1));
-        NUMBER_PROPERTIES.put("thickness",          new NumberProperty(1, 25, 1));
-        NUMBER_PROPERTIES.put("fade_time",          new NumberProperty(0, 500, 1));
-        NUMBER_PROPERTIES.put("brightness",         new NumberProperty(0, 100, 5));
-        NUMBER_PROPERTIES.put("max_render_distance", new NumberProperty(2, 32, 1));
-        NUMBER_PROPERTIES.put("memory_threshold",   new NumberProperty(1, 95, 5));
-        NUMBER_PROPERTIES.put("scale",              new NumberProperty(50, 150, 1));
-        NUMBER_PROPERTIES.put("opacity",            new NumberProperty(0, 100, 1));
-        NUMBER_PROPERTIES.put("size",               new NumberProperty(1, 32, 1));
-        NUMBER_PROPERTIES.put("sensitivity",        new NumberProperty(10, 250, 10));
-        NUMBER_PROPERTIES.put("offset",             new NumberProperty(0, 24000, 500));
-        NUMBER_PROPERTIES.put("speed",              new NumberProperty(1, 100, 1));
-    }
+    // Slider bounds and option lists are no longer table lookups: every numeric setting
+    // declares a Setting.Range and every choice setting declares its options, so both GUIs
+    // read the same metadata and this screen keeps only its colour swatch ring.
 
     private static final int[] COLOR_PRESETS = {
         0xFFFFFFFF, 0xFF52BEEB, 0xFF387DFF, 0xFFFF5555,
@@ -118,23 +90,6 @@ public final class AetherModMenuScreen extends GuiScreen {
         0xAA10141B, 0x00000000
     };
 
-    private static final Map<String, String[]> CHOICE_OPTIONS = new HashMap<>();
-    static {
-        CHOICE_OPTIONS.put("hud.clock.format",                    new String[]{"24h", "12h"});
-        CHOICE_OPTIONS.put("hud.direction.style",                 new String[]{"Compass", "Simple"});
-        CHOICE_OPTIONS.put("graphics.custom_crosshair.shape",     new String[]{"Cross", "Dot", "Circle"});
-        CHOICE_OPTIONS.put("graphics.particles.show_criticals",   new String[]{"Vanilla", "Always", "Never"});
-        CHOICE_OPTIONS.put("graphics.particles.show_sharpness",   new String[]{"Vanilla", "Always", "Never"});
-        CHOICE_OPTIONS.put("hud.coordinates.mode",                new String[]{"Horizontal", "Vertical"});
-        CHOICE_OPTIONS.put("hud.potions.mode",                    new String[]{"Compact", "Detailed"});
-        CHOICE_OPTIONS.put("pvp.toggle_sprint.mode",              new String[]{"Modern", "Legacy"});
-        CHOICE_OPTIONS.put("hud.cps.mode",                        new String[]{"Modern", "Legacy"});
-        CHOICE_OPTIONS.put("hud.ping.mode",                       new String[]{"Modern", "Legacy"});
-        CHOICE_OPTIONS.put("hud.reach_display.mode",              new String[]{"Modern", "Legacy"});
-        CHOICE_OPTIONS.put("hud.speed_indicator.mode",            new String[]{"Modern", "Legacy"});
-        CHOICE_OPTIONS.put("hud.server_address.mode",             new String[]{"Modern", "Legacy"});
-        CHOICE_OPTIONS.put("hud.fps_graph.graph_mode",            new String[]{"Sparkline", "Bar Chart"});
-    }
 
     /* ------------------------------------------------------------------ */
     /*  Setting controller interface                                       */
@@ -218,12 +173,13 @@ public final class AetherModMenuScreen extends GuiScreen {
     }
 
     private void render(int mouseX, int mouseY, float partialTicks) {
+        AetherUi.syncTheme();
         ensurePanels();
         int w = Mc189Compat.screenWidth(this);
         int h = Mc189Compat.screenHeight(this);
         Object font = Mc189Compat.screenFontRenderer(this);
 
-        Mc189Compat.drawRect(0, 0, w, h, 0x880B0E14);
+        Mc189Compat.drawRect(0, 0, w, h, AetherUi.withAlpha(AetherUi.SURFACE, 0x88));
 
         sidebarPanel.draw(font, mouseX, mouseY, partialTicks);
         moduleGridPanel.draw(font, mouseX, mouseY, partialTicks);
@@ -494,12 +450,12 @@ public final class AetherModMenuScreen extends GuiScreen {
         @Override
         void draw(Object font, int mouseX, int mouseY, float dt) {
             recalcMaxScroll();
-            Mc189Compat.drawRect(x, y, x + width, y + height, AetherUi.COLOR_PANEL);
-            Mc189Compat.drawRect(x, y, x + 3, y + height, AetherUi.MODERN_UI_ACCENT);
-            Mc189Compat.drawRect(x + 3, y, x + width, y + 1, AetherUi.COLOR_BORDER);
+            Mc189Compat.drawRect(x, y, x + width, y + height, AetherUi.PANEL);
+            Mc189Compat.drawRect(x, y, x + 3, y + height, AetherUi.ACCENT);
+            Mc189Compat.drawRect(x + 3, y, x + width, y + 1, AetherUi.BORDER);
 
-            AetherUi.centered(font, "AETHER", x + 3, y + 14, width - 3, AetherUi.COLOR_TEXT_PRIMARY);
-            AetherUi.centered(font, "MODS", x + 3, y + 26, width - 3, AetherUi.COLOR_TEXT_SECONDARY);
+            AetherUi.centered(font, "AETHER", x + 3, y + 14, width - 3, AetherUi.TEXT_PRIMARY);
+            AetherUi.centered(font, "MODS", x + 3, y + 26, width - 3, AetherUi.TEXT_SECONDARY);
 
             int headerH = 44;
             int listY = y + headerH;
@@ -525,22 +481,22 @@ public final class AetherModMenuScreen extends GuiScreen {
                             && mouseY >= listY && mouseY <= listY + listH;
 
                     if (sel) {
-                        Mc189Compat.drawRect(btnX, btnY, btnX + btnW, btnY + btnH, AetherUi.COLOR_CARD_HOVER);
-                        Mc189Compat.drawRect(btnX, btnY, btnX + 3, btnY + btnH, AetherUi.MODERN_UI_ACCENT);
+                        Mc189Compat.drawRect(btnX, btnY, btnX + btnW, btnY + btnH, AetherUi.CARD_HOVER);
+                        Mc189Compat.drawRect(btnX, btnY, btnX + 3, btnY + btnH, AetherUi.ACCENT);
                     } else if (hover) {
-                        Mc189Compat.drawRect(btnX, btnY, btnX + btnW, btnY + btnH, 0xFF1A1F2A);
+                        Mc189Compat.drawRect(btnX, btnY, btnX + btnW, btnY + btnH, AetherUi.CARD_HOVER);
                     } else {
-                        Mc189Compat.drawRect(btnX, btnY, btnX + btnW, btnY + btnH, AetherUi.COLOR_CARD);
+                        Mc189Compat.drawRect(btnX, btnY, btnX + btnW, btnY + btnH, AetherUi.CARD);
                     }
 
                     // Draw category icon placeholder (small coloured square)
                     int iconSize = 8;
                     int iconX = btnX + 6;
                     int iconY = btnY + (btnH - iconSize) / 2;
-                    int iconColor = sel ? AetherUi.MODERN_UI_ACCENT : AetherUi.COLOR_TEXT_DISABLED;
+                    int iconColor = sel ? AetherUi.ACCENT : AetherUi.TEXT_DISABLED;
                     Mc189Compat.drawRect(iconX, iconY, iconX + iconSize, iconY + iconSize, iconColor);
 
-                    int textColor = sel ? AetherUi.COLOR_TEXT_PRIMARY : AetherUi.COLOR_TEXT_SECONDARY;
+                    int textColor = sel ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_SECONDARY;
                     String trimmedLabel = AetherUi.trim(font, cat.label, btnW - 22);
                     AetherUi.text(font, trimmedLabel, btnX + 18, btnY + (btnH - 8) / 2, textColor);
                 }
@@ -555,8 +511,8 @@ public final class AetherModMenuScreen extends GuiScreen {
                 int barH = listH;
                 int thumbH = Math.max(16, (int) ((barH / (barH + maxScroll)) * barH));
                 int thumbY = listY + (int) ((scrollOffset / maxScroll) * (barH - thumbH));
-                Mc189Compat.drawRect(x + width - 3, listY, x + width, listY + barH, 0x22FFFFFF);
-                Mc189Compat.drawRect(x + width - 3, thumbY, x + width, thumbY + thumbH, AetherUi.MODERN_UI_ACCENT);
+                Mc189Compat.drawRect(x + width - 3, listY, x + width, listY + barH, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x22));
+                Mc189Compat.drawRect(x + width - 3, thumbY, x + width, thumbY + thumbH, AetherUi.ACCENT);
             }
         }
 
@@ -621,22 +577,22 @@ public final class AetherModMenuScreen extends GuiScreen {
             recalcMaxScroll();
             // Search bar
             int searchH = 36;
-            int searchBg = searchFocused ? AetherUi.COLOR_SEARCH_FOCUS : AetherUi.COLOR_SEARCH;
+            int searchBg = searchFocused ? AetherUi.SEARCH_FOCUS : AetherUi.SEARCH;
             Mc189Compat.drawRect(x, y, x + width, y + searchH, searchBg);
-            Mc189Compat.drawRect(x, y, x + width, y + 1, AetherUi.COLOR_BORDER);
+            Mc189Compat.drawRect(x, y, x + width, y + 1, AetherUi.BORDER);
 
             if (searchQuery.isEmpty() && !searchFocused) {
-                AetherUi.text(font, AetherUi.trim(font, "Search modules...", width - 80), x + 12, y + 14, AetherUi.COLOR_TEXT_DISABLED);
+                AetherUi.text(font, AetherUi.trim(font, "Search modules...", width - 80), x + 12, y + 14, AetherUi.TEXT_DISABLED);
             } else {
                 String cursor = searchFocused && System.currentTimeMillis() % 1000 > 500 ? "_" : "";
-                AetherUi.text(font, AetherUi.trim(font, searchQuery + cursor, width - 80), x + 12, y + 14, AetherUi.COLOR_TEXT_PRIMARY);
+                AetherUi.text(font, AetherUi.trim(font, searchQuery + cursor, width - 80), x + 12, y + 14, AetherUi.TEXT_PRIMARY);
             }
 
             // Module count
             String countStr = modules.size() + " module" + (modules.size() != 1 ? "s" : "");
             int countW = Mc189Compat.stringWidth(font, countStr);
             if (width - countW - 12 > 100) {
-                AetherUi.text(font, countStr, x + width - countW - 8, y + 14, AetherUi.COLOR_TEXT_DISABLED);
+                AetherUi.text(font, countStr, x + width - countW - 8, y + 14, AetherUi.TEXT_DISABLED);
             }
 
             // Grid area with scissor
@@ -673,18 +629,18 @@ public final class AetherModMenuScreen extends GuiScreen {
                         && mouseY >= gridY && mouseY <= gridY + gridH;
 
                 // Card background
-                int cardBg = isSelected ? AetherUi.COLOR_CARD_HOVER : AetherUi.COLOR_CARD;
-                if (hover && !isSelected) cardBg = 0xFF1A1F2A;
+                int cardBg = isSelected ? AetherUi.CARD_HOVER : AetherUi.CARD;
+                if (hover && !isSelected) cardBg = AetherUi.CARD_HOVER;
                 Mc189Compat.drawRect(cx, cy, cx + cardW, cy + cardH, cardBg);
 
                 // Accent bar at top when enabled
                 if (isEnabled) {
-                    Mc189Compat.drawRect(cx, cy, cx + cardW, cy + 3, AetherUi.MODERN_UI_ACCENT);
+                    Mc189Compat.drawRect(cx, cy, cx + cardW, cy + 3, AetherUi.ACCENT);
                 }
 
                 // Selection indicator
                 if (isSelected) {
-                    Mc189Compat.drawRect(cx, cy, cx + 2, cy + cardH, AetherUi.MODERN_UI_ACCENT);
+                    Mc189Compat.drawRect(cx, cy, cx + 2, cy + cardH, AetherUi.ACCENT);
                 }
 
                 // ---- IMAGE PLACEHOLDER ----
@@ -696,21 +652,21 @@ public final class AetherModMenuScreen extends GuiScreen {
                 // Module name (centred below icon)
                 String name = mod.metadata().name();
                 String trimmedName = AetherUi.trim(font, name, cardW - 8);
-                AetherUi.centered(font, trimmedName, cx, iconY + iconSize + 6, cardW, AetherUi.COLOR_TEXT_PRIMARY);
+                AetherUi.centered(font, trimmedName, cx, iconY + iconSize + 6, cardW, AetherUi.TEXT_PRIMARY);
 
                 // Enabled/Disabled label
                 String status = isEnabled ? "Enabled" : "Disabled";
-                int statusColor = isEnabled ? 0xFF55FF88 : AetherUi.COLOR_TEXT_DISABLED;
+                int statusColor = isEnabled ? AetherUi.ACCENT_ON : AetherUi.TEXT_DISABLED;
                 AetherUi.centered(font, status, cx, iconY + iconSize + 18, cardW, statusColor);
 
                 // Settings gear indicator (top-right)
                 if (!mod.settings().isEmpty()) {
-                    AetherUi.text(font, "\u2699", cx + cardW - 12, cy + 5, AetherUi.COLOR_TEXT_DISABLED);
+                    AetherUi.text(font, "\u2699", cx + cardW - 12, cy + 5, AetherUi.TEXT_DISABLED);
                 }
 
                 // Subtle hover border
                 if (hover) {
-                    int bc = 0x44FFFFFF;
+                    int bc = AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x44);
                     Mc189Compat.drawRect(cx, cy, cx + cardW, cy + 1, bc);
                     Mc189Compat.drawRect(cx, cy + cardH - 1, cx + cardW, cy + cardH, bc);
                     Mc189Compat.drawRect(cx, cy, cx + 1, cy + cardH, bc);
@@ -726,8 +682,8 @@ public final class AetherModMenuScreen extends GuiScreen {
                 int thumbH = (int) ((barH / (barH + maxScroll)) * barH);
                 thumbH = Math.max(20, thumbH);
                 int thumbY = gridY + (int) ((scrollOffset / maxScroll) * (barH - thumbH));
-                Mc189Compat.drawRect(x + width - 4, gridY, x + width, gridY + barH, 0x22FFFFFF);
-                Mc189Compat.drawRect(x + width - 4, thumbY, x + width, thumbY + thumbH, AetherUi.MODERN_UI_ACCENT);
+                Mc189Compat.drawRect(x + width - 4, gridY, x + width, gridY + barH, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x22));
+                Mc189Compat.drawRect(x + width - 4, thumbY, x + width, thumbY + thumbH, AetherUi.ACCENT);
             }
         }
 
@@ -738,14 +694,14 @@ public final class AetherModMenuScreen extends GuiScreen {
         private void drawModuleIconPlaceholder(Object font, ClientModule mod, int ix, int iy, int size) {
             // 1. Draw procedural background card container
             Integer catColor = CATEGORY_ICON_COLORS.get(mod.metadata().category());
-            int bgColor = catColor != null ? catColor : 0xFF1E2838;
+            int bgColor = catColor != null ? catColor : AetherUi.CARD_HOVER;
             Mc189Compat.drawRect(ix, iy, ix + size, iy + size, bgColor);
 
             // Subtle inner border bevel
-            Mc189Compat.drawRect(ix, iy, ix + size, iy + 1, 0x33FFFFFF);
-            Mc189Compat.drawRect(ix, iy + size - 1, ix + size, iy + size, 0x22000000);
-            Mc189Compat.drawRect(ix, iy, ix + 1, iy + size, 0x22FFFFFF);
-            Mc189Compat.drawRect(ix + size - 1, iy, ix + size, iy + size, 0x22000000);
+            Mc189Compat.drawRect(ix, iy, ix + size, iy + 1, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x33));
+            Mc189Compat.drawRect(ix, iy + size - 1, ix + size, iy + size, AetherUi.withAlpha(AetherUi.SHADOW, 0x22));
+            Mc189Compat.drawRect(ix, iy, ix + 1, iy + size, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x22));
+            Mc189Compat.drawRect(ix + size - 1, iy, ix + size, iy + size, AetherUi.withAlpha(AetherUi.SHADOW, 0x22));
 
             // 2. Draw custom PNG module icon texture
             String texturePath = "textures/mod/" + mod.metadata().id() + ".png";
@@ -821,9 +777,9 @@ public final class AetherModMenuScreen extends GuiScreen {
                 @Override public void draw(Object font, Setting<?> setting, int y, int mouseX) {
                     boolean on = ((Boolean) setting.value()).booleanValue();
                     int toggleX = PropertyPanel.this.x + PropertyPanel.this.width - 45;
-                    Mc189Compat.drawRect(toggleX, y, toggleX + 30, y + 14, AetherUi.COLOR_TOGGLE_BG);
+                    Mc189Compat.drawRect(toggleX, y, toggleX + 30, y + 14, AetherUi.TOGGLE_BG);
                     Mc189Compat.drawRect(toggleX + 2, y + 2, toggleX + 28, y + 12,
-                            on ? AetherUi.MODERN_UI_ACCENT : AetherUi.COLOR_TEXT_DISABLED);
+                            on ? AetherUi.ACCENT : AetherUi.TEXT_DISABLED);
                 }
                 @Override public void click(Setting<?> setting, int mouseX, int mouseY) {
                     // Row Y already verified by outer mouseClicked loop; only check X.
@@ -839,7 +795,7 @@ public final class AetherModMenuScreen extends GuiScreen {
             settingControllers.put(SettingType.COLOR, new SettingController() {
                 @Override public void draw(Object font, Setting<?> setting, int y, int mouseX) {
                     int swatchX = PropertyPanel.this.x + PropertyPanel.this.width - 45;
-                    Mc189Compat.drawRect(swatchX - 1, y - 1, swatchX + 31, y + 15, AetherUi.COLOR_BORDER);
+                    Mc189Compat.drawRect(swatchX - 1, y - 1, swatchX + 31, y + 15, AetherUi.BORDER);
                     Mc189Compat.drawRect(swatchX, y, swatchX + 30, y + 14, ((Number) setting.value()).intValue());
                 }
                 @Override public void click(Setting<?> setting, int mouseX, int mouseY) {
@@ -864,16 +820,16 @@ public final class AetherModMenuScreen extends GuiScreen {
                     float pct = max > min ? (float) (value - min) / (float) (max - min) : 0;
                     int fillW = (int) (pct * sliderW);
 
-                    Mc189Compat.drawRect(sliderX, y + 2, sliderX + sliderW, y + 12, AetherUi.COLOR_TOGGLE_BG);
-                    Mc189Compat.drawRect(sliderX, y + 2, sliderX + fillW, y + 12, AetherUi.MODERN_UI_ACCENT);
+                    Mc189Compat.drawRect(sliderX, y + 2, sliderX + sliderW, y + 12, AetherUi.TOGGLE_BG);
+                    Mc189Compat.drawRect(sliderX, y + 2, sliderX + fillW, y + 12, AetherUi.ACCENT);
 
                     // Knob
                     int knobX = sliderX + fillW - 2;
-                    Mc189Compat.drawRect(knobX, y, knobX + 4, y + 14, 0xDDFFFFFF);
+                    Mc189Compat.drawRect(knobX, y, knobX + 4, y + 14, AetherUi.PANEL_EDGE);
 
                     String valStr = String.valueOf(value);
                     int textX = sliderX - Mc189Compat.stringWidth(font, valStr) - 6;
-                    AetherUi.text(font, valStr, textX, y + 4, AetherUi.COLOR_TEXT_SECONDARY);
+                    AetherUi.text(font, valStr, textX, y + 4, AetherUi.TEXT_SECONDARY);
                 }
                 @Override public void click(Setting<?> setting, int mouseX, int mouseY) {
                     // Row Y already verified by outer mouseClicked loop; only check X.
@@ -916,8 +872,8 @@ public final class AetherModMenuScreen extends GuiScreen {
                     String trimmed = AetherUi.trim(font, text, maxPillW - 10);
                     int w = Math.min(maxPillW, Math.max(34, Mc189Compat.stringWidth(font, trimmed) + 10));
                     int ctrlX = PropertyPanel.this.x + PropertyPanel.this.width - 15 - w;
-                    Mc189Compat.drawRect(ctrlX, y, ctrlX + w, y + 14, AetherUi.COLOR_CARD);
-                    AetherUi.centered(font, trimmed, ctrlX, y + 4, w, AetherUi.COLOR_TEXT_SECONDARY);
+                    Mc189Compat.drawRect(ctrlX, y, ctrlX + w, y + 14, AetherUi.CARD);
+                    AetherUi.centered(font, trimmed, ctrlX, y + 4, w, AetherUi.TEXT_SECONDARY);
                 }
                 @Override public void click(Setting<?> setting, int mouseX, int mouseY) {
                     // Row Y already verified by outer mouseClicked loop; only check X.
@@ -989,11 +945,11 @@ public final class AetherModMenuScreen extends GuiScreen {
 
         @Override
         void draw(Object font, int mouseX, int mouseY, float dt) {
-            Mc189Compat.drawRect(x, y, x + width, y + height, AetherUi.COLOR_PANEL);
-            Mc189Compat.drawRect(x, y, x + width, y + 1, AetherUi.COLOR_BORDER);
+            Mc189Compat.drawRect(x, y, x + width, y + height, AetherUi.PANEL);
+            Mc189Compat.drawRect(x, y, x + width, y + 1, AetherUi.BORDER);
 
             if (module == null) {
-                AetherUi.centered(font, "Select a module", x, y + height / 2 - 4, width, AetherUi.COLOR_TEXT_DISABLED);
+                AetherUi.centered(font, "Select a module", x, y + height / 2 - 4, width, AetherUi.TEXT_DISABLED);
                 return;
             }
 
@@ -1010,13 +966,13 @@ public final class AetherModMenuScreen extends GuiScreen {
             int headerIconX = x + 12;
             int headerIconY = contentY + 14;
             Integer catColor = CATEGORY_ICON_COLORS.get(module.metadata().category());
-            int iconBg = catColor != null ? catColor : 0xFF4A5568;
+            int iconBg = catColor != null ? catColor : AetherUi.TEXT_DISABLED;
             Mc189Compat.drawRect(headerIconX, headerIconY, headerIconX + headerIconSize, headerIconY + headerIconSize, iconBg);
             String letter = module.metadata().name().substring(0, 1).toUpperCase();
-            AetherUi.centered(font, letter, headerIconX, headerIconY + (headerIconSize - 8) / 2, headerIconSize, 0xFFFFFFFF);
+            AetherUi.centered(font, letter, headerIconX, headerIconY + (headerIconSize - 8) / 2, headerIconSize, AetherUi.readableOn(iconBg));
 
             String titleStr = AetherUi.trim(font, module.metadata().name(), width - (headerIconSize + 28));
-            AetherUi.text(font, titleStr, headerIconX + headerIconSize + 8, contentY + 18, AetherUi.COLOR_TEXT_PRIMARY);
+            AetherUi.text(font, titleStr, headerIconX + headerIconSize + 8, contentY + 18, AetherUi.TEXT_PRIMARY);
 
             // Description (multiline word-wrap to fit inside box)
             String desc = module.metadata().description();
@@ -1031,13 +987,13 @@ public final class AetherModMenuScreen extends GuiScreen {
                     } else if (Mc189Compat.stringWidth(font, line + " " + word) <= maxDescW) {
                         line.append(" ").append(word);
                     } else {
-                        AetherUi.text(font, line.toString(), x + 15, descY, AetherUi.COLOR_TEXT_SECONDARY);
+                        AetherUi.text(font, line.toString(), x + 15, descY, AetherUi.TEXT_SECONDARY);
                         descY += 11;
                         line = new StringBuilder(word);
                     }
                 }
                 if (line.length() > 0) {
-                    AetherUi.text(font, AetherUi.trim(font, line.toString(), maxDescW), x + 15, descY, AetherUi.COLOR_TEXT_SECONDARY);
+                    AetherUi.text(font, AetherUi.trim(font, line.toString(), maxDescW), x + 15, descY, AetherUi.TEXT_SECONDARY);
                     descY += 11;
                 }
             } else {
@@ -1047,26 +1003,26 @@ public final class AetherModMenuScreen extends GuiScreen {
             int settingY = descY + 10;
 
             // General section
-            AetherUi.text(font, "GENERAL", x + 15, settingY, AetherUi.COLOR_TEXT_DISABLED);
+            AetherUi.text(font, "GENERAL", x + 15, settingY, AetherUi.TEXT_DISABLED);
             settingY += 20;
 
             // Enabled toggle
-            AetherUi.text(font, AetherUi.trim(font, "Enabled", width - 70), x + 15, settingY + 4, AetherUi.COLOR_TEXT_PRIMARY);
+            AetherUi.text(font, AetherUi.trim(font, "Enabled", width - 70), x + 15, settingY + 4, AetherUi.TEXT_PRIMARY);
             boolean enabled = module.state() == ModuleState.ENABLED;
             int toggleX = x + width - 45;
-            Mc189Compat.drawRect(toggleX, settingY, toggleX + 30, settingY + 14, AetherUi.COLOR_TOGGLE_BG);
+            Mc189Compat.drawRect(toggleX, settingY, toggleX + 30, settingY + 14, AetherUi.TOGGLE_BG);
             Mc189Compat.drawRect(toggleX + 2, settingY + 2, toggleX + 28, settingY + 12,
-                    enabled ? AetherUi.MODERN_UI_ACCENT : AetherUi.COLOR_TEXT_DISABLED);
+                    enabled ? AetherUi.ACCENT : AetherUi.TEXT_DISABLED);
             settingY += 25;
 
             // Module settings
             if (!module.settings().isEmpty()) {
                 settingY += 10;
-                AetherUi.text(font, "SETTINGS", x + 15, settingY, AetherUi.COLOR_TEXT_DISABLED);
+                AetherUi.text(font, "SETTINGS", x + 15, settingY, AetherUi.TEXT_DISABLED);
                 settingY += 20;
 
                 for (Setting<?> s : module.settings()) {
-                    AetherUi.text(font, AetherUi.trim(font, s.label(), width - 110), x + 15, settingY + 4, AetherUi.COLOR_TEXT_PRIMARY);
+                    AetherUi.text(font, AetherUi.trim(font, s.label(), width - 110), x + 15, settingY + 4, AetherUi.TEXT_PRIMARY);
                     SettingController ctrl = settingControllers.get(s.type());
                     if (ctrl != null) ctrl.draw(font, s, settingY, mouseX);
                     settingY += 22;
@@ -1081,8 +1037,8 @@ public final class AetherModMenuScreen extends GuiScreen {
                 int barH = height;
                 int thumbH = Math.max(20, (int) ((barH / (barH + maxScroll)) * barH));
                 int thumbY = y + (int) ((scrollOffset / maxScroll) * (barH - thumbH));
-                Mc189Compat.drawRect(x + width - 3, y, x + width, y + barH, 0x22FFFFFF);
-                Mc189Compat.drawRect(x + width - 3, thumbY, x + width, thumbY + thumbH, AetherUi.MODERN_UI_ACCENT);
+                Mc189Compat.drawRect(x + width - 3, y, x + width, y + barH, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x22));
+                Mc189Compat.drawRect(x + width - 3, thumbY, x + width, thumbY + thumbH, AetherUi.ACCENT);
             }
         }
 
@@ -1147,28 +1103,31 @@ public final class AetherModMenuScreen extends GuiScreen {
             }
         }
 
+        /**
+         * Next option for a choice pill. The option list lives on the setting itself, so a
+         * choice setting can never render as a dead pill with no alternatives.
+         */
         private String getNextChoice(ClientModule module, Setting<?> setting) {
             String current = String.valueOf(setting.value());
-            String key = module.metadata().id() + "." + setting.id();
-            String[] options = CHOICE_OPTIONS.getOrDefault(key, new String[]{current});
-            if (options.length <= 1) return current;
-            for (int i = 0; i < options.length; i++) {
-                if (options[i].equalsIgnoreCase(current)) return options[(i + 1) % options.length];
+            List<String> options = setting.choices();
+            if (options == null || options.isEmpty()) return current;
+            for (int i = 0; i < options.size(); i++) {
+                if (options.get(i).equalsIgnoreCase(current)) return options.get((i + 1) % options.size());
             }
-            return options[0];
+            return options.get(0);
         }
 
         private int getNumberMin(Setting<?> s) {
-            NumberProperty p = NUMBER_PROPERTIES.get(s.id());
-            return p != null ? p.min : 0;
+            Setting.Range r = s.range();
+            return r != null ? r.min() : 0;
         }
         private int getNumberMax(Setting<?> s) {
-            NumberProperty p = NUMBER_PROPERTIES.get(s.id());
-            return p != null ? p.max : 100;
+            Setting.Range r = s.range();
+            return r != null ? r.max() : 100;
         }
         private int getNumberStep(Setting<?> s) {
-            NumberProperty p = NUMBER_PROPERTIES.get(s.id());
-            return p != null ? p.step : 1;
+            Setting.Range r = s.range();
+            return r != null ? r.step() : 1;
         }
     }
 

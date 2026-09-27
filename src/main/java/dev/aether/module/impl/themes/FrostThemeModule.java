@@ -3,12 +3,20 @@ package dev.aether.module.impl.themes;
 import dev.aether.module.AbstractModule;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleMetadata;
+import dev.aether.theme.ThemeModule;
+import dev.aether.theme.ThemePalette;
+import dev.aether.theme.ThemePalettes;
 
-public class FrostThemeModule extends AbstractModule {
+public class FrostThemeModule extends AbstractModule implements ThemeModule {
     public FrostThemeModule() {
         super(ModuleMetadata.builder("theme.frost", "Frost")
             .category(ModuleCategory.THEMES)
-            .description("Switches the Click GUI to the frost theme.")
+            .description("Cool blue-grey surfaces with an icy highlight accent.")
+            .group(ThemeModule.GROUP)
             .build());
+    }
+
+    public ThemePalette palette() {
+        return ThemePalettes.frost();
     }
 }

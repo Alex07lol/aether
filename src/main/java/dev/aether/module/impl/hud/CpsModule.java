@@ -11,7 +11,7 @@ public class CpsModule extends AbstractModule {
             .description("Shows local mouse click speed.")
             .build());
 
-        addChoice("mode", "Mode", "Modern");
+        addChoice("mode", "Mode", "Modern").choices("Modern", "Legacy");
         addBool("show_background", "Show Background", true);
         addBool("right_click", "Right Click", false);
         addColor("background_color", "Background Color", 0x6F000000);

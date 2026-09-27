@@ -28,8 +28,6 @@ public final class AetherHudEditorScreen extends GuiScreen {
     private static final int KEY_RBRACKET = 27;
 
     private static final int SNAP_THRESHOLD = 6;
-    private static final int ACCENT_COLOR = 0xFF52BEEB;
-    private static final int GUIDE_LINE_COLOR = 0xCC52BEEB;
 
     private final AetherClient client;
     private final ForgeHudRenderer renderer;
@@ -98,11 +96,12 @@ public final class AetherHudEditorScreen extends GuiScreen {
     }
 
     private void renderScreen(int mouseX, int mouseY, float partialTicks) {
+        AetherUi.syncTheme();
         int w = Mc189Compat.screenWidth(this);
         int h = Mc189Compat.screenHeight(this);
 
-        // Background screen dark dim
-        Mc189Compat.drawRectangle(0, 0, w, h, 0x40000000);
+        // Background screen dim, taken from the active theme like every other Aether screen.
+        Mc189Compat.drawRectangle(0, 0, w, h, AetherUi.withAlpha(AetherUi.SHADOW, 0x40));
         drawGrid();
         renderer.renderForEditor();
 
@@ -115,11 +114,13 @@ public final class AetherHudEditorScreen extends GuiScreen {
         }
 
         // Draw active snap guide lines
+        int guide = AetherUi.withAlpha(AetherUi.ACCENT, 0xCC);
+        int guideFade = AetherUi.withAlpha(AetherUi.ACCENT, 0x00);
         for (int xLine : activeVerticalSnapLines) {
-            Mc189Compat.drawGradientRectangle(xLine, 0, 1, h, GUIDE_LINE_COLOR, 0x0052BEEB);
+            Mc189Compat.drawGradientRectangle(xLine, 0, 1, h, guide, guideFade);
         }
         for (int yLine : activeHorizontalSnapLines) {
-            Mc189Compat.drawHorizontalGradientRectangle(0, yLine, w, 1, GUIDE_LINE_COLOR, 0x0052BEEB);
+            Mc189Compat.drawHorizontalGradientRectangle(0, yLine, w, 1, guide, guideFade);
         }
 
         // Render element selection bounding boxes and handles
@@ -133,11 +134,15 @@ public final class AetherHudEditorScreen extends GuiScreen {
             int x2 = element.x() + dim.width + 2;
             int y2 = element.y() + dim.height + 2;
 
-            int boxColor = isEnabled ? 0x44FFFFFF : 0x33AAAAAA;
+            int boxColor = isEnabled
+                ? AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x44)
+                : AetherUi.withAlpha(AetherUi.TEXT_DISABLED, 0x66);
             if (element == selectedElement || element == draggingElement) {
-                boxColor = ACCENT_COLOR;
+                boxColor = AetherUi.ACCENT;
             } else if (mouseX >= x1 && mouseX <= x2 && mouseY >= y1 && mouseY <= y2) {
-                boxColor = isEnabled ? 0x99FFFFFF : 0x66AAAAAA;
+                boxColor = isEnabled
+                    ? AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x99)
+                    : AetherUi.withAlpha(AetherUi.TEXT_DISABLED, 0xAA);
             }
 
             // Outline & Rounded Box
@@ -163,7 +168,7 @@ public final class AetherHudEditorScreen extends GuiScreen {
     }
 
     private void drawHandle(int x, int y) {
-        Mc189Compat.drawRoundedRectangle(x - 1, y - 1, 5, 5, 1, ACCENT_COLOR, 0);
+        Mc189Compat.drawRoundedRectangle(x - 1, y - 1, 5, 5, 1, AetherUi.ACCENT, 0);
     }
 
     private void updateDraggingPosition(int mouseX, int mouseY) {
@@ -267,8 +272,9 @@ public final class AetherHudEditorScreen extends GuiScreen {
         }
 
         // Background card with rounded corners & top accent line
-        Mc189Compat.drawRoundedRectangle(barX, barY, barW, barH, 4, 0xF010141B, 0);
-        Mc189Compat.drawHorizontalGradientRectangle(barX + 2, barY, barW - 4, 2, ACCENT_COLOR, 0xFF00FFFF);
+        Mc189Compat.drawRoundedRectangle(barX, barY, barW, barH, 4, AetherUi.withAlpha(AetherUi.PANEL, 0xFF), 0);
+        Mc189Compat.drawHorizontalGradientRectangle(barX + 2, barY, barW - 4, 2, AetherUi.ACCENT,
+            AetherUi.blend(AetherUi.ACCENT, AetherUi.TEXT_PRIMARY, 0.6F));
 
         // Name
         String name = element.id();
@@ -276,33 +282,35 @@ public final class AetherHudEditorScreen extends GuiScreen {
         if (lastDot >= 0 && lastDot < name.length() - 1) {
             name = name.substring(lastDot + 1).toUpperCase(Locale.ENGLISH);
         }
-        Mc189Compat.drawStringWithShadow(font, name, barX + 6, barY + 4, 0xFFFFFFFF);
+        Mc189Compat.drawStringWithShadow(font, name, barX + 6, barY + 4, AetherUi.TEXT_PRIMARY);
 
         // Enable / Disable Toggle Button
         boolean isEnabled = renderer.enabled(element.id());
         int toggleX = barX + 65;
         int toggleY = barY + 3;
         boolean hoverToggle = mouseX >= toggleX && mouseX <= toggleX + 32 && mouseY >= toggleY && mouseY <= toggleY + 18;
-        int toggleColor = isEnabled ? (hoverToggle ? 0xFF38A169 : 0xFF289C50) : (hoverToggle ? 0xFFE53E3E : 0xFFA03232);
+        int toggleColor = isEnabled
+            ? AetherUi.withAlpha(AetherUi.ACCENT_ON, hoverToggle ? 0xFF : 0xCC)
+            : AetherUi.withAlpha(AetherUi.WARN, hoverToggle ? 0xFF : 0xCC);
         Mc189Compat.drawRoundedRectangle(toggleX, toggleY, 32, 18, 2, toggleColor, 0);
-        Mc189Compat.drawStringWithShadow(font, isEnabled ? "ON" : "OFF", toggleX + (isEnabled ? 8 : 5), toggleY + 5, 0xFFFFFFFF);
+        Mc189Compat.drawStringWithShadow(font, isEnabled ? "ON" : "OFF", toggleX + (isEnabled ? 8 : 5), toggleY + 5, AetherUi.readableOn(toggleColor));
 
         // Scale Control
         int scalePct = Math.round(element.scale() * 100.0F);
         String scaleText = "Scale: " + scalePct + "%";
-        Mc189Compat.drawStringWithShadow(font, scaleText, barX + 104, barY + 4, 0xFF52BEEB);
+        Mc189Compat.drawStringWithShadow(font, scaleText, barX + 104, barY + 4, AetherUi.ACCENT);
 
         // Opacity Control
         int opacityPct = Math.round(element.opacity() * 100.0F);
         String opacityText = "Alpha: " + opacityPct + "%";
-        Mc189Compat.drawStringWithShadow(font, opacityText, barX + 172, barY + 4, 0xFFA0AEC0);
+        Mc189Compat.drawStringWithShadow(font, opacityText, barX + 172, barY + 4, AetherUi.TEXT_SECONDARY);
 
         // Reset Button
         int btnX = barX + barW - 36;
         int btnY = barY + 3;
         boolean hoverReset = mouseX >= btnX && mouseX <= btnX + 32 && mouseY >= btnY && mouseY <= btnY + 18;
-        Mc189Compat.drawRoundedRectangle(btnX, btnY, 32, 18, 2, hoverReset ? 0xCCFF5555 : 0x44FF5555, 0);
-        Mc189Compat.drawStringWithShadow(font, "Reset", btnX + 3, btnY + 5, 0xFFFFFFFF);
+        Mc189Compat.drawRoundedRectangle(btnX, btnY, 32, 18, 2, AetherUi.withAlpha(AetherUi.WARN, hoverReset ? 0xCC : 0x44), 0);
+        Mc189Compat.drawStringWithShadow(font, "Reset", btnX + 3, btnY + 5, AetherUi.TEXT_PRIMARY);
     }
 
     private void drawHelpBar() {
@@ -314,8 +322,8 @@ public final class AetherHudEditorScreen extends GuiScreen {
         int barX = (w - textW - 16) / 2;
         int barY = h - 22;
 
-        Mc189Compat.drawRoundedRectangle(barX, barY, textW + 16, 18, 3, 0xDD10141B, 0);
-        Mc189Compat.drawStringWithShadow(font, help, barX + 8, barY + 5, ACCENT_COLOR);
+        Mc189Compat.drawRoundedRectangle(barX, barY, textW + 16, 18, 3, AetherUi.withAlpha(AetherUi.PANEL, 0xDD), 0);
+        Mc189Compat.drawStringWithShadow(font, help, barX + 8, barY + 5, AetherUi.ACCENT);
     }
 
     @Override
@@ -491,10 +499,10 @@ public final class AetherHudEditorScreen extends GuiScreen {
         int h = Mc189Compat.screenHeight(this);
         int snap = 16;
         for (int x = 0; x < w; x += snap) {
-            Mc189Compat.drawRect(x, 0, x + 1, h, 0x0DFFFFFF);
+            Mc189Compat.drawRect(x, 0, x + 1, h, AetherUi.withAlpha(AetherUi.BORDER, 0x0D));
         }
         for (int y = 0; y < h; y += snap) {
-            Mc189Compat.drawRect(0, y, w, y + 1, 0x0DFFFFFF);
+            Mc189Compat.drawRect(0, y, w, y + 1, AetherUi.withAlpha(AetherUi.BORDER, 0x0D));
         }
     }
 

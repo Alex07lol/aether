@@ -12,10 +12,10 @@ public class ZoomModule extends AbstractModule {
             .build());
 
         addKeybind("keybind", "Keybind", 46);
-        addNumber("zoom_percent", "Zoom Percent", 40);
+        addNumber("zoom_percent", "Zoom Percent", 40, 5, 100, 5);
         addBool("scroll_to_zoom", "Scroll To Zoom", true);
-        addNumber("min_zoom_percent", "Minimum Zoom", 15);
-        addNumber("max_zoom_percent", "Maximum Zoom", 90);
-        addNumber("scroll_step", "Scroll Step", 5);
+        addNumber("min_zoom_percent", "Minimum Zoom", 15, 5, 100, 5);
+        addNumber("max_zoom_percent", "Maximum Zoom", 90, 5, 100, 5);
+        addNumber("scroll_step", "Scroll Step", 5, 1, 25, 1);
     }
 }

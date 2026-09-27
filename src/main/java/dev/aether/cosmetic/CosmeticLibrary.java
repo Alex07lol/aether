@@ -15,9 +15,20 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+/**
+ * Owns the selectable cosmetics and which asset fills each slot.
+ * <p>
+ * Slots are per {@link CosmeticType}: a cape and a halo are chosen independently, and each
+ * slot has a built-in fallback so a renderer always has something to draw when the matching
+ * module is on. The cape slot stays exposed through {@link #selected()} for the legacy
+ * single-selection callers.
+ */
 public final class CosmeticLibrary {
+    private static final CosmeticType DEFAULT_SLOT = CosmeticType.STATIC_CAPE;
+
     private final Path storageDirectory;
     private final Map<String, CosmeticAsset> assets = new LinkedHashMap<String, CosmeticAsset>();
+    private final Map<CosmeticType, String> selection = new LinkedHashMap<CosmeticType, String>();
     private String selectedId;
 
     public CosmeticLibrary(Path storageDirectory) {
@@ -50,8 +61,27 @@ public final class CosmeticLibrary {
                 assets.put(id, new CosmeticAsset(id, stripExtension(path.getFileName().toString()), CosmeticType.STATIC_CAPE, path, false));
             }
         }
+        // Selections survive a reload as long as their asset is still on disk.
+        java.util.Iterator<Map.Entry<CosmeticType, String>> slots = selection.entrySet().iterator();
+        while (slots.hasNext()) {
+            if (!assets.containsKey(slots.next().getValue())) {
+                slots.remove();
+            }
+        }
         if (selectedId == null || !assets.containsKey(selectedId)) {
-            selectedId = "builtin.frost_cape";
+            CosmeticAsset cape = firstBuiltIn(DEFAULT_SLOT);
+            selectedId = cape == null ? null : cape.id();
+        }
+        if (selectedId != null) {
+            selection.put(DEFAULT_SLOT, selectedId);
+        }
+        for (CosmeticType type : CosmeticType.values()) {
+            if (!selection.containsKey(type)) {
+                CosmeticAsset fallback = firstBuiltIn(type);
+                if (fallback != null) {
+                    selection.put(type, fallback.id());
+                }
+            }
         }
     }
 
@@ -63,11 +93,58 @@ public final class CosmeticLibrary {
         return selectedId == null ? null : assets.get(selectedId);
     }
 
+    /**
+     * @return the asset filling the given slot, or {@code null} when nothing of that type
+     *     is available yet. Built-ins register on {@link #load()}, so this is normally
+     *     non-null for every slot a module can render.
+     */
+    public CosmeticAsset selectedFor(CosmeticType type) {
+        if (type == null) {
+            return null;
+        }
+        String id = selection.get(type);
+        CosmeticAsset asset = id == null ? null : assets.get(id);
+        return asset != null ? asset : (type == DEFAULT_SLOT ? selected() : null);
+    }
+
+    /**
+     * @return the asset a renderer should draw for this slot: the selected one, else the
+     *     first built-in of that type, else {@code null} when the slot has nothing.
+     */
+    public CosmeticAsset effective(CosmeticType type) {
+        CosmeticAsset chosen = selectedFor(type);
+        if (chosen != null) {
+            return chosen;
+        }
+        CosmeticAsset fallback = firstBuiltIn(type);
+        if (fallback == null) {
+            return null;
+        }
+        selection.put(type, fallback.id());
+        return fallback;
+    }
+
+    /** Selects a cosmetic into the slot that matches its own type. */
     public void select(String id) {
         if (!assets.containsKey(id)) {
             throw new IllegalArgumentException("Unknown cosmetic: " + id);
         }
-        selectedId = id;
+        CosmeticAsset asset = assets.get(id);
+        selection.put(asset.type(), asset.id());
+        if (asset.type() == DEFAULT_SLOT) {
+            selectedId = asset.id();
+        }
+    }
+
+    /** @return every asset that can fill the given slot. */
+    public List<CosmeticAsset> forType(CosmeticType type) {
+        List<CosmeticAsset> matches = new ArrayList<CosmeticAsset>();
+        for (CosmeticAsset asset : assets.values()) {
+            if (asset.type() == type) {
+                matches.add(asset);
+            }
+        }
+        return Collections.unmodifiableList(matches);
     }
 
     public CosmeticValidationResult importCapePng(Path source) throws IOException {
@@ -84,8 +161,9 @@ public final class CosmeticLibrary {
 
         String id = "local." + sanitize(stripExtension(fileName));
         CosmeticAsset asset = new CosmeticAsset(id, stripExtension(source.getFileName().toString()), CosmeticType.STATIC_CAPE, destination, false);
-        assets.put(id, asset);
-        selectedId = id;
+        put(asset);
+        // Importing a cape selects it into the cape slot so it is worn immediately.
+        select(id);
         return CosmeticValidationResult.valid(asset.name() + " imported.");
     }
 
@@ -115,13 +193,37 @@ public final class CosmeticLibrary {
         String configured = document.get("cosmetics.selected", selectedId);
         if (configured != null && assets.containsKey(configured)) {
             selectedId = configured;
+            selection.put(DEFAULT_SLOT, configured);
+        }
+        for (CosmeticType type : CosmeticType.values()) {
+            String stored = document.get(slotKey(type), null);
+            if (stored != null && assets.containsKey(stored)) {
+                selection.put(type, stored);
+            }
         }
     }
 
     public void writeConfig(ConfigDocument.Builder builder) {
         if (selectedId != null) {
+            // Kept for configs written before slots existed.
             builder.put("cosmetics.selected", selectedId);
         }
+        for (Map.Entry<CosmeticType, String> entry : selection.entrySet()) {
+            builder.put(slotKey(entry.getKey()), entry.getValue());
+        }
+    }
+
+    private static String slotKey(CosmeticType type) {
+        return "cosmetics." + type.name().toLowerCase(Locale.ENGLISH);
+    }
+
+    private CosmeticAsset firstBuiltIn(CosmeticType type) {
+        for (CosmeticAsset asset : assets.values()) {
+            if (asset.builtIn() && asset.type() == type) {
+                return asset;
+            }
+        }
+        return null;
     }
 
     public Path storageDirectory() {
@@ -132,10 +234,30 @@ public final class CosmeticLibrary {
         return storageDirectory.resolve("imports");
     }
 
+    /** Registers the procedural catalogue: every slot has at least one asset to draw. */
     private void registerBuiltIns() {
-        assets.put("builtin.frost_cape", new CosmeticAsset("builtin.frost_cape", "Aether Frost Cape", CosmeticType.STATIC_CAPE, null, true));
-        assets.put("builtin.sky_halo", new CosmeticAsset("builtin.sky_halo", "Sky Halo", CosmeticType.HALO, null, true));
-        assets.put("builtin.cloud_trail", new CosmeticAsset("builtin.cloud_trail", "Cloud Trail", CosmeticType.TRAIL, null, true));
+        put(new CosmeticAsset("builtin.frost_cape", "Aether Frost Cape", CosmeticType.STATIC_CAPE, null, true,
+            0xFF9FD8FF, 0xFF2C5C93));
+        put(new CosmeticAsset("builtin.ember_cape", "Ember Cape", CosmeticType.STATIC_CAPE, null, true,
+            0xFFFF9A4D, 0xFF7A2B0A));
+        put(new CosmeticAsset("builtin.frost_wings", "Frost Wings", CosmeticType.WINGS, null, true,
+            0xFFDFF3FF, 0xFF3E8CD6));
+        put(new CosmeticAsset("builtin.ember_wings", "Ember Wings", CosmeticType.WINGS, null, true,
+            0xFFFFD9A8, 0xFFB4491A));
+        put(new CosmeticAsset("builtin.sky_halo", "Sky Halo", CosmeticType.HALO, null, true,
+            0xFFB8ECFF, 0x66FFFFFF));
+        put(new CosmeticAsset("builtin.gold_halo", "Golden Halo", CosmeticType.HALO, null, true,
+            0xFFFFE08A, 0x66FFD75E));
+        put(new CosmeticAsset("builtin.aether_hat", "Aether Cap", CosmeticType.HAT, null, true,
+            0xFF2E3B58, 0xFFFFD75E));
+        put(new CosmeticAsset("builtin.cloud_trail", "Cloud Trail", CosmeticType.TRAIL, null, true,
+            0xCCFFFFFF, 0x33FFFFFF));
+        put(new CosmeticAsset("builtin.spark_trail", "Spark Trail", CosmeticType.TRAIL, null, true,
+            0xFFFFF0A0, 0x44FFD34D));
+    }
+
+    private void put(CosmeticAsset asset) {
+        assets.put(asset.id(), asset);
     }
 
     private static CosmeticValidationResult validateCapePng(Path source) throws IOException {

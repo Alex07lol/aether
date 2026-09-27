@@ -3,12 +3,20 @@ package dev.aether.module.impl.themes;
 import dev.aether.module.AbstractModule;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleMetadata;
+import dev.aether.theme.ThemeModule;
+import dev.aether.theme.ThemePalette;
+import dev.aether.theme.ThemePalettes;
 
-public class MidnightThemeModule extends AbstractModule {
+public class MidnightThemeModule extends AbstractModule implements ThemeModule {
     public MidnightThemeModule() {
         super(ModuleMetadata.builder("theme.midnight", "Midnight")
             .category(ModuleCategory.THEMES)
-            .description("Switches the Click GUI to a dark midnight theme.")
+            .description("Near-black surfaces with a violet accent for low-light sessions.")
+            .group(ThemeModule.GROUP)
             .build());
+    }
+
+    public ThemePalette palette() {
+        return ThemePalettes.midnight();
     }
 }

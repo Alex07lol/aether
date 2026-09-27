@@ -11,6 +11,6 @@ public class TimeChangerModule extends AbstractModule {
             .description("Changes the in-game world time of day. Offset controls the visual time (0=dawn, 12000=dusk).")
             .build());
 
-        addNumber("offset", "Offset", 12000);
+        addNumber("offset", "Offset", 12000, 0, 24000, 500);
     }
 }

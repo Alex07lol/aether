@@ -8,7 +8,10 @@ public class SkyCustomizationModule extends AbstractModule {
     public SkyCustomizationModule() {
         super(ModuleMetadata.builder("graphics.sky_customization", "Sky Customization")
             .category(ModuleCategory.GRAPHICS)
-            .description("Customizes the sky rendering with configurable colors, fog, and cloud styles.")
+            .description("Overrides the cloud style and clears the distance fog.")
             .build());
+
+        addChoice("clouds", "Clouds", "Vanilla").choices("Vanilla", "Off", "Fast", "Fancy");
+        addBool("hide_fog", "Hide Fog", false);
     }
 }

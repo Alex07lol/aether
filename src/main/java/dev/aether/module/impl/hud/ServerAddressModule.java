@@ -11,7 +11,7 @@ public class ServerAddressModule extends AbstractModule {
             .description("Displays the current server address on the HUD.")
             .build());
 
-        addChoice("mode", "Mode", "Modern");
+        addChoice("mode", "Mode", "Modern").choices("Modern", "Legacy");
         addBool("show_background", "Show Background", true);
         addColor("text_color", "Text Color", 0xFFFFFFFF);
         addColor("background_color", "Background Color", 0x6F000000);

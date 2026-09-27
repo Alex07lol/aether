@@ -14,7 +14,7 @@ public class ScoreboardCustomizationModule extends AbstractModule {
         addBool("show_background", "Show Background", true);
         addBool("text_shadow", "Text Shadow", true);
         addBool("hide_red_numbers", "Hide Red Numbers", false);
-        addNumber("scale", "Scale", 100);
+        addNumber("scale", "Scale", 100, 50, 150, 5);
         addColor("title_color", "Title Color", 0xFFFFFFFF);
         addColor("text_color", "Text Color", 0xFFFFFFFF);
         addColor("background_color", "Background Color", 0x6F000000);

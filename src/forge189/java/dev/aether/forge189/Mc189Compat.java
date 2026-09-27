@@ -1,5 +1,7 @@
 package dev.aether.forge189;
 
+import dev.aether.graphics.FirstPersonAnims;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiScreen;
@@ -179,33 +181,24 @@ public final class Mc189Compat {
         setField(gameSettings, new String[] {"thirdPersonView", "field_74320_O"}, Integer.valueOf(value));
     }
 
-    static int hurtTime(Object entity) {
+    /** @return the player's hurt timer, used by the hurt-camera mixin. */
+    public static int hurtTime(Object entity) {
         return intField(entity, new String[] {"hurtTime", "field_70737_aN"});
     }
 
-    static void setHurtTime(Object entity, int value) {
-        setField(entity, new String[] {"hurtTime", "field_70737_aN"}, Integer.valueOf(value));
-    }
-
-    static int maxHurtTime(Object entity) {
+    /** @return the hurt timer's initial value, the denominator of the shake curve. */
+    public static int maxHurtTime(Object entity) {
         return intField(entity, new String[] {"maxHurtTime", "field_70738_aO"});
     }
 
-    static void setMaxHurtTime(Object entity, int value) {
-        setField(entity, new String[] {"maxHurtTime", "field_70738_aO"}, Integer.valueOf(value));
-    }
-
-    static float attackedAtYaw(Object entity) {
+    /** @return the yaw the last hit came from, which vanilla shakes the camera around. */
+    public static float attackedAtYaw(Object entity) {
         return floatField(entity, new String[] {"attackedAtYaw", "field_70739_aP"});
     }
 
     static AxisAlignedBB getEntityBoundingBox(Object entity) {
         Object obj = invoke(entity, new String[] {"getEntityBoundingBox", "func_174813_aQ"});
         return obj instanceof AxisAlignedBB ? (AxisAlignedBB) obj : null;
-    }
-
-    static void setAttackedAtYaw(Object entity, float value) {
-        setField(entity, new String[] {"attackedAtYaw", "field_70739_aP"}, Float.valueOf(value));
     }
 
     static float gammaSetting(Object gameSettings) {
@@ -531,6 +524,114 @@ public final class Mc189Compat {
         invoke(player, new String[] {"setSprinting", "func_70031_b"}, new Class<?>[] {Boolean.TYPE}, Boolean.valueOf(sprinting));
     }
 
+    static boolean isSwingInProgress(Object entity) {
+        Object value = getField(entity, new String[] {"isSwingInProgress", "field_70749_d"});
+        return value instanceof Boolean && ((Boolean) value).booleanValue();
+    }
+
+    static void setSwingInProgress(Object entity, boolean value) {
+        setField(entity, new String[] {"isSwingInProgress", "field_70749_d"}, Boolean.valueOf(value));
+    }
+
+    static void setSwingProgressInt(Object entity, int value) {
+        setField(entity, new String[] {"swingProgressInt", "field_70754_P"}, Integer.valueOf(value));
+    }
+
+    static boolean usingItem(Object player) {
+        Object value = invoke(player, new String[] {"isUsingItem", "func_71039_bw"});
+        return value instanceof Boolean && ((Boolean) value).booleanValue();
+    }
+
+    static Object itemInUse(Object player) {
+        return invoke(player, new String[] {"getItemInUse", "func_71011_bu"});
+    }
+
+    /**
+     * True for effects handed out by ambient sources (beacons), which 1.8.9 exposes through
+     * {@code PotionEffect.getIsAmbient()}. An unmapped runtime reports false, so a name
+     * mismatch shows the effect rather than silently hiding it.
+     */
+    static boolean isAmbientEffect(Object effect) {
+        Object value = invoke(effect, new String[] {"getIsAmbient", "func_180154_f"});
+        if (value instanceof Boolean) {
+            return ((Boolean) value).booleanValue();
+        }
+        value = getField(effect, new String[] {"isAmbient", "field_180155_a"});
+        return value instanceof Boolean && ((Boolean) value).booleanValue();
+    }
+
+    static String itemUseAction(Object stack) {
+        if (stack == null) {
+            return "NONE";
+        }
+        Object action = invoke(stack, new String[] {"getItemUseAction", "func_77975_n"});
+        return action == null ? "NONE" : action.toString();
+    }
+
+    /** @return the 1.7 pose action of a held stack, used by the first-person animation mixin. */
+    public static FirstPersonAnims.Action useActionKind(Object stack) {
+        return FirstPersonAnims.action(itemUseAction(stack));
+    }
+
+    /** @return the local player, or {@code null} when the client is not in a world. */
+    public static Object localPlayer() {
+        return player(minecraft());
+    }
+
+    /** @return the arm swing progress for this frame, or {@code 0} when the entity cannot report it. */
+    public static float swingProgress(Object entity, float partialTicks) {
+        Object value = invoke(entity, new String[] {"getSwingProgress", "func_70678_g"},
+            new Class<?>[] {Float.TYPE}, Float.valueOf(partialTicks));
+        return value instanceof Number ? ((Number) value).floatValue() : 0.0F;
+    }
+
+    /**
+     * @return the ticks left in the entity's current item use, or {@code -1} when the runtime
+     *         cannot report them. Both getter names are tried because 1.8 renamed it; whichever
+     *         answers is the value vanilla's own bow code reads.
+     */
+    public static int itemUseRemainingTicks(Object entity) {
+        Object value = invoke(entity, new String[] {"getItemInUseMaxCount", "getItemInUseCount", "func_71052_bv"});
+        return value instanceof Number ? ((Number) value).intValue() : -1;
+    }
+
+    /**
+     * Vanilla eases the bow draw with a smoothstep, 1.7 with a square. Handing vanilla a
+     * compensated partial tick puts its own pose on the 1.7 curve without duplicating any of
+     * its rotations.
+     *
+     * @return the partial tick to pass to the bow transform, or {@code null} to keep vanilla's
+     *         own easing (unknown tick state, or a draw fraction where both curves agree)
+     */
+    public static Float legacyBowPartialTicks(Object player, float partialTicks) {
+        int remaining = itemUseRemainingTicks(player);
+        if (remaining < 0 || FirstPersonAnims.bowEasesAgree(remaining, partialTicks)) {
+            return null;
+        }
+        return Float.valueOf(FirstPersonAnims.bowPartialTicks(remaining, partialTicks));
+    }
+
+    static String itemUnlocalizedName(Object stack) {
+        if (stack == null) {
+            return "";
+        }
+        Object item = invoke(stack, new String[] {"getItem", "func_77973_b"});
+        if (item == null) {
+            return "";
+        }
+        Object name = invoke(item, new String[] {"getUnlocalizedName", "func_77658_a"});
+        return name instanceof String ? (String) name : "";
+    }
+
+    /**
+     * Matched by unlocalized name because the string survives obfuscation, unlike the class
+     * name (the runtime class is {@code aji} in production 1.8.9).
+     */
+    public static boolean isFishingRod(Object stack) {
+        String name = itemUnlocalizedName(stack);
+        return name.length() > 0 && name.toLowerCase(java.util.Locale.ENGLISH).indexOf("fishingrod") >= 0;
+    }
+
     static void onCriticalHit(Object player, Object target) {
         if (target instanceof Entity) {
             invoke(player, new String[] {"onCriticalHit", "func_71009_b"}, new Class<?>[] {Entity.class}, target);
@@ -561,6 +662,154 @@ public final class Mc189Compat {
 
     static float rotationPitch(Object entity) {
         return floatField(entity, new String[] {"rotationPitch", "field_70125_A"});
+    }
+
+    /**
+     * Body yaw interpolated between the last two ticks, so a rendered cape or wing follows a
+     * turning player smoothly. Falls back to the raw yaw when the previous-yaw field is not
+     * reachable (it is only present under MCP names in the reference mappings).
+     */
+    static float interpolatedYaw(Object entity, float partialTicks) {
+        float yaw = rotationYaw(entity);
+        Object previous = getField(entity, new String[] {"prevRotationYaw"});
+        if (previous instanceof Float) {
+            float previousYaw = ((Float) previous).floatValue();
+            // Skip interpolation across a 180-degree wrap, which would spin the geometry.
+            if (Math.abs(previousYaw - yaw) < 45.0F) {
+                return previousYaw + (yaw - previousYaw) * partialTicks;
+            }
+        }
+        return yaw;
+    }
+
+    static int entityId(Object entity) {
+        Object id = invoke(entity, new String[] {"getEntityId", "func_145782_y"});
+        return id instanceof Integer ? ((Integer) id).intValue() : 0;
+    }
+
+    static boolean isInvisible(Object entity) {
+        Object invisible = invoke(entity, new String[] {"isInvisible", "func_82150_aj"});
+        return invisible instanceof Boolean && ((Boolean) invisible).booleanValue();
+    }
+
+    static double distanceTo(Object entity, double x, double y, double z) {
+        double dx = posX(entity) - x;
+        double dy = posY(entity) - y;
+        double dz = posZ(entity) - z;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    /** @return the loaded players, or an empty list when the world is not reachable yet. */
+    static java.util.List<?> worldPlayers(Object world) {
+        Object players = getField(world, new String[] {"playerEntities", "field_73010_i"});
+        return players instanceof java.util.List ? (java.util.List<?>) players : java.util.Collections.emptyList();
+    }
+
+    /**
+     * Spawns one vanilla particle in the world. The particle is named by its MCP enum constant
+     * and resolved reflectively, so an unknown name or a different particle API simply draws
+     * nothing instead of failing the whole render pass.
+     */
+    static void spawnParticle(Object world, String particleName, double x, double y, double z,
+                              double vx, double vy, double vz) {
+        if (world == null || particleName == null) {
+            return;
+        }
+        Object particleType = particleType(particleName);
+        if (particleType == null) {
+            return;
+        }
+        Class<?> type = particleType.getClass();
+        invoke(world, new String[] {"spawnParticle", "func_175688_a"}, new Class<?>[] {
+            type, Double.TYPE, Double.TYPE, Double.TYPE, Double.TYPE, Double.TYPE, Double.TYPE, int[].class
+        }, particleType, Double.valueOf(x), Double.valueOf(y), Double.valueOf(z),
+            Double.valueOf(vx), Double.valueOf(vy), Double.valueOf(vz), new int[0]);
+    }
+
+    private static Object particleType(String particleName) {
+        try {
+            Class<?> particleTypes = Class.forName("net.minecraft.util.EnumParticleTypes");
+            String cacheKey = "particle#" + particleName;
+            Field cached = fieldCache.get(cacheKey);
+            if (cached != null) {
+                try {
+                    return cached.get(null);
+                } catch (IllegalAccessException ignored) {
+                    fieldCache.remove(cacheKey);
+                }
+            }
+            Field constant = findField(particleTypes, particleName);
+            if (constant != null) {
+                constant.setAccessible(true);
+                fieldCache.put(cacheKey, constant);
+                return constant.get(null);
+            }
+        } catch (ClassNotFoundException ignored) {
+        } catch (IllegalAccessException ignored) {
+        }
+        return null;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Chat components, name tags and armour                              */
+    /* ------------------------------------------------------------------ */
+
+    /** @return the chat line with its formatting codes intact, or {@code null}. */
+    static String chatFormattedText(Object chatComponent) {
+        Object text = invoke(chatComponent, new String[] {"getFormattedText", "func_150254_d"});
+        return text instanceof String ? (String) text : null;
+    }
+
+    /** Builds a plain chat component from legacy-formatted text ({@code §} codes included). */
+    static Object chatComponent(String formattedText) {
+        try {
+            Class<?> type = Class.forName("net.minecraft.util.ChatComponentText");
+            return type.getConstructor(String.class).newInstance(formattedText);
+        } catch (ReflectiveOperationException failure) {
+            return null;
+        } catch (LinkageError failure) {
+            return null;
+        }
+    }
+
+    /** @return the entity's armour points, or {@code 0} when it cannot be read. */
+    static int armourValue(Object entity) {
+        Object value = invoke(entity, new String[] {"getTotalArmorValue", "func_70658_aO"});
+        return value instanceof Integer ? ((Integer) value).intValue() : 0;
+    }
+
+    /** @return the entity's display name text (chat component flattened), or its plain name. */
+    static String displayName(Object entity) {
+        Object component = invoke(entity, new String[] {"getDisplayName", "func_145748_c_"});
+        if (component != null) {
+            String formatted = chatFormattedText(component);
+            if (formatted != null && !formatted.isEmpty()) {
+                return formatted;
+            }
+            Object plain = invoke(component, new String[] {"getUnformattedText", "func_150260_c"});
+            if (plain instanceof String && !((String) plain).isEmpty()) {
+                return (String) plain;
+            }
+        }
+        Object name = invoke(entity, new String[] {"getName", "func_70005_c_"});
+        return name instanceof String ? (String) name : "";
+    }
+
+    /** @return the entity's hitbox height, or the standard player height when unreadable. */
+    static float entityHeight(Object entity) {
+        float height = floatField(entity, new String[] {"height", "field_70130_N"});
+        return height > 0.0F ? height : 1.8F;
+    }
+
+    static boolean hasCustomName(Object entity) {
+        Object custom = invoke(entity, new String[] {"hasCustomName", "func_145818_k_"});
+        return custom instanceof Boolean && ((Boolean) custom).booleanValue();
+    }
+
+    /** @return whether the entity is sneaking, used to hide its name tag like vanilla does. */
+    static boolean isSneaking(Object entity) {
+        Object sneaking = invoke(entity, new String[] {"isSneaking", "func_70093_af"});
+        return sneaking instanceof Boolean && ((Boolean) sneaking).booleanValue();
     }
 
     static Object worldInfo(Object world) {
@@ -810,11 +1059,6 @@ public final class Mc189Compat {
         }
     }
 
-    public static void setAngles(Object entity, float yaw, float pitch) {
-        invoke(entity, new String[] {"setAngles", "func_70082_c"},
-            new Class<?>[] {Float.TYPE, Float.TYPE}, Float.valueOf(yaw), Float.valueOf(pitch));
-    }
-
     public static void enableAlpha() {
         if (invokeStatic(glStateManagerClass(), new String[] {"enableAlpha", "func_179092_a"}) == null) {
             invokeStatic(gl11Class(), new String[] {"glEnable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(3008));
@@ -894,6 +1138,50 @@ public final class Mc189Compat {
         if (invokeStatic(glStateManagerClass(), new String[] {"disableRescaleNormal", "func_179101_B"}) == null) {
             invokeStatic(gl11Class(), new String[] {"glDisable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(32826));
         }
+    }
+
+    // The plain-state toggles below only list their MCP names: a no-argument SRG name that
+    // belongs to a different toggle would still resolve, so the GL11 call (which is exactly
+    // what GlStateManager wraps) is the safer second attempt.
+
+    static void disableCull() {
+        if (invokeStatic(glStateManagerClass(), new String[] {"disableCull"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glDisable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(2884));
+        }
+    }
+
+    static void enableCull() {
+        if (invokeStatic(glStateManagerClass(), new String[] {"enableCull"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glEnable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(2884));
+        }
+    }
+
+    static void disableLighting() {
+        if (invokeStatic(glStateManagerClass(), new String[] {"disableLighting"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glDisable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(2896));
+        }
+    }
+
+    static void enableLighting() {
+        if (invokeStatic(glStateManagerClass(), new String[] {"enableLighting"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glEnable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(2896));
+        }
+    }
+
+    static void disableDepth() {
+        if (invokeStatic(glStateManagerClass(), new String[] {"disableDepth"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glDisable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(2929));
+        }
+    }
+
+    static void enableDepth() {
+        if (invokeStatic(glStateManagerClass(), new String[] {"enableDepth"}) == null) {
+            invokeStatic(gl11Class(), new String[] {"glEnable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(2929));
+        }
+    }
+
+    static void resetColor() {
+        color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
     static void drawSelectionBoundingBox(AxisAlignedBB box) {
