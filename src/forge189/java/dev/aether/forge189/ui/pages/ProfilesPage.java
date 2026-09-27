@@ -23,6 +23,8 @@ public final class ProfilesPage extends Page {
                        Layout layout) {
         int y = layout.listY + 8;
         AetherUi.text(font, "PROFILES", layout.listX + 8, y, AetherUi.TEXT_DISABLED);
+        // Section underline
+        Mc189Compat.drawRect(layout.listX + 8, y + 16, layout.listX + 100, y + 17, AetherUi.withAlpha(AetherUi.ACCENT, 0x66));
         y += 30;
 
         int btnX = layout.listX + layout.listW - 180;
@@ -38,10 +40,26 @@ public final class ProfilesPage extends Page {
             boolean isActive = name.equals(activeProfile);
 
             int bg = isActive ? AetherUi.withAlpha(AetherUi.ACCENT, 0x26) : AetherUi.CARD;
+            // Hover effect
+            boolean hover = mouseX >= cardX && mouseX <= cardX + cardW &&
+                            mouseY >= y && mouseY <= y + cardH;
+            if (hover && !isActive) {
+                bg = AetherUi.lerpColor(AetherUi.CARD, AetherUi.ACCENT, 0.04f);
+            }
             Mc189Compat.drawRect(cardX, y, cardX + cardW, y + cardH, bg);
+
+            // Active indicator bar on left
+            if (isActive) {
+                Mc189Compat.drawRect(cardX, y, cardX + 3, y + cardH, AetherUi.ACCENT);
+            }
 
             AetherUi.text(font, name, cardX + 12, y + 8,
                          isActive ? AetherUi.ACCENT : AetherUi.TEXT_PRIMARY);
+
+            // Active badge
+            if (isActive) {
+                AetherUi.text(font, "ACTIVE", cardX + 12, y + 20, AetherUi.ACCENT);
+            }
 
             int actionX = cardX + cardW - 100;
             boolean applyHover = mouseX >= actionX && mouseX <= actionX + 46 &&
@@ -63,7 +81,14 @@ public final class ProfilesPage extends Page {
         y += 4;
         AetherUi.text(font, "New profile name:", layout.listX + 8, y + 4, AetherUi.TEXT_DISABLED);
         y += 24;
-        Mc189Compat.drawRect(layout.listX + 8, y, layout.listX + 200, y + 20, AetherUi.SEARCH);
+        // Input field with focus styling
+        boolean inputHover = mouseX >= layout.listX + 8 && mouseX <= layout.listX + 200 &&
+                             mouseY >= y && mouseY <= y + 20;
+        int inputBg = inputHover ? AetherUi.SEARCH_FOCUS : AetherUi.SEARCH;
+        Mc189Compat.drawRect(layout.listX + 8, y, layout.listX + 200, y + 20, inputBg);
+        if (inputHover) {
+            AetherUi.outline(layout.listX + 8, y, layout.listX + 200, y + 20, AetherUi.withAlpha(AetherUi.ACCENT, 0x88));
+        }
         AetherUi.text(font, screen.getProfileDraftName(), layout.listX + 12, y + 4, AetherUi.TEXT_PRIMARY);
 
         y += 30;
@@ -80,6 +105,7 @@ public final class ProfilesPage extends Page {
         if (mouseX >= btnX && mouseX <= btnX + 80 &&
             mouseY >= y && mouseY <= y + 22) {
             screen.saveProfile();
+            screen.getToasts().push("Profile saved", AetherUi.ACCENT);
             return;
         }
 
@@ -100,21 +126,24 @@ public final class ProfilesPage extends Page {
             if (mouseX >= actionX && mouseX <= actionX + 46 &&
                 mouseY >= rowY + 6 && mouseY <= rowY + 18) {
                 screen.applyProfile(name);
+                screen.getToasts().push("Applied profile: " + name, AetherUi.ACCENT);
                 return;
             }
             if (mouseX >= actionX + 50 && mouseX <= actionX + 94 &&
                 mouseY >= rowY + 6 && mouseY <= rowY + 18) {
                 screen.deleteProfile(name);
+                screen.getToasts().push("Deleted profile: " + name, AetherUi.WARN);
                 return;
             }
             rowY += cardH + 6;
         }
 
-        // Bottom Save button at y + 30 + 30 + 4 + 24 + 30
+        // Bottom Save button
         int saveY = y + 30 + 30 + 4 + 24 + 30;
         if (mouseX >= layout.listX + 8 && mouseX <= layout.listX + 88 &&
             mouseY >= saveY && mouseY <= saveY + 22) {
             screen.saveProfile();
+            screen.getToasts().push("Profile saved", AetherUi.ACCENT);
         }
     }
 }

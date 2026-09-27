@@ -576,7 +576,7 @@ public final class AetherClickGuiScreen extends GuiScreen {
         scroll = clamp(scroll, 0, maxScroll);
     }
 
-    private void takeScreenshot() {
+    public void takeScreenshot() {
         if (client.screenshots().state().isInFlight()) return;
         screenshotRequested = true;
     }

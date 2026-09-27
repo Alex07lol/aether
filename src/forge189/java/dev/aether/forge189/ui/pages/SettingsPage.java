@@ -20,6 +20,8 @@ public final class SettingsPage extends Page {
                        Layout layout) {
         int y = layout.listY + 8;
         AetherUi.text(font, "SETTINGS", layout.listX + 8, y, AetherUi.TEXT_DISABLED);
+        // Section underline
+        Mc189Compat.drawRect(layout.listX + 8, y + 16, layout.listX + 100, y + 17, AetherUi.withAlpha(AetherUi.ACCENT, 0x66));
         y += 30;
 
         ClientPreferences prefs = screen.getClient().preferences();
@@ -28,19 +30,19 @@ public final class SettingsPage extends Page {
         y += 24;
 
         drawPreferenceRow(font, y, "Save config when menu closes",
-                         prefs.saveOnClose(), layout.listX + 8, layout.listW - 16, mouseX, mouseY);
+                         prefs.saveOnClose(), layout.listX + 8, layout.listW - 16, mouseX, mouseY, 0);
         y += 28;
 
         drawPreferenceRow(font, y, "Show tooltips",
-                         prefs.showTooltips(), layout.listX + 8, layout.listW - 16, mouseX, mouseY);
+                         prefs.showTooltips(), layout.listX + 8, layout.listW - 16, mouseX, mouseY, 1);
         y += 28;
 
         drawPreferenceRow(font, y, "Animated transitions",
-                         true, layout.listX + 8, layout.listW - 16, mouseX, mouseY);
+                         true, layout.listX + 8, layout.listW - 16, mouseX, mouseY, -1);
         y += 28;
 
         drawPreferenceRow(font, y, "Compact sidebar",
-                         false, layout.listX + 8, layout.listW - 16, mouseX, mouseY);
+                         false, layout.listX + 8, layout.listW - 16, mouseX, mouseY, -1);
         y += 28;
 
         y += 8;
@@ -48,7 +50,7 @@ public final class SettingsPage extends Page {
         y += 24;
 
         drawPreferenceRow(font, y, "Blur background when open",
-                         false, layout.listX + 8, layout.listW - 16, mouseX, mouseY);
+                         false, layout.listX + 8, layout.listW - 16, mouseX, mouseY, -1);
         y += 28;
 
         y += 8;
@@ -56,7 +58,7 @@ public final class SettingsPage extends Page {
         y += 24;
 
         drawPreferenceRow(font, y, "Limit FPS when menu open",
-                         true, layout.listX + 8, layout.listW - 16, mouseX, mouseY);
+                         true, layout.listX + 8, layout.listW - 16, mouseX, mouseY, -1);
         y += 28;
 
         y += 8;
@@ -64,7 +66,7 @@ public final class SettingsPage extends Page {
         y += 24;
 
         drawPreferenceRow(font, y, "Scroll sensitivity",
-                         true, layout.listX + 8, layout.listW - 16, mouseX, mouseY);
+                         true, layout.listX + 8, layout.listW - 16, mouseX, mouseY, -1);
         y += 28;
 
         y += 8;
@@ -72,20 +74,20 @@ public final class SettingsPage extends Page {
         y += 24;
 
         drawPreferenceRow(font, y, "High contrast mode",
-                         false, layout.listX + 8, layout.listW - 16, mouseX, mouseY);
+                         false, layout.listX + 8, layout.listW - 16, mouseX, mouseY, -1);
         y += 28;
 
         drawPreferenceRow(font, y, "Reduce motion",
-                         false, layout.listX + 8, layout.listW - 16, mouseX, mouseY);
+                         false, layout.listX + 8, layout.listW - 16, mouseX, mouseY, -1);
     }
 
     private void drawSectionHeader(Object font, String label, int x, int y) {
         AetherUi.text(font, label, x, y, AetherUi.TEXT_DISABLED);
-        Mc189Compat.drawRect(x, y + 14, x + 100, y + 15, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x22));
+        Mc189Compat.drawRect(x, y + 14, x + 100, y + 15, AetherUi.withAlpha(AetherUi.ACCENT, 0x44));
     }
 
     private void drawPreferenceRow(Object font, int y, String label, boolean on,
-                                   int x, int w, int mouseX, int mouseY) {
+                                   int x, int w, int mouseX, int mouseY, int toggleIndex) {
         boolean hover = mouseX >= x && mouseX <= x + w &&
                         mouseY >= y - 2 && mouseY <= y + 22;
         if (hover) {
@@ -98,7 +100,16 @@ public final class SettingsPage extends Page {
         int toggleY = y;
         boolean toggleHover = mouseX >= toggleX && mouseX <= toggleX + 26 &&
                               mouseY >= toggleY && mouseY <= toggleY + 13;
-        new AetherToggle(toggleX, toggleY, 26, 13, on).render(toggleHover);
+
+        // Only show toggle for interactive settings (first two)
+        if (toggleIndex >= 0) {
+            new AetherToggle(toggleX, toggleY, 26, 13, on).render(toggleHover);
+        } else {
+            // Read-only indicator
+            Mc189Compat.drawRect(toggleX, toggleY, toggleX + 26, toggleY + 13,
+                                 AetherUi.withAlpha(AetherUi.ROW_BG, 0x88));
+            AetherUi.text(font, "N/A", toggleX + 3, toggleY + 1, AetherUi.TEXT_DISABLED);
+        }
     }
 
     @Override
@@ -143,13 +154,14 @@ public final class SettingsPage extends Page {
             boolean toggleHover = mouseX >= toggleX && mouseX <= toggleX + 26 &&
                                   mouseY >= toggleY && mouseY <= toggleY + 13;
 
-            // Handle toggle clicks
+            // Handle toggle clicks (only first two are interactive)
             if (button == 0 && toggleHover && (i == 0 || i == 1)) {
                 // Flip the preference
                 if (i == 0) prefs.setSaveOnClose(!on);
                 if (i == 1) prefs.setShowTooltips(!on);
                 states[i] = !on; // Update local state
                 screen.writeLastChange("Preference '" + labels[i] + "' -> " + (!on));
+                screen.getToasts().push(labels[i] + ": " + (!on ? "Enabled" : "Disabled"), AetherUi.ACCENT);
                 return;
             }
             y += 28;

@@ -4,14 +4,12 @@ import dev.aether.forge189.AetherClickGuiScreen;
 import dev.aether.forge189.AetherUi;
 import dev.aether.forge189.Mc189Compat;
 import dev.aether.ui.ControlCenterSection;
-import dev.aether.forge189.ui.AetherIcon;
 import dev.aether.forge189.ui.pages.ModulesPage;
 import dev.aether.forge189.ui.pages.ProfilesPage;
 import dev.aether.forge189.ui.pages.ThemesPage;
 import dev.aether.forge189.ui.pages.CosmeticsPage;
 import dev.aether.forge189.ui.pages.ScreenshotsPage;
 import dev.aether.forge189.ui.pages.SettingsPage;
-import java.util.List;
 
 /**
  * Central renderer that draws the whole Control Center. It delegates page-specific drawing to
@@ -27,46 +25,156 @@ public final class ControlCenterRenderer {
     private final SettingsPage settingsPage = new SettingsPage();
 
     public void render(AetherClickGuiScreen screen, Object font, int mouseX, int mouseY, Layout layout) {
-        // Background
-        AetherUi.drawScreen(layout.deckW, layout.deckH);
+        drawBackground(screen, font, layout);
+        drawDeck(screen, font, layout);
+        drawHeader(screen, font, layout, mouseX, mouseY);
+        drawSidebar(screen, font, layout, mouseX, mouseY);
+        drawPage(screen, font, mouseX, mouseY, layout);
+        drawToasts(font, screen, layout);
+    }
+
+    private void drawBackground(AetherClickGuiScreen screen, Object font, Layout layout) {
+        int w = layout.deckW;
+        int h = layout.deckH;
+        AetherUi.drawScreen(w, h);
+    }
+
+    private void drawDeck(AetherClickGuiScreen screen, Object font, Layout layout) {
+        // Shadow layer
+        drawShadow(layout.deckX, layout.deckY,
+                layout.deckX + layout.deckW, layout.deckY + layout.deckH,
+                AetherMetrics.CORNER_RADIUS, 6);
         // Deck container
-        AetherUi.drawRoundRect(layout.deckX, layout.deckY, layout.deckX + layout.deckW, layout.deckY + layout.deckH, 6, AetherUi.DECK_BG);
-        // Header
-        drawHeader(screen, font, layout);
-        // Sidebar
-        drawSidebar(screen, font, layout);
-        // Page content
-        switch (screen.nav().section()) {
+        AetherUi.drawRoundRect(layout.deckX, layout.deckY,
+                layout.deckX + layout.deckW, layout.deckY + layout.deckH,
+                AetherMetrics.CORNER_RADIUS, AetherUi.DECK_BG);
+        AetherUi.outline(layout.deckX, layout.deckY,
+                layout.deckX + layout.deckW, layout.deckY + layout.deckH,
+                AetherUi.DECK_EDGE);
+    }
+
+    private void drawHeader(AetherClickGuiScreen screen, Object font, Layout layout,
+                            int mouseX, int mouseY) {
+        int headerY = layout.deckY;
+        int headerH = layout.headerH;
+
+        // Header background strip
+        int headerBg = AetherUi.withAlpha(AetherUi.PANEL, 0xCC);
+        Mc189Compat.drawRect(layout.deckX + 1, headerY,
+                layout.deckX + layout.deckW - 1, headerY + headerH - 2, headerBg);
+
+        // Branding on left
+        AetherUi.text(font, "AETHER", layout.deckX + 16, headerY + 14, AetherUi.ACCENT);
+
+        // Page title centered
+        ControlCenterSection section = screen.nav().section();
+        String pageTitle = section != null ? section.label() : "";
+        int titleWidth = Mc189Compat.stringWidth(font, pageTitle);
+        int centerX = layout.deckX + layout.deckW / 2;
+        AetherUi.text(font, pageTitle, centerX - titleWidth / 2, headerY + 14,
+                AetherUi.TEXT_PRIMARY);
+
+        // Search icon on right
+        int searchIconX = layout.deckX + layout.deckW - 40;
+        int searchIconY = headerY + 14;
+        boolean searchHover = mouseX >= searchIconX && mouseX <= searchIconX + 24
+                && mouseY >= searchIconY && mouseY <= searchIconY + 24;
+        if (searchHover) {
+            Mc189Compat.drawRect(searchIconX - 2, searchIconY - 2,
+                    searchIconX + 26, searchIconY + 26,
+                    AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x0D));
+        }
+        AetherIcon.SEARCH.draw(searchIconX, searchIconY,
+                searchHover ? AetherUi.ACCENT_ON : AetherUi.TEXT_SECONDARY);
+    }
+
+    private void drawSidebar(AetherClickGuiScreen screen, Object font, Layout layout,
+                             int mouseX, int mouseY) {
+        int sidebarW = layout.sidebarW;
+        if (sidebarW <= 0) return;
+
+        // Subtle sidebar background
+        Mc189Compat.drawRect(layout.sidebarX, layout.sidebarY,
+                layout.sidebarX + sidebarW, layout.sidebarY + layout.sidebarH,
+                AetherUi.withAlpha(AetherUi.PANEL, 0x88));
+
+        ControlCenterSection activeSection = screen.nav().section();
+
+        for (ControlCenterSection section : ControlCenterSection.ordered()) {
+            int itemY = layout.sidebarY + 8 + section.ordinal() * AetherMetrics.SIDEBAR_ITEM_HEIGHT;
+            int itemH = AetherMetrics.SIDEBAR_ITEM_HEIGHT;
+
+            boolean isHover = mouseX >= layout.sidebarX + 8 && mouseX <= layout.sidebarX + sidebarW - 8
+                    && mouseY >= itemY && mouseY <= itemY + itemH;
+            boolean isActive = section == activeSection;
+
+            // Active indicator bar
+            if (isActive) {
+                Mc189Compat.drawRect(layout.sidebarX + 2, itemY + 2,
+                        layout.sidebarX + 5, itemY + itemH - 2,
+                        AetherUi.ACCENT);
+            }
+
+            // Hover background
+            if (isHover) {
+                Mc189Compat.drawRect(layout.sidebarX + 4, itemY,
+                        layout.sidebarX + sidebarW - 4, itemY + itemH,
+                        AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x10));
+            }
+
+            // Icon
+            AetherIcon icon = sectionToIcon(section);
+            int iconColor = isActive ? AetherUi.ACCENT_ON : isHover ? AetherUi.TEXT_PRIMARY
+                    : AetherUi.TEXT_SECONDARY;
+            icon.draw(layout.sidebarX + 10, itemY + 9, iconColor);
+
+            // Label
+            String label = section.label();
+            int labelWidth = Mc189Compat.stringWidth(font, label);
+            int labelX = layout.sidebarX + sidebarW / 2 - labelWidth / 2;
+            int labelY = itemY + 8;
+            AetherUi.text(font, label, labelX, labelY,
+                    isActive ? AetherUi.ACCENT_ON : isHover ? AetherUi.TEXT_PRIMARY
+                            : AetherUi.TEXT_SECONDARY);
+        }
+    }
+
+    private void drawPage(AetherClickGuiScreen screen, Object font, int mouseX, int mouseY,
+                          Layout layout) {
+        ControlCenterSection section = screen.nav().section();
+        switch (section) {
             case MODULES: modulesPage.render(screen, font, mouseX, mouseY, layout); break;
             case PROFILES: profilesPage.render(screen, font, mouseX, mouseY, layout); break;
             case THEMES: themesPage.render(screen, font, mouseX, mouseY, layout); break;
             case COSMETICS: cosmeticsPage.render(screen, font, mouseX, mouseY, layout); break;
             case SCREENSHOTS: screenshotsPage.render(screen, font, mouseX, mouseY, layout); break;
             case SETTINGS: settingsPage.render(screen, font, mouseX, mouseY, layout); break;
+            default: break;
         }
-        // Spine (telemetry, quick buttons)
-        drawSpine(screen, font, layout);
-        // Footer
-        drawFooter(screen, font, layout);
-        // Toasts
+    }
+
+    private void drawToasts(Object font, AetherClickGuiScreen screen, Layout layout) {
         AetherToastRenderer.render(font, screen.getToasts().snapshot(), layout.deckW, layout.deckH);
     }
 
-    private void drawHeader(AetherClickGuiScreen screen, Object font, Layout layout) {
-        AetherUi.text(font, "AETHER", layout.deckX + 12, layout.deckY + 12, AetherUi.ACCENT);
-    }
-
-    private void drawSidebar(AetherClickGuiScreen screen, Object font, Layout layout) {
-        for (ControlCenterSection section : ControlCenterSection.ordered()) {
-            AetherIcon.HOME.draw(layout.sidebarX + 10, layout.sidebarY + 10 + section.ordinal() * 32, AetherUi.TEXT_PRIMARY);
+    // Package-private shadow helper (mirrors AetherUi.drawShadow)
+    static void drawShadow(int left, int top, int right, int bottom, int radius, int spread) {
+        for (int i = 0; i < spread; i++) {
+            int alpha = 40 - (i * (40 / spread));
+            int shadowColor = (alpha << 24) | (AetherUi.SHADOW & 0x00FFFFFF);
+            AetherUi.drawRoundRect(left - i, top - i, right + i, bottom + i, radius + i, shadowColor);
         }
     }
 
-    private void drawSpine(AetherClickGuiScreen screen, Object font, Layout layout) {
-        // Spine implementation placeholder
-    }
-
-    private void drawFooter(AetherClickGuiScreen screen, Object font, Layout layout) {
-        // Footer implementation placeholder
+    private static AetherIcon sectionToIcon(ControlCenterSection section) {
+        switch (section) {
+            case MODULES:    return AetherIcon.HOME;
+            case PROFILES:   return AetherIcon.EDIT;
+            case THEMES:     return AetherIcon.RENDER;
+            case COSMETICS:  return AetherIcon.COSMETICS;
+            case SCREENSHOTS:return AetherIcon.HUD;
+            case SETTINGS:   return AetherIcon.GAMEPLAY;
+            default:         return AetherIcon.HOME;
+        }
     }
 }
