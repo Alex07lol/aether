@@ -232,6 +232,22 @@ public final class ControlCenterState {
         this.focus = next == null ? ControlFocus.idle() : next;
     }
 
+    /** Opens the colour palette for a colour setting. */
+    public void openPalette(dev.aether.module.setting.Setting<?> setting, int anchorX, int anchorY) {
+        this.focus = ControlFocus.palette(setting, anchorX, anchorY);
+    }
+
+    /** Starts a keybind capture for a keybind setting. */
+    public void focusKeybind(dev.aether.module.setting.Setting<?> setting) {
+        this.focus = ControlFocus.keybind(setting);
+    }
+
+    /** Opens the text editor for a text setting, seeding it with the current value. */
+    public void focusText(dev.aether.module.setting.Setting<?> setting) {
+        Object current = setting.value();
+        this.focus = ControlFocus.text(setting, current == null ? "" : String.valueOf(current));
+    }
+
     /** Drops the focus without touching anything else; used when the screen closes. */
     public ControlFocus clearFocus() {
         ControlFocus previous = this.focus;

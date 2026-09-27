@@ -913,7 +913,7 @@ public final class Mc189Compat {
         color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
-    static int stringWidth(Object fontRenderer, String text) {
+    public static int stringWidth(Object fontRenderer, String text) {
         Object value = invoke(fontRenderer, new String[] {"getStringWidth", "func_78256_a"}, new Class<?>[] {String.class}, text);
         return value instanceof Integer ? ((Integer) value).intValue() : text.length() * 6;
     }
@@ -953,7 +953,7 @@ public final class Mc189Compat {
         return value == null ? fontRenderer(minecraft()) : value;
     }
 
-    static void drawRect(int left, int top, int right, int bottom, int color) {
+    public static void drawRect(int left, int top, int right, int bottom, int color) {
         for (String name : new String[] {"drawRect", "func_73734_a"}) {
             try {
                 Method method = Gui.class.getMethod(name, Integer.TYPE, Integer.TYPE, Integer.TYPE, Integer.TYPE, Integer.TYPE);
@@ -1583,7 +1583,7 @@ public final class Mc189Compat {
         }
     }
 
-    static void drawRectangle(int x, int y, int width, int height, int color) {
+    public static void drawRectangle(int x, int y, int width, int height, int color) {
         drawRect(x, y, x + width, y + height, color);
     }
 

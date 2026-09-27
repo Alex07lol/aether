@@ -14,8 +14,24 @@ import dev.aether.ui.ControlFocus;
 import dev.aether.ui.ModuleSearch;
 
 import dev.aether.forge189.AetherUi;
-import dev.aether.forge189.ui.*;
-import dev.aether.forge189.ui.pages.*;
+import dev.aether.forge189.ui.AetherMetrics;
+import dev.aether.forge189.ui.AetherToastRenderer;
+import dev.aether.forge189.ui.ControlCenterLayout;
+import dev.aether.forge189.ui.ControlCenterRenderer;
+import dev.aether.forge189.ui.ControlCenterInput;
+import dev.aether.forge189.ui.ToastSystem;
+import dev.aether.forge189.ui.Layout;
+import dev.aether.forge189.ui.pages.ModulesPage;
+import dev.aether.forge189.ui.pages.ProfilesPage;
+import dev.aether.forge189.ui.pages.ThemesPage;
+import dev.aether.forge189.ui.pages.CosmeticsPage;
+import dev.aether.forge189.ui.pages.ScreenshotsPage;
+import dev.aether.forge189.ui.pages.SettingsPage;
+import dev.aether.forge189.ui.pages.Page;
+import dev.aether.forge189.ui.components.AetherToggle;
+import dev.aether.forge189.ui.components.AetherSearchBox;
+import dev.aether.forge189.ui.components.AetherDropdown;
+import dev.aether.forge189.ui.components.AetherSlider;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.ScaledResolution;
@@ -90,6 +106,9 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     // Legacy state kept for compatibility
     private String query = "";
+
+    public void setQuery(String q) { this.query = q; }
+    public String getQuery() { return query; }
     private boolean searchFocused;
     private int selected;
     private float scroll;
@@ -98,6 +117,7 @@ public final class AetherClickGuiScreen extends GuiScreen {
     private long lastSampleMillis;
     private long lastFrameMillis;
     private int fpsCursor;
+    private final int[] fpsSamples = new int[60];
     private String activeProfile;
     private String profileDraftName = "";
     private boolean screenshotRequested;
@@ -128,7 +148,7 @@ public final class AetherClickGuiScreen extends GuiScreen {
         search.category(category);
     }
 
-    ControlCenterState nav() {
+    public ControlCenterState nav() {
         return nav;
     }
 
@@ -191,7 +211,7 @@ public final class AetherClickGuiScreen extends GuiScreen {
         return client.modules().all();
     }
 
-    private void syncVisible() {
+    public void syncVisible() {
         search.query(query);
         List<ClientModule> source = sectionSource();
         search.source(source);
@@ -296,6 +316,23 @@ public final class AetherClickGuiScreen extends GuiScreen {
     }
 
     @Override
+    protected void keyTyped(char typedChar, int keyCode) throws IOException {
+        inputHandler.handleKey(typedChar, keyCode);
+    }
+
+    /**
+     * Public wrapper for headless tests to inject key events without
+     * needing to call the protected {@link #keyTyped(char, int)} directly.
+     */
+    public void typeKey(char typedChar, int keyCode) throws IOException {
+        keyTyped(typedChar, keyCode);
+    }
+
+    public void releaseMouse(int mx, int my, int button) throws IOException {
+        mouseReleased(mx, my, button);
+    }
+
+    @Override
     public void handleMouseInput() throws IOException {
         int w = Mc189Compat.screenWidth(this);
         int h = Mc189Compat.screenHeight(this);
@@ -323,18 +360,44 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     /* ── helpers used by pages / input ─────────────────────────────────── */
 
-    Layout getLayout() { return currentLayout; }
-    ToastSystem getToasts() { return toastSystem; }
-    AetherClient getClient() { return client; }
-    ControlCenterState getNav() { return nav; }
-    ModuleSearch getSearch() { return search; }
-    ControlCenterState getState() { return nav; }
-    ControlCenterState getCurrentState() { return nav; }
-    String getActiveProfile() { return activeProfile; }
-    String getProfileDraftName() { return profileDraftName; }
-    void setProfileDraftName(String name) { this.profileDraftName = name; }
+    public Layout getLayout() { return currentLayout; }
+    public ToastSystem getToasts() { return toastSystem; }
+    public AetherClient getClient() { return client; }
+    public ControlCenterState getNav() { return nav; }
+    public ModuleSearch getSearch() { return search; }
+    public ControlCenterState getState() { return nav; }
+    public ControlCenterState getCurrentState() { return nav; }
+    public String getActiveProfile() { return activeProfile; }
+    public String getProfileDraftName() { return profileDraftName; }
+    public void setProfileDraftName(String name) { this.profileDraftName = name; }
+    public boolean saveProfile() {
+        String name = profileDraftName.trim();
+        if (name.isEmpty()) {
+            return false;
+        }
+        boolean ok = client.profiles().save(name, client.modules());
+        if (ok) {
+            activeProfile = name;
+            profileDraftName = "";
+        }
+        return ok;
+    }
+    public boolean newProfile() {
+        profileDraftName = "";
+        return true;
+    }
+    public boolean applyProfile(String name) {
+        return client.profiles().apply(name, client.modules());
+    }
+    public boolean deleteProfile(String name) {
+        return client.profiles().delete(name);
+    }
 
-    Page getCurrentPage() {
+    public void handleKey(char typedChar, int keyCode) throws IOException {
+        inputHandler.handleKey(typedChar, keyCode);
+    }
+
+    public Page getCurrentPage() {
         switch (nav.section()) {
             case MODULES: return modulesPage;
             case PROFILES: return profilesPage;
@@ -346,7 +409,7 @@ public final class AetherClickGuiScreen extends GuiScreen {
         }
     }
 
-    void handleSidebarClick(int mx, int my, int button) {
+    public void handleSidebarClick(int mx, int my, int button) {
         if (currentLayout == null) return;
         // Map vertical position to section
         int relY = my - currentLayout.sidebarY;
@@ -361,7 +424,7 @@ public final class AetherClickGuiScreen extends GuiScreen {
         }
     }
 
-    void handleSpineClick(int mx, int my, int button) {
+    public void handleSpineClick(int mx, int my, int button) {
         if (currentLayout == null || currentLayout.spineW <= 0) return;
         // The spine has 3 buttons at fixed positions (HUD EDITOR, COSMETICS, SAVE NOW)
         int x = currentLayout.spineX + 10;
@@ -440,7 +503,7 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     /* ── actions ───────────────────────────────────────────────────────── */
 
-    void toggleModule(ClientModule module) {
+    public void toggleModule(ClientModule module) {
         boolean enable = module.state() != ModuleState.ENABLED;
         client.modules().setEnabled(module.metadata().id(), enable);
         writeLastChange("Toggled module '" + module.metadata().name() + "' -> " + (enable ? "ENABLED" : "DISABLED"));
@@ -474,7 +537,7 @@ public final class AetherClickGuiScreen extends GuiScreen {
         ((Setting) setting).setValue(value);
     }
 
-    private void writeLastChange(String description) {
+    public void writeLastChange(String description) {
         try {
             File changeFile = new File(System.getProperty("aether.changeLog", "lastchange.txt"));
             String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
@@ -501,15 +564,15 @@ public final class AetherClickGuiScreen extends GuiScreen {
         return Math.max(min, Math.min(max, value));
     }
 
-    private void setScroll(float scroll) {
+    public void setScroll(float scroll) {
         this.scroll = scroll;
     }
 
-    private float getScroll() {
+    public float getScroll() {
         return scroll;
     }
 
-    private void clampScroll() {
+    public void clampScroll() {
         scroll = clamp(scroll, 0, maxScroll);
     }
 
@@ -539,7 +602,7 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     /* ── getter methods for pages ─────────────────────────────────────── */
 
-    List<ClientModule> getVisibleModules() {
+    public List<ClientModule> getVisibleModules() {
         // Returns the filtered module list for the current section
         syncVisible();
         return visible;
