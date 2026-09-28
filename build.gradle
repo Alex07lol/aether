@@ -3,8 +3,12 @@ apply plugin: "java"
 group = "dev.aether"
 version = "0.1.0"
 
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
+// Set on the compile tasks rather than the project: Gradle 9 removed the project-level property,
+// and the CI pins Gradle 7.6.4, which honours the task-level form as well.
+tasks.withType(JavaCompile).configureEach {
+    sourceCompatibility = "1.8"
+    targetCompatibility = "1.8"
+}
 
 repositories {
     mavenCentral()
@@ -171,17 +175,22 @@ task remapForge189(type: JavaExec) {
     }
     classpath = sourceSets.main.runtimeClasspath
     mainClass = "dev.aether.remap.RemapTool"
-    args "--mappings", file(aetherSrgMappings).path,
-         "--input", sourceSets.main.output.classesDirs.singleFile.path,
-         "--input", sourceSets.forge189.output.classesDirs.singleFile.path,
-         "--output", remappedClassesDir.path,
-         "--report", file("${buildDir}/reports/unmapped-game-references.txt").path,
-         // Self-tests and the remapper are compiled but not shipped; they link against this build's
-         // stubs, so they have no mapping and must not make a release look unmappable.
-         "--exclude", "SelfTest",
-         "--exclude", "dev/aether/remap/"
-    if (requireRemap) {
-        args "--require-complete"
+    // The arguments are built lazily inside a closure: aetherSrgMappings is unset for a plain dev
+    // build, and a task's configuration runs even when onlyIf will skip its execution, so an eager
+    // file(aetherSrgMappings) here would break every build that does not remap.
+    doFirst {
+        args "--mappings", file(aetherSrgMappings).path,
+             "--input", sourceSets.main.output.classesDirs.singleFile.path,
+             "--input", sourceSets.forge189.output.classesDirs.singleFile.path,
+             "--output", remappedClassesDir.path,
+             "--report", file("${buildDir}/reports/unmapped-game-references.txt").path,
+             // Self-tests and the remapper are compiled but not shipped; they link against this
+             // build's stubs, so they have no mapping and must not make a release look unmappable.
+             "--exclude", "SelfTest",
+             "--exclude", "dev/aether/remap/"
+        if (requireRemap) {
+            args "--require-complete"
+        }
     }
 }
 
@@ -192,13 +201,7 @@ task auditForge189(type: JavaExec) {
     dependsOn classes, forge189Classes
     classpath = sourceSets.main.runtimeClasspath
     mainClass = "dev.aether.remap.RemapTool"
-    args "--mappings", hasSrgMappings ? file(aetherSrgMappings).path : file("${buildDir}/empty-mappings.srg").path,
-         "--input", sourceSets.main.output.classesDirs.singleFile.path,
-         "--input", sourceSets.forge189.output.classesDirs.singleFile.path,
-         "--output", file("${buildDir}/audit-remapped").path,
-         "--report", file("${buildDir}/reports/unmapped-game-references.txt").path,
-         "--exclude", "SelfTest",
-         "--exclude", "dev/aether/remap/"
+    // Lazy for the same reason as remapForge189 above: the mappings property may be unset.
     doFirst {
         def placeholder = file("${buildDir}/empty-mappings.srg")
         if (!placeholder.parentFile.exists()) {
@@ -207,6 +210,13 @@ task auditForge189(type: JavaExec) {
         if (!placeholder.exists()) {
             placeholder.text = "# No SRG mapping file was supplied, so this run reports every game reference.\n"
         }
+        args "--mappings", hasSrgMappings ? file(aetherSrgMappings).path : placeholder.path,
+             "--input", sourceSets.main.output.classesDirs.singleFile.path,
+             "--input", sourceSets.forge189.output.classesDirs.singleFile.path,
+             "--output", file("${buildDir}/audit-remapped").path,
+             "--report", file("${buildDir}/reports/unmapped-game-references.txt").path,
+             "--exclude", "SelfTest",
+             "--exclude", "dev/aether/remap/"
     }
 }
 
