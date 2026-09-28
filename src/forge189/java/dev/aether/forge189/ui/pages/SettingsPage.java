@@ -3,6 +3,7 @@ package dev.aether.forge189.ui.pages;
 import dev.aether.forge189.AetherClickGuiScreen;
 import dev.aether.config.ClientPreferences;
 import dev.aether.forge189.AetherUi;
+import dev.aether.forge189.font.GlyphPageFontRenderer;
 import dev.aether.forge189.Mc189Compat;
 import dev.aether.forge189.ui.Layout;
 import dev.aether.forge189.ui.components.AetherToggle;
@@ -19,7 +20,7 @@ public final class SettingsPage extends Page {
                        int mouseX, int mouseY,
                        Layout layout) {
         int y = layout.listY + 8;
-        AetherUi.text(font, "SETTINGS", layout.listX + 8, y, AetherUi.TEXT_DISABLED);
+        AetherUi.textSmooth(font, "SETTINGS", layout.listX + 8, y, AetherUi.TEXT_DISABLED);
         // Section underline
         Mc189Compat.drawRect(layout.listX + 8, y + 16, layout.listX + 100, y + 17, AetherUi.withAlpha(AetherUi.ACCENT, 0x66));
         y += 30;
@@ -82,7 +83,7 @@ public final class SettingsPage extends Page {
     }
 
     private void drawSectionHeader(Object font, String label, int x, int y) {
-        AetherUi.text(font, label, x, y, AetherUi.TEXT_DISABLED);
+        AetherUi.textSmooth(font, label, x, y, AetherUi.TEXT_DISABLED);
         Mc189Compat.drawRect(x, y + 14, x + 100, y + 15, AetherUi.withAlpha(AetherUi.ACCENT, 0x44));
     }
 
@@ -94,7 +95,7 @@ public final class SettingsPage extends Page {
             Mc189Compat.drawRect(x, y - 2, x + w, y + 22, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x10));
         }
 
-        AetherUi.text(font, label, x, y + 6, AetherUi.TEXT_PRIMARY);
+        AetherUi.textSmooth(font, label, x, y + 6, AetherUi.TEXT_PRIMARY);
 
         int toggleX = x + w - 40;
         int toggleY = y;
@@ -108,7 +109,7 @@ public final class SettingsPage extends Page {
             // Read-only indicator
             Mc189Compat.drawRect(toggleX, toggleY, toggleX + 26, toggleY + 13,
                                  AetherUi.withAlpha(AetherUi.ROW_BG, 0x88));
-            AetherUi.text(font, "N/A", toggleX + 3, toggleY + 1, AetherUi.TEXT_DISABLED);
+            AetherUi.textSmooth(font, "N/A", toggleX + 3, toggleY + 1, AetherUi.TEXT_DISABLED);
         }
     }
 

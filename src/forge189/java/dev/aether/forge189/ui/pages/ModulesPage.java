@@ -4,6 +4,7 @@ import dev.aether.module.ClientModule;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.forge189.AetherClickGuiScreen;
 import dev.aether.forge189.AetherUi;
+import dev.aether.forge189.font.GlyphPageFontRenderer;
 import dev.aether.forge189.Mc189Compat;
 import dev.aether.forge189.ui.Layout;
 import dev.aether.forge189.ui.components.AetherToggle;
@@ -146,8 +147,13 @@ public final class ModulesPage extends Page {
             int chipX = x + i * 80;
             int bg = active ? AetherUi.ACCENT : hover ? AetherUi.ROW_HOVER : AetherUi.ROW_BG;
             AetherUi.drawRoundRect(chipX, y, chipX + 70, y + 20, 4, bg);
-            AetherUi.text(font, chips[i], chipX + 10, y + 6,
-                         active ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
+            if (font instanceof GlyphPageFontRenderer) {
+                ((GlyphPageFontRenderer) font).drawString(chips[i], chipX + 10, y + 6,
+                    active ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
+            } else {
+                AetherUi.textSmooth(font, chips[i], chipX + 10, y + 6,
+                    active ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
+            }
         }
     }
 
@@ -159,8 +165,13 @@ public final class ModulesPage extends Page {
             int pillW = 100;
             int bg = active ? AetherUi.ACCENT : hover ? AetherUi.ROW_HOVER : AetherUi.ROW_BG;
             AetherUi.drawRoundRect(x, y, x + pillW, y + 20, 4, bg);
-            AetherUi.text(font, category.name(), x + 10, y + 6,
-                         active ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
+            if (font instanceof GlyphPageFontRenderer) {
+                ((GlyphPageFontRenderer) font).drawString(category.name(), x + 10, y + 6,
+                    active ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
+            } else {
+                AetherUi.textSmooth(font, category.name(), x + 10, y + 6,
+                    active ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
+            }
             y += 24;
         }
     }
@@ -180,10 +191,17 @@ public final class ModulesPage extends Page {
         Mc189Compat.drawRect(cardX, y, cardX + cardW, y + cardH, bg);
 
         // Module name
-        AetherUi.text(font, module.metadata().name(),
-                       cardX + 16, y + 8,
-                       module.state() == ClientModule.ModuleState.ENABLED
-                           ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
+        if (font instanceof GlyphPageFontRenderer) {
+            ((GlyphPageFontRenderer) font).drawString(module.metadata().name(),
+                cardX + 16, y + 8,
+                module.state() == ClientModule.ModuleState.ENABLED
+                    ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
+        } else {
+            AetherUi.textSmooth(font, module.metadata().name(),
+                cardX + 16, y + 8,
+                module.state() == ClientModule.ModuleState.ENABLED
+                    ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
+        }
 
         // Category badge
         String tag = label(module.metadata().category());
@@ -192,7 +210,11 @@ public final class ModulesPage extends Page {
         if (tagX > cardX + 16) {
             Mc189Compat.drawRect(tagX, y + 8, tagX + tagW, y + 20,
                                  AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x1E));
-            AetherUi.text(font, tag, tagX + 6, y + 12, AetherUi.TEXT_DISABLED);
+            if (font instanceof GlyphPageFontRenderer) {
+                ((GlyphPageFontRenderer) font).drawString(tag, tagX + 6, y + 12, AetherUi.TEXT_DISABLED);
+            } else {
+                AetherUi.textSmooth(font, tag, tagX + 6, y + 12, AetherUi.TEXT_DISABLED);
+            }
         }
 
         // Toggle button (right side)
@@ -237,8 +259,13 @@ public final class ModulesPage extends Page {
         if (hover) {
             Mc189Compat.drawRect(x, y, x + w, y + 22, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x10));
         }
-        AetherUi.text(font, setting.label(), x + 8, y + 6,
-                     hover ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_SECONDARY);
+        if (font instanceof GlyphPageFontRenderer) {
+            ((GlyphPageFontRenderer) font).drawString(setting.label(), x + 8, y + 6,
+                hover ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_SECONDARY);
+        } else {
+            AetherUi.textSmooth(font, setting.label(), x + 8, y + 6,
+                hover ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_SECONDARY);
+        }
         switch (setting.type()) {
             case BOOLEAN:
                 boolean bool = Boolean.TRUE.equals(setting.value());
@@ -258,7 +285,11 @@ public final class ModulesPage extends Page {
                 if (fill > 0) {
                     Mc189Compat.drawRect(x + w - 80, y + 4, x + w - 80 + fill, y + 18, AetherUi.ACCENT);
                 }
-                AetherUi.text(font, String.valueOf(val), x + w - 60, y + 6, AetherUi.TEXT_PRIMARY);
+                if (font instanceof GlyphPageFontRenderer) {
+                    ((GlyphPageFontRenderer) font).drawString(String.valueOf(val), x + w - 60, y + 6, AetherUi.TEXT_PRIMARY);
+                } else {
+                    AetherUi.textSmooth(font, String.valueOf(val), x + w - 60, y + 6, AetherUi.TEXT_PRIMARY);
+                }
                 break;
             case COLOR:
                 int color = (Integer) setting.value();
@@ -269,16 +300,28 @@ public final class ModulesPage extends Page {
                 int keyCode = (Integer) setting.value();
                 String keyName = keyCodeToName(keyCode);
                 Mc189Compat.drawRect(x + w - 90, y + 3, x + w - 8, y + 17, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x1E));
-                AetherUi.text(font, keyName, x + w - 85, y + 6, AetherUi.TEXT_PRIMARY);
+                if (font instanceof GlyphPageFontRenderer) {
+                    ((GlyphPageFontRenderer) font).drawString(keyName, x + w - 85, y + 6, AetherUi.TEXT_PRIMARY);
+                } else {
+                    AetherUi.textSmooth(font, keyName, x + w - 85, y + 6, AetherUi.TEXT_PRIMARY);
+                }
                 break;
             case TEXT:
                 String text = setting.value().toString();
-                AetherUi.text(font, text, x + w - 80, y + 6, AetherUi.TEXT_PRIMARY);
+                if (font instanceof GlyphPageFontRenderer) {
+                    ((GlyphPageFontRenderer) font).drawString(text, x + w - 80, y + 6, AetherUi.TEXT_PRIMARY);
+                } else {
+                    AetherUi.textSmooth(font, text, x + w - 80, y + 6, AetherUi.TEXT_PRIMARY);
+                }
                 break;
             case CHOICE:
                 String choice = String.valueOf(setting.value());
                 Mc189Compat.drawRect(x + w - 80, y + 3, x + w - 8, y + 17, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x1E));
-                AetherUi.text(font, choice, x + w - 70, y + 8, AetherUi.TEXT_PRIMARY);
+                if (font instanceof GlyphPageFontRenderer) {
+                    ((GlyphPageFontRenderer) font).drawString(choice, x + w - 70, y + 8, AetherUi.TEXT_PRIMARY);
+                } else {
+                    AetherUi.textSmooth(font, choice, x + w - 70, y + 8, AetherUi.TEXT_PRIMARY);
+                }
                 break;
         }
     }

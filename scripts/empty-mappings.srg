@@ -1,0 +1,5 @@
+# Intentionally empty. Passing this file to dev.aether.remap.RemapTool puts it in report mode: nothing
+# is renamed, and every Minecraft member the compiled classes call in its development form is listed.
+# That list is the work a real SRG mapping file has to cover, which is what makes the report a
+# verification step rather than a decoration: the count is the number of call sites that would throw
+# NoSuchMethodError on a production runtime, and it reaches zero only when the remap actually ran.

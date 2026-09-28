@@ -1,6 +1,8 @@
 package dev.aether.forge189;
 
 import dev.aether.AetherClient;
+import dev.aether.forge189.font.AetherFontManager;
+import dev.aether.forge189.font.GlyphPageFontRenderer;
 import net.minecraft.client.gui.GuiScreen;
 
 import java.io.IOException;
@@ -21,6 +23,8 @@ public final class AetherQuickNavScreen extends GuiScreen {
 
     // circles
     private static final int RADIUS = 32;
+
+    private static final AetherFontManager fontManager = AetherFontManager.instance();
 
     private final AetherClient client;
     private final GuiScreen    parent;
@@ -51,6 +55,10 @@ public final class AetherQuickNavScreen extends GuiScreen {
         int sw = Mc189Compat.screenWidth(this);
         int sh = Mc189Compat.screenHeight(this);
         Object font = Mc189Compat.screenFontRenderer(this);
+        Object smoothFont = fontManager.uiFont();
+        if (smoothFont != null) {
+            font = smoothFont;
+        }
 
         // Every colour here comes from the shared theme tokens, so the quick nav follows the
         // active theme module exactly like the click deck does.
@@ -70,7 +78,7 @@ public final class AetherQuickNavScreen extends GuiScreen {
         Mc189Compat.drawRect(cx - 1, cy - 1, cx + CW + 1, cy + CH + 1, AetherUi.withAlpha(AetherUi.SHADOW, 0x50));
 
         // card body
-        Mc189Compat.drawRect(cx, cy, cx + CW, cy + CH, AetherUi.SURFACE);
+        AetherUi.drawRoundRect(cx, cy, cx + CW, cy + CH, 12, AetherUi.SURFACE);
 
         // top accent bar: solid accent 3px, then 1px lighter line
         Mc189Compat.drawRect(cx,      cy,     cx + CW, cy + 3, AetherUi.ACCENT);
@@ -82,8 +90,13 @@ public final class AetherQuickNavScreen extends GuiScreen {
         Mc189Compat.drawRect(cx,          cy + CH - 1, cx + CW, cy + CH, panelEdge);
 
         // ── header text ────────────────────────────────────────────────
-        AetherUi.centered(font, "AETHER", cx, cy + 9,  CW, AetherUi.TEXT_PRIMARY);
-        AetherUi.centered(font, "Quick Navigation", cx, cy + 20, CW, AetherUi.TEXT_DISABLED);
+        if (font instanceof GlyphPageFontRenderer) {
+            ((GlyphPageFontRenderer) font).drawString("AETHER", cx, cy + 9, AetherUi.ACCENT);
+            ((GlyphPageFontRenderer) font).drawString("Quick Navigation", cx, cy + 20, AetherUi.TEXT_DISABLED);
+        } else {
+            AetherUi.centered(font, "AETHER", cx, cy + 9,  CW, AetherUi.TEXT_PRIMARY);
+            AetherUi.centered(font, "Quick Navigation", cx, cy + 20, CW, AetherUi.TEXT_DISABLED);
+        }
 
         // thin separator
         int sepY = cy + 33;
@@ -107,6 +120,10 @@ public final class AetherQuickNavScreen extends GuiScreen {
             drawSolidCircle(leftCX, btnCY, RADIUS + 5, AetherUi.withAlpha(AetherUi.ACCENT, 0x1A));
             drawSolidCircle(leftCX, btnCY, RADIUS + 3, AetherUi.withAlpha(AetherUi.ACCENT, 0x2A));
         }
+        // Left button background
+        AetherUi.drawCircle(leftCX, btnCY, RADIUS, AetherUi.withAlpha(AetherUi.CARD, 0xCC));
+        // Inner highlight
+        AetherUi.drawCircle(leftCX, btnCY - 2, RADIUS - 4, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x22));
         // filled circle
         drawSolidCircle(leftCX, btnCY, RADIUS, hL ? AetherUi.ACCENT : idleFill);
         // 1-px outline ring
@@ -129,6 +146,10 @@ public final class AetherQuickNavScreen extends GuiScreen {
             drawSolidCircle(rightCX, btnCY, RADIUS + 5, AetherUi.withAlpha(AetherUi.ACCENT, 0x1A));
             drawSolidCircle(rightCX, btnCY, RADIUS + 3, AetherUi.withAlpha(AetherUi.ACCENT, 0x2A));
         }
+        // Right button background
+        AetherUi.drawCircle(rightCX, btnCY, RADIUS, AetherUi.withAlpha(AetherUi.CARD, 0xCC));
+        // Inner highlight
+        AetherUi.drawCircle(rightCX, btnCY - 2, RADIUS - 4, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x22));
         drawSolidCircle(rightCX, btnCY, RADIUS, hR ? AetherUi.ACCENT : idleFill);
         drawCircleOutline(rightCX, btnCY, RADIUS, hR ? accentLight : idleRing);
 

@@ -1,6 +1,7 @@
 package dev.aether.forge189;
 
 import dev.aether.AetherClient;
+import dev.aether.forge189.font.GlyphPageFontRenderer;
 import dev.aether.theme.AetherTheme;
 import dev.aether.theme.ColorRgb;
 import dev.aether.theme.ThemePalette;
@@ -20,52 +21,52 @@ import java.awt.Color;
  */
 public final class AetherUi {
     /* ── structure ──────────────────────────────────────────────────────── */
-    /** Window body. */
-    public static int SURFACE = 0xFF0B0E14;
+    /** Window body - deep charcoal glass. */
+    public static int SURFACE = 0xFF08090D;
     /** Translucent panel over the world (menus). */
-    public static int PANEL = 0xEE10141B;
+    public static int PANEL = 0xCC15161B;
     /** Raised card / row. */
-    public static int CARD = 0xFF191E29;
-    public static int CARD_HOVER = 0xFF232834;
-    public static int SEARCH = 0xFF1F232E;
-    public static int SEARCH_FOCUS = 0xFF2A2F3C;
+    public static int CARD = 0xCC1D1E25;
+    public static int CARD_HOVER = 0xD9252630;
+    public static int SEARCH = 0xCC1F2028;
+    public static int SEARCH_FOCUS = 0xD92A2B36;
     /** Frosted panel fill used by the classic Aether screens. */
-    public static int GLASS = 0xDD0F1620;
-    public static int GLASS_SOFT = 0xBB0F1620;
+    public static int GLASS = 0xCC15161B;
+    public static int GLASS_SOFT = 0xAA1D1E25;
     public static int TOGGLE_BG = 0xFF343A49;
     /** Slider / progress trough. */
-    public static int TRACK = 0xFF2A3143;
-    public static int BORDER = 0x22FFFFFF;
-    public static int PANEL_EDGE = 0xE6FFFFFF;
+    public static int TRACK = 0xFF252630;
+    public static int BORDER = 0x14FFFFFF;
+    public static int PANEL_EDGE = 0x14FFFFFF;
     public static int SHADOW = 0x50000000;
 
     /* ── text ───────────────────────────────────────────────────────────── */
-    public static int TEXT_PRIMARY = 0xFFEAEFFB;
-    public static int TEXT_SECONDARY = 0xFF8A99B5;
-    public static int TEXT_DISABLED = 0xFF56637C;
+    public static int TEXT_PRIMARY = 0xFFF2F2F5;
+    public static int TEXT_SECONDARY = 0xFFA3A4B3;
+    public static int TEXT_DISABLED = 0xFF737585;
 
     /* ── accent ─────────────────────────────────────────────────────────── */
-    public static int ACCENT = 0xFF387DFF;
-    public static int ACCENT_DARK = 0xFF1F5FD0;
-    public static int ACCENT_SOFT = 0x66387DFF;
+    public static int ACCENT = 0xFF9B8CFF;
+    public static int ACCENT_DARK = 0xFF7B6CFF;
+    public static int ACCENT_SOFT = 0x669B8CFF;
     /** Lamp colour for "this module is on"; kept green so a theme cannot blur the meaning. */
     public static int ACCENT_ON = 0xFF38E0A8;
-    public static int ACCENT_GLOW = 0x55387DFF;
+    public static int ACCENT_GLOW = 0x559B8CFF;
 
     /* ── click deck ─────────────────────────────────────────────────────── */
-    public static int SCRIM_TOP = 0xF2070B14;
-    public static int SCRIM_BOTTOM = 0xF20D1524;
-    public static int DECK_BG = 0xE60B1220;
-    public static int DECK_EDGE = 0x30FFFFFF;
-    public static int ROW_BG = 0x12FFFFFF;
-    public static int ROW_HOVER = 0x1EFFFFFF;
-    public static int ROW_SELECTED = 0x264C8DFF;
+    public static int SCRIM_TOP = 0xF208090D;
+    public static int SCRIM_BOTTOM = 0xF20D0F17;
+    public static int DECK_BG = 0xE615161B;
+    public static int DECK_EDGE = 0x20FFFFFF;
+    public static int ROW_BG = 0x0AFFFFFF;
+    public static int ROW_HOVER = 0x14FFFFFF;
+    public static int ROW_SELECTED = 0x269B8CFF;
     public static int ROW_ON_TINT = 0x1A38E0A8;
 
     /* ── background gradient (title/menu screens) ───────────────────────── */
-    public static int SKY_TOP = 0xFFBDEFFF;
-    public static int SKY_BOTTOM = 0xFFEAF8FF;
-    public static int SPARKLE = 0x66FFFFFF;
+    public static int SKY_TOP = 0xFF08090D;
+    public static int SKY_BOTTOM = 0xFF0D0F17;
+    public static int SPARKLE = 0x33FFFFFF;
 
     /* ── semantic accents that must stay recognisable across themes ─────── */
     public static int STAR = 0xFFFFD166;
@@ -260,12 +261,34 @@ public final class AetherUi {
     }
 
     public static void text(Object font, String text, int x, int y, int color) {
-        Mc189Compat.drawStringWithShadow(font, text, x, y, color);
+        Mc189Compat.drawString(font, text, x, y, color, false);
+    }
+
+    public static void textSmooth(Object font, String text, int x, int y, int color) {
+        if (font instanceof GlyphPageFontRenderer) {
+            ((GlyphPageFontRenderer) font).drawString(text, x, y, color);
+        } else {
+            Mc189Compat.drawString(font, text, x, y, color, false);
+        }
     }
 
     public static void centered(Object font, String text, int x, int y, int width, int color) {
         int textX = x + (width - Mc189Compat.stringWidth(font, text)) / 2;
-        text(font, text, textX, y, color);
+        Mc189Compat.drawStringWithShadow(font, text, textX, y, color);
+    }
+
+    public static void centeredSmooth(Object font, String text, int x, int y, int width, int color) {
+        int tw = stringWidthSmooth(font, text);
+        int textX = x + (width - tw) / 2;
+        textSmooth(font, text, textX, y, color);
+    }
+
+    /** Get text width from either font type. */
+    public static int stringWidthSmooth(Object font, String text) {
+        if (font instanceof GlyphPageFontRenderer) {
+            return ((GlyphPageFontRenderer) font).getStringWidth(text);
+        }
+        return Mc189Compat.stringWidth(font, text);
     }
 
     public static void outline(int left, int top, int right, int bottom, int color) {

@@ -2,6 +2,7 @@ package dev.aether.forge189.ui;
 
 import dev.aether.forge189.AetherClickGuiScreen;
 import dev.aether.forge189.AetherUi;
+import dev.aether.forge189.font.GlyphPageFontRenderer;
 import dev.aether.forge189.Mc189Compat;
 import dev.aether.ui.ControlCenterSection;
 import dev.aether.forge189.ui.pages.ModulesPage;
@@ -34,20 +35,39 @@ public final class ControlCenterRenderer {
     }
 
     private void drawBackground(AetherClickGuiScreen screen, Object font, Layout layout) {
-        int w = layout.deckW;
-        int h = layout.deckH;
-        AetherUi.drawScreen(w, h);
+        int w = layout.screenW;
+        int h = layout.screenH;
+        if (w <= 0 || h <= 0) return;
+
+        // Dark gradient backdrop
+        int steps = 24;
+        for (int i = 0; i < steps; i++) {
+            int top = i * h / steps;
+            int bottom = (i + 1) * h / steps + 1;
+            float t = (float) i / steps;
+            int color = AetherUi.lerpColor(0xFF0A0C12, 0xFF05070A, t);
+            Mc189Compat.drawRect(0, top, w, bottom, color);
+        }
+
+        // Twinkling particles
+        long time = System.currentTimeMillis() / 40L;
+        for (int i = 0; i < 14; i++) {
+            int x = (int) ((i * 137L + time) % Math.max(1L, (long) w + 80L)) - 40;
+            int y = (i * 53) % Math.max(1, h);
+            int size = 1 + (i % 3);
+            Mc189Compat.drawRect(x, y, x + size, y + size, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x22));
+        }
     }
 
     private void drawDeck(AetherClickGuiScreen screen, Object font, Layout layout) {
         // Shadow layer
         drawShadow(layout.deckX, layout.deckY,
                 layout.deckX + layout.deckW, layout.deckY + layout.deckH,
-                AetherMetrics.CORNER_RADIUS, 6);
+                12, 6);
         // Deck container
         AetherUi.drawRoundRect(layout.deckX, layout.deckY,
                 layout.deckX + layout.deckW, layout.deckY + layout.deckH,
-                AetherMetrics.CORNER_RADIUS, AetherUi.DECK_BG);
+                12, AetherUi.DECK_BG);
         AetherUi.outline(layout.deckX, layout.deckY,
                 layout.deckX + layout.deckW, layout.deckY + layout.deckH,
                 AetherUi.DECK_EDGE);
@@ -63,16 +83,18 @@ public final class ControlCenterRenderer {
         Mc189Compat.drawRect(layout.deckX + 1, headerY,
                 layout.deckX + layout.deckW - 1, headerY + headerH - 2, headerBg);
 
+        // Top accent line
+        Mc189Compat.drawRect(layout.deckX + 1, headerY,
+                layout.deckX + layout.deckW - 1, headerY + 2, AetherUi.withAlpha(AetherUi.ACCENT, 0x44));
+
         // Branding on left
-        AetherUi.text(font, "AETHER", layout.deckX + 16, headerY + 14, AetherUi.ACCENT);
+        AetherUi.textSmooth(font, "AETHER", layout.deckX + 16, headerY + 14, AetherUi.ACCENT);
 
         // Page title centered
         ControlCenterSection section = screen.nav().section();
         String pageTitle = section != null ? section.label() : "";
-        int titleWidth = Mc189Compat.stringWidth(font, pageTitle);
         int centerX = layout.deckX + layout.deckW / 2;
-        AetherUi.text(font, pageTitle, centerX - titleWidth / 2, headerY + 14,
-                AetherUi.TEXT_PRIMARY);
+        AetherUi.centeredSmooth(font, pageTitle, centerX, headerY + 14, layout.deckW, AetherUi.TEXT_PRIMARY);
 
         // Search icon on right
         int searchIconX = layout.deckX + layout.deckW - 40;
@@ -94,9 +116,9 @@ public final class ControlCenterRenderer {
         if (sidebarW <= 0) return;
 
         // Subtle sidebar background
-        Mc189Compat.drawRect(layout.sidebarX, layout.sidebarY,
+        AetherUi.drawRoundRect(layout.sidebarX, layout.sidebarY,
                 layout.sidebarX + sidebarW, layout.sidebarY + layout.sidebarH,
-                AetherUi.withAlpha(AetherUi.PANEL, 0x88));
+                8, AetherUi.withAlpha(AetherUi.PANEL, 0x88));
 
         ControlCenterSection activeSection = screen.nav().section();
 
@@ -130,10 +152,9 @@ public final class ControlCenterRenderer {
 
             // Label
             String label = section.label();
-            int labelWidth = Mc189Compat.stringWidth(font, label);
-            int labelX = layout.sidebarX + sidebarW / 2 - labelWidth / 2;
+            int labelX = layout.sidebarX + sidebarW / 2;
             int labelY = itemY + 8;
-            AetherUi.text(font, label, labelX, labelY,
+            AetherUi.textSmooth(font, label, labelX, labelY,
                     isActive ? AetherUi.ACCENT_ON : isHover ? AetherUi.TEXT_PRIMARY
                             : AetherUi.TEXT_SECONDARY);
         }

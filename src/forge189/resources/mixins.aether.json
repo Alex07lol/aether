@@ -1,5 +1,5 @@
 {
-  "required": true,
+  "required": false,
   "minVersion": "0.7",
   "package": "dev.aether.forge189.mixin",
   "compatibilityLevel": "JAVA_8",
@@ -12,6 +12,6 @@
     "WorldMixin"
   ],
   "injectors": {
-    "defaultRequire": 1
+    "defaultRequire": 0
   }
 }

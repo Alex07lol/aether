@@ -59,6 +59,6 @@ public final class AetherButton {
         AetherUi.drawRoundRect(ox, oy, ox + w, oy + h, r, bg);
         AetherUi.outline(ox, oy, ox + w, oy + h, border);
         int txtX = ox + (w - Mc189Compat.stringWidth(font, txt)) / 2;
-        AetherUi.text(font, txt, txtX, oy + (h > 20 ? 6 : 3), text);
+        AetherUi.textSmooth(font, txt, txtX, oy + (h > 20 ? 6 : 3), text);
     }
 }

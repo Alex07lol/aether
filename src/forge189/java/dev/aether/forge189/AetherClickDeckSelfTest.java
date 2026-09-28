@@ -112,6 +112,18 @@ public final class AetherClickDeckSelfTest {
         narrow.drawScreen(4, 4, 0F);
         narrow.typeKey('\0', 1);
 
+        // F9 hands over to the glyph-render diagnostic; the deck must hand over without throwing,
+        // and the diagnostic itself must render both its text paths headlessly.
+        wide.typeKey('\0', 67);
+        AetherFontDiagScreen diagnostic = new AetherFontDiagScreen(client, wide);
+        diagnostic.width = 854;
+        diagnostic.height = 480;
+        diagnostic.mc = null;
+        diagnostic.fontRendererObj = new FontRenderer();
+        diagnostic.drawScreen(10, 10, 0F);
+        diagnostic.keyTyped('\0', 1);
+        assertTrue(!diagnostic.doesGuiPauseGame(), "the font diagnostic does not pause the game");
+
         wide.handleMouseInput();
         wide.releaseMouse(10, 10, 0);
 
@@ -208,8 +220,8 @@ public final class AetherClickDeckSelfTest {
 
     private static void gotoSectionByClick(AetherClickGuiScreen deck, String sectionLabel) throws IOException {
         deck.drawScreen(10, 10, 0F);
-        // Sidebar items use AetherMetrics.SIDEBAR_ITEM_HEIGHT = 30
-        int itemH = 30; // AetherMetrics.SIDEBAR_ITEM_HEIGHT
+        // Sidebar items use AetherMetrics.SIDEBAR_ITEM_HEIGHT = 28
+        int itemH = 28; // AetherMetrics.SIDEBAR_ITEM_HEIGHT
         int baseY = listY(854, 480);
         int index = -1;
         for (int i = 0; i < ControlCenterSection.ordered().length; i++) {
@@ -372,14 +384,14 @@ public final class AetherClickDeckSelfTest {
     private static void clickFirstRowToggle(AetherClickGuiScreen screen, int w, int h) throws IOException {
         screen.drawScreen(10, 10, 0F);
         // Match ControlCenterLayout.compute() + ModulesPage exactly using actual AetherMetrics constants:
-        // HEADER_HEIGHT=48, SIDEBAR_WIDTH=130, ROW_HEIGHT=34
+        // HEADER_HEIGHT=44, SIDEBAR_WIDTH=130, ROW_HEIGHT=34
         int margin = clamp(w / 24, 6, 16);
         int deckW = Math.min(1040, w - margin * 2);
         int deckH = h - margin * 2;
         int deckX = (w - deckW) / 2;
         int deckY = margin;
-        int headerH = 48; // AetherMetrics.HEADER_HEIGHT
-        int footerH = 20; // AetherMetrics.FOOTER_HEIGHT
+        int headerH = 44; // AetherMetrics.HEADER_HEIGHT
+        int footerH = 18; // AetherMetrics.FOOTER_HEIGHT
         int bodyTop = deckY + headerH;
         int footerY = deckY + deckH - footerH;
         int sidebarW = (deckW >= 560) ? 130 : 0; // AetherMetrics.SIDEBAR_WIDTH
@@ -481,7 +493,7 @@ public final class AetherClickDeckSelfTest {
     }
 
     private static int listY(int w, int h) {
-        int bodyTop = deckY(w) + 48; // AetherMetrics.HEADER_HEIGHT
+        int bodyTop = deckY(w) + 44; // AetherMetrics.HEADER_HEIGHT
         return bodyTop + 6;
     }
 

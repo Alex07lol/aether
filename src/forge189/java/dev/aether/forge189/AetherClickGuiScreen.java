@@ -101,6 +101,10 @@ public final class AetherClickGuiScreen extends GuiScreen {
     private final AetherDropdown aetherDropdown = new AetherDropdown();
     private final AetherSlider aetherSlider = new AetherSlider();
 
+    // Custom smooth font renderer (anti-aliased TrueType text)
+    private static final dev.aether.forge189.font.AetherFontManager fontManager =
+        dev.aether.forge189.font.AetherFontManager.instance();
+
     // Cached layout for the current frame (used by hit-testing)
     private Layout currentLayout;
 
@@ -273,11 +277,25 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        render(mouseX, mouseY, partialTicks);
+        int w = Mc189Compat.screenWidth(this);
+        int h = Mc189Compat.screenHeight(this);
+        if (w <= 0 || h <= 0) {
+            return;
+        }
+        int scaledX = scaledMouseX(w);
+        int scaledY = scaledMouseY(h);
+        render(scaledX, scaledY, partialTicks);
     }
 
     public void func_73863_a(int mouseX, int mouseY, float partialTicks) {
-        render(mouseX, mouseY, partialTicks);
+        int w = Mc189Compat.screenWidth(this);
+        int h = Mc189Compat.screenHeight(this);
+        if (w <= 0 || h <= 0) {
+            return;
+        }
+        int scaledX = scaledMouseX(w);
+        int scaledY = scaledMouseY(h);
+        render(scaledX, scaledY, partialTicks);
     }
 
     private void render(int mouseX, int mouseY, float partialTicks) {
@@ -295,11 +313,15 @@ public final class AetherClickGuiScreen extends GuiScreen {
         if (currentLayout == null) return;
 
         Object font = Mc189Compat.screenFontRenderer(this);
-        renderer.render(this, font, mouseX, mouseY, currentLayout);
+        // Use the custom smooth font only when it owns a real OpenGL texture; otherwise Minecraft's
+        // font draws the UI instead of nothing at all.
+        Object smoothFont = fontManager.uiFont();
+        Object uiFont = smoothFont != null ? smoothFont : font;
+        renderer.render(this, uiFont, mouseX, mouseY, currentLayout);
 
         // Toasts
         toastSystem.tick();
-        AetherToastRenderer.render(font,
+        AetherToastRenderer.render(uiFont,
                                    toastSystem.snapshot(),
                                    w, h);
     }
@@ -397,6 +419,14 @@ public final class AetherClickGuiScreen extends GuiScreen {
         inputHandler.handleKey(typedChar, keyCode);
     }
 
+    /**
+     * Opens the glyph-render diagnostic. Reachable with F9 while no field has focus, so a broken
+     * custom font can be told apart from a broken layout without leaving the game.
+     */
+    public void openFontDiagnostic() {
+        Mc189Compat.displayGuiScreen(new AetherFontDiagScreen(client, this));
+    }
+
     public Page getCurrentPage() {
         switch (nav.section()) {
             case MODULES: return modulesPage;
@@ -465,7 +495,7 @@ public final class AetherClickGuiScreen extends GuiScreen {
         }
     }
 
-    private int backdropDim() {
+    public int backdropDim() {
         if (!moduleEnabled("graphics.ui_blur")) {
             return 0xF2;
         }

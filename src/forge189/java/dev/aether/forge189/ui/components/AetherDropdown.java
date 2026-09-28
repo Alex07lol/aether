@@ -21,13 +21,13 @@ public final class AetherDropdown {
         this.open = false;
     }
 
-    public void render() {
+    public void render(Object font) {
         int bg = hover ? AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x1E)
                        : AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x1E);
         AetherUi.roundRect(x, y, x + w, y + h, 3, bg);
         int txt = hover ? AetherUi.TEXT_PRIMARY
                         : AetherUi.TEXT_SECONDARY;
-        AetherUi.text(null, label, x + 6, y + 4, txt);
+        AetherUi.textSmooth(font, label, x + 6, y + 4, txt);
         AetherUi.drawChevron(x + w - 12, y + h / 2 - 2, 1, txt);
         AetherUi.drawChevron(x + w - 6,  y + h / 2 - 2, -1, txt);
     }

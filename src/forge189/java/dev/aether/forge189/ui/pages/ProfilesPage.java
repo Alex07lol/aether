@@ -2,6 +2,7 @@ package dev.aether.forge189.ui.pages;
 
 import dev.aether.forge189.AetherClickGuiScreen;
 import dev.aether.forge189.AetherUi;
+import dev.aether.forge189.font.GlyphPageFontRenderer;
 import dev.aether.forge189.Mc189Compat;
 import dev.aether.forge189.ui.Layout;
 import dev.aether.forge189.ui.components.AetherButton;
@@ -22,7 +23,11 @@ public final class ProfilesPage extends Page {
                        int mouseX, int mouseY,
                        Layout layout) {
         int y = layout.listY + 8;
-        AetherUi.text(font, "PROFILES", layout.listX + 8, y, AetherUi.TEXT_DISABLED);
+        if (font instanceof GlyphPageFontRenderer) {
+            ((GlyphPageFontRenderer) font).drawString("PROFILES", layout.listX + 8, y, AetherUi.TEXT_DISABLED);
+        } else {
+            AetherUi.textSmooth(font, "PROFILES", layout.listX + 8, y, AetherUi.TEXT_DISABLED);
+        }
         // Section underline
         Mc189Compat.drawRect(layout.listX + 8, y + 16, layout.listX + 100, y + 17, AetherUi.withAlpha(AetherUi.ACCENT, 0x66));
         y += 30;
@@ -53,12 +58,21 @@ public final class ProfilesPage extends Page {
                 Mc189Compat.drawRect(cardX, y, cardX + 3, y + cardH, AetherUi.ACCENT);
             }
 
-            AetherUi.text(font, name, cardX + 12, y + 8,
-                         isActive ? AetherUi.ACCENT : AetherUi.TEXT_PRIMARY);
+            if (font instanceof GlyphPageFontRenderer) {
+                ((GlyphPageFontRenderer) font).drawString(name, cardX + 12, y + 8,
+                    isActive ? AetherUi.ACCENT : AetherUi.TEXT_PRIMARY);
+            } else {
+                AetherUi.textSmooth(font, name, cardX + 12, y + 8,
+                    isActive ? AetherUi.ACCENT : AetherUi.TEXT_PRIMARY);
+            }
 
             // Active badge
             if (isActive) {
-                AetherUi.text(font, "ACTIVE", cardX + 12, y + 20, AetherUi.ACCENT);
+                if (font instanceof GlyphPageFontRenderer) {
+                    ((GlyphPageFontRenderer) font).drawString("ACTIVE", cardX + 12, y + 20, AetherUi.ACCENT);
+                } else {
+                    AetherUi.textSmooth(font, "ACTIVE", cardX + 12, y + 20, AetherUi.ACCENT);
+                }
             }
 
             int actionX = cardX + cardW - 100;
@@ -66,20 +80,28 @@ public final class ProfilesPage extends Page {
                                  mouseY >= y + 6 && mouseY <= y + 18;
             int applyBg = applyHover ? AetherUi.withAlpha(AetherUi.ACCENT, 0x33) : AetherUi.withAlpha(AetherUi.ROW_BG, 0xFF);
             Mc189Compat.drawRect(actionX, y + 6, actionX + 46, y + 18, applyBg);
-            AetherUi.text(font, "APPLY", actionX + 8, y + 9, applyHover ? AetherUi.ACCENT : AetherUi.TEXT_DISABLED);
+            if (font instanceof GlyphPageFontRenderer) {
+                ((GlyphPageFontRenderer) font).drawString("APPLY", actionX + 8, y + 9, applyHover ? AetherUi.ACCENT : AetherUi.TEXT_DISABLED);
+            } else {
+                AetherUi.textSmooth(font, "APPLY", actionX + 8, y + 9, applyHover ? AetherUi.ACCENT : AetherUi.TEXT_DISABLED);
+            }
 
             int delX = actionX + 50;
             boolean delHover = mouseX >= delX && mouseX <= delX + 44 &&
                                mouseY >= y + 6 && mouseY <= y + 18;
             int delBg = delHover ? AetherUi.withAlpha(AetherUi.WARN, 0x33) : AetherUi.withAlpha(AetherUi.ROW_BG, 0xFF);
             Mc189Compat.drawRect(delX, y + 6, delX + 44, y + 18, delBg);
-            AetherUi.text(font, "DELETE", delX + 8, y + 9, delHover ? AetherUi.WARN : AetherUi.TEXT_DISABLED);
+            if (font instanceof GlyphPageFontRenderer) {
+                ((GlyphPageFontRenderer) font).drawString("DELETE", delX + 8, y + 9, delHover ? AetherUi.WARN : AetherUi.TEXT_DISABLED);
+            } else {
+                AetherUi.textSmooth(font, "DELETE", delX + 8, y + 9, delHover ? AetherUi.WARN : AetherUi.TEXT_DISABLED);
+            }
 
             y += cardH + 6;
         }
 
         y += 4;
-        AetherUi.text(font, "New profile name:", layout.listX + 8, y + 4, AetherUi.TEXT_DISABLED);
+        AetherUi.textSmooth(font, "New profile name:", layout.listX + 8, y + 4, AetherUi.TEXT_DISABLED);
         y += 24;
         // Input field with focus styling
         boolean inputHover = mouseX >= layout.listX + 8 && mouseX <= layout.listX + 200 &&
@@ -89,7 +111,7 @@ public final class ProfilesPage extends Page {
         if (inputHover) {
             AetherUi.outline(layout.listX + 8, y, layout.listX + 200, y + 20, AetherUi.withAlpha(AetherUi.ACCENT, 0x88));
         }
-        AetherUi.text(font, screen.getProfileDraftName(), layout.listX + 12, y + 4, AetherUi.TEXT_PRIMARY);
+        AetherUi.textSmooth(font, screen.getProfileDraftName(), layout.listX + 12, y + 4, AetherUi.TEXT_PRIMARY);
 
         y += 30;
         saveBtn.render(font, mouseX, mouseY, layout.listX + 8, y);

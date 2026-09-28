@@ -40,6 +40,7 @@ public final class ControlCenterLayout {
                 listX, listY, listW, listH,
                 spineX, spineY, spineW, spineH,
                 footerY,
+                width, height,
                 scroll, maxScroll);
     }
 }

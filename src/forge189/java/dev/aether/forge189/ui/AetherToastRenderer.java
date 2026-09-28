@@ -21,7 +21,7 @@ public final class AetherToastRenderer {
             int x = screenWidth - PADDING_X - WIDTH;
             int slide = (int) ((1f - vis) * 30);
             AetherUi.roundRect(x + slide, y, x + WIDTH + slide, y + HEIGHT, 4, bg);
-            AetherUi.text(font, toast.text(), x + slide + 8, y + 6, txt);
+            AetherUi.textSmooth(font, toast.text(), x + slide + 8, y + 6, txt);
             y -= HEIGHT + 4;
         }
     }

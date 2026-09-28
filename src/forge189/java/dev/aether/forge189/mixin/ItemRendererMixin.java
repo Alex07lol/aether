@@ -9,7 +9,6 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.ItemSword;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -30,6 +29,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *   <li>Third-person poses (the sword block pose and the lowered fishing rod) are inline
  *       transforms, because there is no vanilla argument to steer.</li>
  * </ul>
+ * <p>
+ * This mixin deliberately declares no {@code @Shadow} members. A shadow is a hard requirement: if
+ * the member cannot be resolved the whole mixin fails and the client crashes on start, which is what
+ * a production runtime without a generated refmap would do. Vanilla's own transforms and the held
+ * item are reached through {@link Mc189Compat} instead, which tries the development name and then
+ * the SRG name and simply does not enhance the pose when neither is present.
  */
 @Mixin(ItemRenderer.class)
 public abstract class ItemRendererMixin {
@@ -46,23 +51,15 @@ public abstract class ItemRendererMixin {
     /** Set by ForgeClientEventBridge while graphics.animation > rod_animation is on. */
     public static boolean fishingRodAnimationEnabled = false;
 
-    @Shadow
-    private ItemStack itemToRender;
-
-    @Shadow
-    private void transformFirstPersonItem(float equipProgress, float swingProgress) {
-        throw new AssertionError("shadowed by Mixin");
-    }
-
-    @Shadow
-    private void doBowTransformations(float partialTicks, EntityPlayer player) {
-        throw new AssertionError("shadowed by Mixin");
-    }
+    /** MCP first, then the SRG name a production runtime uses. */
+    private static final String[] ITEM_TO_RENDER = {"itemToRender", "field_78453_b"};
+    private static final String[] TRANSFORM_FIRST_PERSON = {"transformFirstPersonItem", "func_178096_b"};
+    private static final String[] DO_BOW_TRANSFORMATIONS = {"doBowTransformations", "func_178098_a"};
 
     /** Partial ticks of the frame being rendered; the redirects need them for the arm swing. */
     private static float renderingPartialTicks;
 
-    @Inject(method = "renderItemInFirstPerson", at = @At("HEAD"))
+    @Inject(method = "renderItemInFirstPerson", at = @At("HEAD"), require = 0)
     private void rememberPartialTicks(float partialTicks, CallbackInfo ci) {
         renderingPartialTicks = partialTicks;
     }
@@ -72,31 +69,37 @@ public abstract class ItemRendererMixin {
      * already passes the live swing, so only the in-use actions change: 1.7 kept the arm swing
      * for a blocking sword and for food/drink, which is the "block hit" bob.
      */
-    @Redirect(method = "renderItemInFirstPerson", at = @At(value = "INVOKE",
+    @Redirect(method = "renderItemInFirstPerson", require = 0, at = @At(value = "INVOKE",
         target = "Lnet/minecraft/client/renderer/ItemRenderer;transformFirstPersonItem(FF)V"))
     private void legacyFirstPersonTransform(ItemRenderer renderer, float equipProgress, float swingProgress) {
-        this.transformFirstPersonItem(equipProgress, legacySwing(swingProgress));
+        Mc189Compat.call(renderer, TRANSFORM_FIRST_PERSON, new Class<?>[] {Float.TYPE, Float.TYPE},
+            Float.valueOf(equipProgress), Float.valueOf(legacySwing(swingProgress)));
     }
 
     /** Lets vanilla build the bow pose, but on the 1.7 draw curve. */
-    @Redirect(method = "renderItemInFirstPerson", at = @At(value = "INVOKE",
+    @Redirect(method = "renderItemInFirstPerson", require = 0, at = @At(value = "INVOKE",
         target = "Lnet/minecraft/client/renderer/ItemRenderer;doBowTransformations(FLnet/minecraft/entity/player/EntityPlayer;)V"))
     private void legacyBowTransformations(ItemRenderer renderer, float partialTicks, EntityPlayer player) {
         if (bowAnimationEnabled) {
             Float compensated = Mc189Compat.legacyBowPartialTicks(player, partialTicks);
             if (compensated != null) {
-                this.doBowTransformations(compensated.floatValue(), player);
+                callBowTransformations(renderer, compensated.floatValue(), player);
                 return;
             }
         }
-        this.doBowTransformations(partialTicks, player);
+        callBowTransformations(renderer, partialTicks, player);
+    }
+
+    private static void callBowTransformations(ItemRenderer renderer, float partialTicks, EntityPlayer player) {
+        Mc189Compat.call(renderer, DO_BOW_TRANSFORMATIONS, new Class<?>[] {Float.TYPE, EntityPlayer.class},
+            Float.valueOf(partialTicks), player);
     }
 
     private float legacySwing(float swingProgress) {
         if (!blockAnimationEnabled && !eatDrinkAnimationEnabled) {
             return swingProgress;
         }
-        FirstPersonAnims.Action action = Mc189Compat.useActionKind(this.itemToRender);
+        FirstPersonAnims.Action action = Mc189Compat.useActionKind(Mc189Compat.read(this, ITEM_TO_RENDER));
         if (action == FirstPersonAnims.Action.NONE || action == FirstPersonAnims.Action.BOW) {
             return swingProgress;
         }
@@ -105,7 +108,7 @@ public abstract class ItemRendererMixin {
             blockAnimationEnabled, eatDrinkAnimationEnabled);
     }
 
-    @Inject(method = "renderItem", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/entity/RenderItem;renderItemModelForEntity(Lnet/minecraft/item/ItemStack;Lnet/minecraft/entity/EntityLivingBase;Lnet/minecraft/client/renderer/block/model/ItemCameraTransforms$TransformType;)V"))
+    @Inject(method = "renderItem", require = 0, at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/entity/RenderItem;renderItemModelForEntity(Lnet/minecraft/item/ItemStack;Lnet/minecraft/entity/EntityLivingBase;Lnet/minecraft/client/renderer/block/model/ItemCameraTransforms$TransformType;)V"))
     public void renderItem(EntityLivingBase entity, ItemStack item, ItemCameraTransforms.TransformType transformType, CallbackInfo ci) {
         if (item == null) return;
 
@@ -125,7 +128,7 @@ public abstract class ItemRendererMixin {
         Mc189Compat.translate(-0.04F, -0.04F, 0.0F);
     }
 
-    @Inject(method = "doBlockTransformations", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "doBlockTransformations", at = @At("HEAD"), cancellable = true, require = 0)
     public void swordBlockTransformations(CallbackInfo ci) {
         if (!blockAnimationEnabled) return;
         Mc189Compat.translate(-0.24F, 0.17F, 0.0F);

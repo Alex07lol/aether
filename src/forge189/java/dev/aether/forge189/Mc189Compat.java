@@ -1,5 +1,6 @@
 package dev.aether.forge189;
 
+import dev.aether.forge189.font.GlyphPageFontRenderer;
 import dev.aether.graphics.FirstPersonAnims;
 
 import net.minecraft.client.Minecraft;
@@ -35,6 +36,9 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class Mc189Compat {
     private static final Map<String, Method> methodCache = new ConcurrentHashMap<>();
     private static final Map<String, Field> fieldCache = new ConcurrentHashMap<>();
+    /** Guards the one-shot report for a colour state that cannot be set; see {@link #color}. */
+    private static final java.util.concurrent.atomic.AtomicBoolean COLOUR_FAILURE_REPORTED =
+        new java.util.concurrent.atomic.AtomicBoolean(false);
 
     private Mc189Compat() {
     }
@@ -884,6 +888,13 @@ public final class Mc189Compat {
 
     public static void drawStringWithShadow(Object fontRenderer, String text, float x, float y, int color) {
         if (fontRenderer == null || text == null || text.isEmpty()) return;
+        if (fontRenderer instanceof GlyphPageFontRenderer) {
+            // Aether's own renderer is not Minecraft's FontRenderer, so it has to be called directly:
+            // the reflective lookup below only ever matches Minecraft's (String, int, int, int)
+            // signature, and a miss there used to mean the text was silently never drawn.
+            ((GlyphPageFontRenderer) fontRenderer).drawStringWithShadow(text, x, y, color);
+            return;
+        }
         enableBlend();
         enableTexture2D();
         color(1.0F, 1.0F, 1.0F, 1.0F);
@@ -895,6 +906,15 @@ public final class Mc189Compat {
 
     public static void drawString(Object fontRenderer, String text, float x, float y, int color, boolean dropShadow) {
         if (fontRenderer == null || text == null || text.isEmpty()) return;
+        if (fontRenderer instanceof GlyphPageFontRenderer) {
+            GlyphPageFontRenderer smooth = (GlyphPageFontRenderer) fontRenderer;
+            if (dropShadow) {
+                smooth.drawStringWithShadow(text, x, y, color);
+            } else {
+                smooth.drawString(text, x, y, color);
+            }
+            return;
+        }
         enableBlend();
         enableTexture2D();
         color(1.0F, 1.0F, 1.0F, 1.0F);
@@ -913,7 +933,36 @@ public final class Mc189Compat {
         color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
+    /**
+     * Calls an instance method that Aether cannot reference at compile time, trying each name in
+     * order (MCP first, then the SRG name a production runtime uses).
+     * <p>
+     * Mixin's {@code @Shadow} is the usual way to reach a private Minecraft method, but a shadow is
+     * a hard requirement: on a runtime whose mappings do not match it fails the whole mixin and takes
+     * the game down with it, while a refmap is only generated when the build was given SRG mappings.
+     * Resolving the member here keeps the hook soft - a mapping mismatch degrades to "the animation
+     * does not change", which is the contract every other Aether hook already has.
+     *
+     * @return the call's result, or null when no candidate resolved.
+     */
+    public static Object call(Object target, String[] names, Class<?>[] parameterTypes, Object... args) {
+        return invoke(target, names, parameterTypes, args);
+    }
+
+    /**
+     * Reads an instance field that Aether cannot reference at compile time, trying MCP then SRG
+     * names. See {@link #call} for why this is preferred over an {@code @Shadow} field.
+     *
+     * @return the field's value, or null when neither candidate resolved.
+     */
+    public static Object read(Object target, String[] names) {
+        return getField(target, names);
+    }
+
     public static int stringWidth(Object fontRenderer, String text) {
+        if (fontRenderer instanceof GlyphPageFontRenderer) {
+            return ((GlyphPageFontRenderer) fontRenderer).getStringWidth(text);
+        }
         Object value = invoke(fontRenderer, new String[] {"getStringWidth", "func_78256_a"}, new Class<?>[] {String.class}, text);
         return value instanceof Integer ? ((Integer) value).intValue() : text.length() * 6;
     }
@@ -983,15 +1032,14 @@ public final class Mc189Compat {
         enableBlend();
         disableTexture2D();
         tryBlendFuncSeparate(770, 771, 1, 0);
-        color(r, g, b, a);
 
         Tessellator tessellator = getTessellator();
         WorldRenderer worldRenderer = tessellator.getWorldRenderer();
-        worldRenderer.begin(7, DefaultVertexFormats.POSITION);
-        worldRenderer.pos((double) left, (double) bottom, 0.0D).endVertex();
-        worldRenderer.pos((double) right, (double) bottom, 0.0D).endVertex();
-        worldRenderer.pos((double) right, (double) top, 0.0D).endVertex();
-        worldRenderer.pos((double) left, (double) top, 0.0D).endVertex();
+        worldRenderer.begin(7, DefaultVertexFormats.POSITION_COLOR);
+        worldRenderer.pos((double) left, (double) bottom, 0.0D).color(r, g, b, a).endVertex();
+        worldRenderer.pos((double) right, (double) bottom, 0.0D).color(r, g, b, a).endVertex();
+        worldRenderer.pos((double) right, (double) top, 0.0D).color(r, g, b, a).endVertex();
+        worldRenderer.pos((double) left, (double) top, 0.0D).color(r, g, b, a).endVertex();
         tessellator.draw();
 
         enableTexture2D();
@@ -1032,11 +1080,11 @@ public final class Mc189Compat {
 
         Tessellator tessellator = getTessellator();
         WorldRenderer worldRenderer = tessellator.getWorldRenderer();
-        worldRenderer.begin(7, DefaultVertexFormats.POSITION_TEX);
-        worldRenderer.pos(x, y + height, 0.0D).tex(0.0D, 1.0D).endVertex();
-        worldRenderer.pos(x + width, y + height, 0.0D).tex(1.0D, 1.0D).endVertex();
-        worldRenderer.pos(x + width, y, 0.0D).tex(1.0D, 0.0D).endVertex();
-        worldRenderer.pos(x, y, 0.0D).tex(0.0D, 0.0D).endVertex();
+        worldRenderer.begin(7, DefaultVertexFormats.POSITION_TEX_COLOR);
+        worldRenderer.pos(x, y + height, 0.0D).tex(0.0D, 1.0D).color(1.0F, 1.0F, 1.0F, 1.0F).endVertex();
+        worldRenderer.pos(x + width, y + height, 0.0D).tex(1.0D, 1.0D).color(1.0F, 1.0F, 1.0F, 1.0F).endVertex();
+        worldRenderer.pos(x + width, y, 0.0D).tex(1.0D, 0.0D).color(1.0F, 1.0F, 1.0F, 1.0F).endVertex();
+        worldRenderer.pos(x, y, 0.0D).tex(0.0D, 0.0D).color(1.0F, 1.0F, 1.0F, 1.0F).endVertex();
         tessellator.draw();
         color(1.0F, 1.0F, 1.0F, 1.0F);
     }
@@ -1152,12 +1200,19 @@ public final class Mc189Compat {
     }
 
     public static void color(float red, float green, float blue, float alpha) {
-        if (invokeStatic(glStateManagerClass(), new String[] {"color", "func_179131_c", "func_179124_c"},
+        // Both SRG candidates are kept: one of them names the four-argument overload in 1.8.9, and a
+        // name that does not match the parameter list simply fails to resolve.
+        if (!invokeStaticVoid(glStateManagerClass(), new String[] {"color", "func_179131_c", "func_179124_c"},
             new Class<?>[] {Float.TYPE, Float.TYPE, Float.TYPE, Float.TYPE},
-            Float.valueOf(red), Float.valueOf(green), Float.valueOf(blue), Float.valueOf(alpha)) == null) {
-            invokeStatic(gl11Class(), new String[] {"glColor4f"},
-                new Class<?>[] {Float.TYPE, Float.TYPE, Float.TYPE, Float.TYPE},
-                Float.valueOf(red), Float.valueOf(green), Float.valueOf(blue), Float.valueOf(alpha));
+            Float.valueOf(red), Float.valueOf(green), Float.valueOf(blue), Float.valueOf(alpha))
+            && COLOUR_FAILURE_REPORTED.compareAndSet(false, true)) {
+            // GlStateManager owns 1.8.9's colour state and caches it, so it is the only place worth
+            // writing: LWJGL's glColor4f sets the client-array colour, which the Tessellator vertex
+            // pipeline never reads, and writing it here would move GL state without moving the cache
+            // paired with it. A colour that cannot be set is reported rather than ignored.
+            System.out.println("[Aether] GlStateManager.color is unreachable on this runtime, so colour"
+                + " state will not change. UI drawing carries its colour on the vertex, so only the"
+                + " primitives that still rely on GL colour are affected.");
         }
     }
 
@@ -1463,6 +1518,43 @@ public final class Mc189Compat {
         return null;
     }
 
+    /**
+     * Calls a static method and reports whether it was actually reached.
+     * <p>
+     * {@link #invokeStatic} returns the method's value, which is {@code null} for every void entry
+     * point - and most of the state calls here are void - so it cannot distinguish "invoked" from
+     * "not found". That ambiguity was harmless while the callers' fallbacks did the same thing; it
+     * is not harmless once a caller reports the failure or takes a different path, which is why the
+     * distinction is made explicit here instead of being inferred from a return value.
+     */
+    private static boolean invokeStaticVoid(Class<?> type, String[] names, Class<?>[] parameterTypes, Object... args) {
+        if (type == null) {
+            return false;
+        }
+        String cacheKey = buildCacheKey("static#" + type.getName(), names, parameterTypes);
+        Method cachedMethod = methodCache.get(cacheKey);
+        if (cachedMethod != null) {
+            try {
+                cachedMethod.invoke(null, args);
+                return true;
+            } catch (ReflectiveOperationException ignored) {
+                methodCache.remove(cacheKey);
+            }
+        }
+        for (String name : names) {
+            Method method = findMethod(type, name, parameterTypes);
+            if (method != null) {
+                try {
+                    methodCache.put(cacheKey, method);
+                    method.invoke(null, args);
+                    return true;
+                } catch (ReflectiveOperationException ignored) {
+                }
+            }
+        }
+        return false;
+    }
+
     private static Object invoke(Object target, String[] names) {
         return invoke(target, names, new Class<?>[0]);
     }
@@ -1618,32 +1710,6 @@ public final class Mc189Compat {
         if (invokeStatic(glStateManagerClass(), new String[] {"shadeModel", "func_179103_j"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(mode)) == null) {
             invokeStatic(gl11Class(), new String[] {"glShadeModel"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(mode));
         }
-    }
-
-    static void drawCircle(float x, float y, float r, int h, int j, int color) {
-        enableBlend();
-        disableTexture2D();
-
-        float a = (float)(color >> 24 & 255) / 255.0F;
-        float red = (float)(color >> 16 & 255) / 255.0F;
-        float g = (float)(color >> 8 & 255) / 255.0F;
-        float b = (float)(color & 255) / 255.0F;
-        color(red, g, b, a);
-
-        Class<?> gl = gl11Class();
-        invokeStatic(gl, new String[] {"glBegin"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(6));
-        invokeStatic(gl, new String[] {"glVertex2f"}, new Class<?>[] {Float.TYPE, Float.TYPE}, Float.valueOf(x), Float.valueOf(y));
-
-        for (float var = h; var <= j; var++) {
-            color(red, g, b, a);
-            float vx = (float) (r * Math.cos(Math.PI * var / 180) + x);
-            float vy = (float) (r * Math.sin(Math.PI * var / 180) + y);
-            invokeStatic(gl, new String[] {"glVertex2f"}, new Class<?>[] {Float.TYPE, Float.TYPE}, Float.valueOf(vx), Float.valueOf(vy));
-        }
-
-        invokeStatic(gl, new String[] {"glEnd"});
-        enableTexture2D();
-        disableBlend();
     }
 
     static void drawRoundedRectangle(int x, int y, int w, int h, int radius, int color, int index) {

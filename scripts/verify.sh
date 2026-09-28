@@ -33,12 +33,23 @@ else
   javac $JAVAC_FLAGS -cp "build/classes$CP_SEP""build/forge189Stubs-classes" -d build/forge189-classes @build/forge189-sources.txt
 fi
 
-# Drive the Control Center screen headlessly: layout, sections, keyboard, mouse, palette,
-# profiles and reset paths all run against the stubs, so regressions fail here instead of in game.
-java -cp "build/classes$CP_SEP""build/test-classes$CP_SEP""build/forge189Stubs-classes$CP_SEP""build/forge189-classes" \
-  dev.aether.forge189.AetherClickDeckSelfTest
+# Drive the adapter headlessly. The Control Center test covers layout, sections, keyboard, mouse,
+# palette, profiles and reset paths; the font test covers the glyph atlas, the packing and the
+# measurement contract, the fallback a missing OpenGL texture has to take, and the colour contract:
+# glyph quads and their underline/strikethrough decorations both carry their colour on the vertex,
+# so a text draw neither reads nor leaves GL colour state. Both run against the stubs, so a
+# regression fails here instead of in game.
+for self_test in \
+  dev.aether.forge189.AetherClickDeckSelfTest \
+  dev.aether.forge189.font.AetherFontSelfTest
+do
+  java -cp "build/classes$CP_SEP""build/test-classes$CP_SEP""build/forge189Stubs-classes$CP_SEP""build/forge189-classes" \
+    "$self_test"
+done
 
 for test_class in \
+  dev.aether.remap.McpSrgRemapperTest \
+  dev.aether.graphics.TextureIdResolverTest \
   dev.aether.event.EventBusTest \
   dev.aether.module.ModuleRegistryTest \
   dev.aether.module.AetherSettingsMetadataTest \
@@ -68,5 +79,34 @@ for test_class in \
 do
   java -cp "build/classes$CP_SEP""build/test-classes" "$test_class"
 done
+
+# The UI draws exclusively through the Tessellator vertex pipeline. Immediate mode and the
+# client-array colour are what made text depend on GL state in the first place, so their return is a
+# failure, not a style issue. GL_TRIANGLE_FAN is deliberately not matched: as a Tessellator mode it
+# is a legitimate primitive, and the cosmetics renderer uses it that way.
+IMMEDIATE_MODE='glBegin|glEnd[[:space:]]*\(|glVertex2f|glVertex3f|glTexCoord2f|glColor4f'
+# Comment lines are excluded: the sources legitimately name these entry points while explaining why
+# they are gone.
+if grep -rnE "$IMMEDIATE_MODE" src/forge189/java src/main/java \
+  | grep -vE ':[[:space:]]*(//|\*|/\*)' | grep -qv '^$'; then
+  echo "Verification failed: immediate-mode or client-array GL calls are back in the drawing path:"
+  grep -rnE "$IMMEDIATE_MODE" src/forge189/java src/main/java | grep -vE ':[[:space:]]*(//|\*|/\*)'
+  exit 1
+fi
+echo "No immediate-mode or client-array GL entry points in the drawing path."
+
+# The release step has to leave the artifact addressing names a production runtime has, and this
+# check used to be missing entirely. Run with an empty mapping file it is a report: it names every
+# Minecraft member the shipping classes call in development form, which is exactly the set that
+# throws NoSuchMethodError in game until -PaetherSrgMappings=<mcp-srg.srg> remaps them.
+mkdir -p build/reports build/audit
+java -cp "build/classes" dev.aether.remap.RemapTool \
+  --mappings scripts/empty-mappings.srg \
+  --input build/classes --input build/forge189-classes \
+  --output build/audit/remapped \
+  --report build/reports/aether-unmapped-game-references.txt \
+  --exclude SelfTest --exclude dev/aether/remap/ \
+  > build/audit/remap-summary.txt 2>&1 || true
+grep -E "distinct Minecraft members|call sites that would fail" build/audit/remap-summary.txt || true
 
 echo "Aether verification passed."

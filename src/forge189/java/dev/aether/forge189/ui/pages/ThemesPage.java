@@ -5,6 +5,7 @@ import dev.aether.module.ClientModule;
 import dev.aether.theme.AetherTheme;
 import dev.aether.theme.ThemeModule;
 import dev.aether.forge189.AetherUi;
+import dev.aether.forge189.font.GlyphPageFontRenderer;
 import dev.aether.forge189.Mc189Compat;
 import dev.aether.forge189.ui.Layout;
 import dev.aether.forge189.ui.components.AetherButton;
@@ -36,7 +37,11 @@ public final class ThemesPage extends Page {
         }
 
         int y = layout.listY + 8;
-        AetherUi.text(font, "THEMES", layout.listX + 8, y, AetherUi.TEXT_DISABLED);
+        if (font instanceof GlyphPageFontRenderer) {
+            ((GlyphPageFontRenderer) font).drawString("THEMES", layout.listX + 8, y, AetherUi.TEXT_DISABLED);
+        } else {
+            AetherUi.textSmooth(font, "THEMES", layout.listX + 8, y, AetherUi.TEXT_DISABLED);
+        }
         y += 30;
 
         for (AetherTheme theme : themes) {
@@ -58,12 +63,21 @@ public final class ThemesPage extends Page {
             }
 
             // Theme name
-            AetherUi.text(font, theme.name(), cardX + 16, y + 10,
-                         isActive ? AetherUi.ACCENT : AetherUi.TEXT_PRIMARY);
+            if (font instanceof GlyphPageFontRenderer) {
+                ((GlyphPageFontRenderer) font).drawString(theme.name(), cardX + 16, y + 10,
+                    isActive ? AetherUi.ACCENT : AetherUi.TEXT_PRIMARY);
+            } else {
+                AetherUi.textSmooth(font, theme.name(), cardX + 16, y + 10,
+                    isActive ? AetherUi.ACCENT : AetherUi.TEXT_PRIMARY);
+            }
 
             // Active badge
             if (isActive) {
-                AetherUi.text(font, "ACTIVE", cardX + 16, y + 24, AetherUi.ACCENT);
+                if (font instanceof GlyphPageFontRenderer) {
+                    ((GlyphPageFontRenderer) font).drawString("ACTIVE", cardX + 16, y + 24, AetherUi.ACCENT);
+                } else {
+                    AetherUi.textSmooth(font, "ACTIVE", cardX + 16, y + 24, AetherUi.ACCENT);
+                }
             }
 
             // Palette preview - 5 color swatches

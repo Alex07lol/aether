@@ -13,12 +13,21 @@ public final class AetherTheme {
         return new AetherTheme(name == null ? "Custom" : name, palette);
     }
 
+    /**
+     * The palette the client starts on, before any theme module is enabled.
+     * <p>
+     * It is deliberately dark. Every Aether screen is designed as charcoal glass, and the light
+     * palettes are opt-in theme modules. A light default did not just look wrong: the theme hub
+     * repaints the shared tokens from the active palette on the first frame, so a near-white
+     * default replaced the UI's own dark surface, deck and panel tokens and the Control Center
+     * rendered as one large washed-out panel no screen could opt out of.
+     */
     public static AetherTheme defaultTheme() {
-        return new AetherTheme("Aether Frost", new ThemePalette(
-            ColorRgb.of(245, 251, 255),
-            ColorRgb.of(210, 239, 255),
-            ColorRgb.of(82, 190, 235),
-            ColorRgb.of(22, 74, 112),
+        return new AetherTheme("Aether", new ThemePalette(
+            ColorRgb.of(8, 9, 13),
+            ColorRgb.of(29, 30, 37),
+            ColorRgb.of(155, 140, 255),
+            ColorRgb.of(242, 242, 245),
             ColorRgb.of(255, 255, 255)
         ));
     }

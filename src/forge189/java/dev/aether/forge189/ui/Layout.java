@@ -11,6 +11,7 @@ public final class Layout {
     public final int listX, listY, listW, listH;
     public final int spineX, spineY, spineW, spineH;
     public final int footerY;
+    public final int screenW, screenH;
     public final float scroll;
     public final float maxScroll;
 
@@ -20,6 +21,7 @@ public final class Layout {
                   int listX, int listY, int listW, int listH,
                   int spineX, int spineY, int spineW, int spineH,
                   int footerY,
+                  int screenW, int screenH,
                   float scroll, float maxScroll) {
         this.deckX = deckX; this.deckY = deckY; this.deckW = deckW; this.deckH = deckH;
         this.headerH = headerH; this.footerH = footerH;
@@ -27,6 +29,7 @@ public final class Layout {
         this.listX = listX; this.listY = listY; this.listW = listW; this.listH = listH;
         this.spineX = spineX; this.spineY = spineY; this.spineW = spineW; this.spineH = spineH;
         this.footerY = footerY;
+        this.screenW = screenW; this.screenH = screenH;
         this.scroll = scroll; this.maxScroll = maxScroll;
     }
 }

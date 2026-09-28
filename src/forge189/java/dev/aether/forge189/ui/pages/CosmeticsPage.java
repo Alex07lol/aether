@@ -5,6 +5,7 @@ import dev.aether.cosmetic.CosmeticType;
 import dev.aether.cosmetic.CosmeticValidationResult;
 import dev.aether.forge189.AetherClickGuiScreen;
 import dev.aether.forge189.AetherUi;
+import dev.aether.forge189.font.GlyphPageFontRenderer;
 import dev.aether.forge189.Mc189Compat;
 import dev.aether.forge189.ui.Layout;
 import dev.aether.forge189.ui.components.AetherButton;
@@ -96,7 +97,7 @@ public final class CosmeticsPage extends Page {
             boolean hover = mx >= cx && mx <= cx + cw && my >= chipY && my <= chipY + FILTER_HEIGHT;
             int bg = active ? AetherUi.ACCENT : hover ? AetherUi.ROW_HOVER : AetherUi.ROW_BG;
             Mc189Compat.drawRect(cx, chipY, cx + cw, chipY + FILTER_HEIGHT, bg);
-            AetherUi.text(font, labels[i], cx + 8, chipY + 5,
+            AetherUi.textSmooth(font, labels[i], cx + 8, chipY + 5,
                          active ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
             cx += cw + 4;
         }
@@ -116,8 +117,8 @@ public final class CosmeticsPage extends Page {
         if (filtered.isEmpty()) {
             int cx = gx + gw / 2;
             int cy = gy + gh / 2;
-            AetherUi.text(font, "No cosmetics found", cx - 50, cy - 8, AetherUi.TEXT_SECONDARY);
-            AetherUi.text(font, "Import a PNG cape to get started", cx - 65, cy + 8, AetherUi.TEXT_DISABLED);
+            AetherUi.textSmooth(font, "No cosmetics found", cx - 50, cy - 8, AetherUi.TEXT_SECONDARY);
+            AetherUi.textSmooth(font, "Import a PNG cape to get started", cx - 65, cy + 8, AetherUi.TEXT_DISABLED);
             return;
         }
 
@@ -164,7 +165,7 @@ public final class CosmeticsPage extends Page {
             // Name
             String shortName = asset.name().length() > 10
                 ? asset.name().substring(0, 8) + ".." : asset.name();
-            AetherUi.text(font, shortName, cx + 4, cy + CELL_SIZE - 16, AetherUi.TEXT_PRIMARY);
+            AetherUi.textSmooth(font, shortName, cx + 4, cy + CELL_SIZE - 16, AetherUi.TEXT_PRIMARY);
 
             // Type badge
             AetherUi.drawBadge(asset.type().name(), cx + 4, cy + 4, AetherUi.ACCENT);

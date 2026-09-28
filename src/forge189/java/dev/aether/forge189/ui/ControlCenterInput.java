@@ -56,6 +56,13 @@ public final class ControlCenterInput {
         ControlCenterState nav = screen.getNav();
         ControlCenterSection section = nav.section();
 
+        // F9 opens the glyph-render diagnostic, but only when nothing is capturing input, so it
+        // never steals a key that is being bound to a module setting.
+        if (keyCode == 67 && nav.focus().isIdle() && !nav.isSearching()) {
+            screen.openFontDiagnostic();
+            return;
+        }
+
         // Keyboard navigation for the control center
         switch (keyCode) {
             case 15: // Tab: cycle sections

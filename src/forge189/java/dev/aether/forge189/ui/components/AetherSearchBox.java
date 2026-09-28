@@ -26,7 +26,7 @@ public final class AetherSearchBox {
                                  focused ? AetherUi.ACCENT : AetherUi.TEXT_DISABLED);
         String shown = query.isEmpty() && !focused ? "type to search" : query;
         int textColor = query.isEmpty() && !focused ? AetherUi.TEXT_DISABLED : AetherUi.TEXT_PRIMARY;
-        AetherUi.text(font, shown, x + 22, y + 6, textColor);
+        AetherUi.textSmooth(font, shown, x + 22, y + 6, textColor);
     }
 
     public void render(Object font) {

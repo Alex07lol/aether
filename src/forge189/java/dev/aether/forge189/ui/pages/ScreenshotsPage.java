@@ -3,6 +3,7 @@ package dev.aether.forge189.ui.pages;
 import dev.aether.forge189.AetherClickGuiScreen;
 import dev.aether.screenshot.ScreenshotInfo;
 import dev.aether.forge189.AetherUi;
+import dev.aether.forge189.font.GlyphPageFontRenderer;
 import dev.aether.forge189.Mc189Compat;
 import dev.aether.forge189.ui.Layout;
 import dev.aether.forge189.ui.components.AetherButton;
@@ -24,7 +25,7 @@ public final class ScreenshotsPage extends Page {
                        int mouseX, int mouseY,
                        Layout layout) {
         int y = layout.listY + 8;
-        AetherUi.text(font, "SCREENSHOTS", layout.listX + 8, y, AetherUi.TEXT_DISABLED);
+        AetherUi.textSmooth(font, "SCREENSHOTS", layout.listX + 8, y, AetherUi.TEXT_DISABLED);
         y += 30;
 
         captureBtn.render(font, mouseX, mouseY, layout.listX + layout.listW - 110, y);
@@ -36,8 +37,8 @@ public final class ScreenshotsPage extends Page {
             // Empty state
             int centerX = layout.listX + layout.listW / 2;
             int centerY = y + 80;
-            AetherUi.text(font, "No screenshots yet", centerX - 60, centerY, AetherUi.TEXT_SECONDARY);
-            AetherUi.text(font, "Press the Capture button or use the Screenshot module", centerX - 130, centerY + 16, AetherUi.TEXT_DISABLED);
+            AetherUi.textSmooth(font, "No screenshots yet", centerX - 60, centerY, AetherUi.TEXT_SECONDARY);
+            AetherUi.textSmooth(font, "Press the Capture button or use the Screenshot module", centerX - 130, centerY + 16, AetherUi.TEXT_DISABLED);
             return;
         }
 
@@ -65,9 +66,9 @@ public final class ScreenshotsPage extends Page {
 
             String shortName = shot.name().length() > 20
                 ? shot.name().substring(0, 18) + ".." : shot.name();
-            AetherUi.text(font, shortName, x + 4, ty + 4, AetherUi.TEXT_PRIMARY);
+            AetherUi.textSmooth(font, shortName, x + 4, ty + 4, AetherUi.TEXT_PRIMARY);
 
-            AetherUi.text(font, shot.timestamp() + " · " + (shot.sizeBytes() / 1024) + " KB",
+            AetherUi.textSmooth(font, shot.timestamp() + " · " + (shot.sizeBytes() / 1024) + " KB",
                          x + 4, ty + 18, AetherUi.TEXT_DISABLED);
 
             // OPEN button
@@ -77,7 +78,7 @@ public final class ScreenshotsPage extends Page {
                                 mouseY >= btnY && mouseY <= btnY + 18;
             int openBg = openHover ? AetherUi.withAlpha(AetherUi.ACCENT, 0x33) : AetherUi.withAlpha(AetherUi.ROW_BG, 0xFF);
             Mc189Compat.drawRect(actionX, btnY, actionX + 56, btnY + 18, openBg);
-            AetherUi.text(font, "OPEN", actionX + 10, btnY + 6,
+            AetherUi.textSmooth(font, "OPEN", actionX + 10, btnY + 6,
                          openHover ? AetherUi.ACCENT : AetherUi.TEXT_DISABLED);
 
             // DEL button
@@ -86,7 +87,7 @@ public final class ScreenshotsPage extends Page {
                                mouseY >= btnY && mouseY <= btnY + 18;
             int delBg = delHover ? AetherUi.withAlpha(AetherUi.WARN, 0x33) : AetherUi.withAlpha(AetherUi.ROW_BG, 0xFF);
             Mc189Compat.drawRect(delX, btnY, delX + 38, btnY + 18, delBg);
-            AetherUi.text(font, "DEL", delX + 8, btnY + 6,
+            AetherUi.textSmooth(font, "DEL", delX + 8, btnY + 6,
                          delHover ? AetherUi.WARN : AetherUi.TEXT_DISABLED);
 
             idx++;
