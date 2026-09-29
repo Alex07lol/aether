@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build:
-    name: Build & Publish Release
+    name: Build, verify & publish release
     runs-on: ubuntu-latest
 
     steps:
@@ -26,32 +26,24 @@ jobs:
           java-version: '8'
           distribution: 'temurin'
 
-      - name: Setup Gradle 7.6.4
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '7.6.4'
-
-      # A jar that ships development Minecraft names throws NoSuchMethodError on a real 1.8.9 client
-      # and never has its screens called. Supplying the ForgeGradle SRG mapping file turns the
-      # remapping step on and makes the build refuse to publish anything it could not remap; without
-      # it the build still runs, but the jar is a development jar (see docs/BUILD_PIPELINE_AUDIT.md).
-      - name: Build Aether JAR
-        env:
-          AETHER_SRG_MAPPINGS: ${{ vars.AETHER_SRG_MAPPINGS }}
-        run: |
-          export JAVA8_HOME="$JAVA_HOME"
-          REQUIRE_REMAP="false"
-          if [ -n "$AETHER_SRG_MAPPINGS" ]; then REQUIRE_REMAP="true"; fi
-          gradle assemble forge189Jar -PaetherRequireRemap="$REQUIRE_REMAP" --no-daemon
+      # The legacy toolchain this project is pinned to: ForgeGradle 2.1 + MixinGradle 0.6
+      # only run on Gradle 4.x and Java 8 (see docs/BUILD_PIPELINE_AUDIT.md). The Gradle
+      # wrapper resolves 4.10.3 - do NOT raise it without migrating the build first.
+      #
+      # scripts/verify.sh runs the real gate: build + core self tests + reobfJar, then
+      # proves the shipped jar has the refmap (searge table), the mixin config, the
+      # Mixin/FMLCorePlugin manifest attributes and zero MCP-named calls into Minecraft.
+      # A jar that failed any of those would NoSuchMethodError on a real 1.8.9 client,
+      # so failing the build here is the point.
+      - name: Build, test & verify production jar
+        run: sh scripts/verify.sh
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: aether-client-jar
-          path: |
-            build/libs/*.jar
-            build/reports/unmapped-game-references.txt
-          if-no-files-found: warn
+          path: build/libs/aether-*.jar
+          if-no-files-found: error
 
       - name: Create Release & Upload Asset
         uses: softprops/action-gh-release@v2
@@ -62,7 +54,6 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          files: |
-            build/libs/*.jar
+          files: build/libs/aether-*.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
