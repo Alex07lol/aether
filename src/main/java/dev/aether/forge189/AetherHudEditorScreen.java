@@ -62,9 +62,6 @@ public final class AetherHudEditorScreen extends GuiScreen {
         }
     }
 
-    public void func_73866_w_() {
-        initGui();
-    }
 
     @Override
     public void onGuiClosed() {
@@ -75,9 +72,6 @@ public final class AetherHudEditorScreen extends GuiScreen {
         }
     }
 
-    public void func_146281_b() {
-        onGuiClosed();
-    }
 
     private void calculateDimensions() {
         elementDimensions.clear();
@@ -96,9 +90,6 @@ public final class AetherHudEditorScreen extends GuiScreen {
         renderScreen(mouseX, mouseY, partialTicks);
     }
 
-    public void func_73863_a(int mouseX, int mouseY, float partialTicks) {
-        renderScreen(mouseX, mouseY, partialTicks);
-    }
 
     private void renderScreen(int mouseX, int mouseY, float partialTicks) {
         AetherUi.syncTheme();
@@ -408,10 +399,6 @@ public final class AetherHudEditorScreen extends GuiScreen {
         }
     }
 
-    // MCP 1.8.9 obfuscated alias for mouseClickMove
-    protected void func_73862_b(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
-        mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
-    }
 
     @Override
     public void handleMouseInput() throws IOException {
@@ -495,25 +482,10 @@ public final class AetherHudEditorScreen extends GuiScreen {
         }
     }
 
-    protected void func_73864_a(int mouseX, int mouseY, int mouseButton) throws IOException {
-        mouseClicked(mouseX, mouseY, mouseButton);
-    }
 
-    public void func_146274_d() throws IOException {
-        handleMouseInput();
-    }
 
-    protected void func_146286_b(int mouseX, int mouseY, int state) {
-        mouseReleased(mouseX, mouseY, state);
-    }
 
-    protected void func_73869_a(char typedChar, int keyCode) throws IOException {
-        keyTyped(typedChar, keyCode);
-    }
 
-    public boolean func_73868_f() {
-        return false;
-    }
 
     private void drawGrid() {
         int w = Mc189Compat.screenWidth(this);

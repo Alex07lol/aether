@@ -29,17 +29,11 @@ public final class AetherMainMenuScreen extends GuiScreen {
         render(mouseX, mouseY);
     }
 
-    public void func_73863_a(int mouseX, int mouseY, float partialTicks) {
-        render(mouseX, mouseY);
-    }
 
     protected void mouseClicked(int mouseX, int mouseY, int clickedButton) throws IOException {
         click(mouseX, mouseY, clickedButton);
     }
 
-    protected void func_73864_a(int mouseX, int mouseY, int clickedButton) throws IOException {
-        click(mouseX, mouseY, clickedButton);
-    }
 
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
         if (keyCode == KEY_ESCAPE) {
@@ -50,17 +44,11 @@ public final class AetherMainMenuScreen extends GuiScreen {
         }
     }
 
-    protected void func_73869_a(char typedChar, int keyCode) throws IOException {
-        keyTyped(typedChar, keyCode);
-    }
 
     public boolean doesGuiPauseGame() {
         return false;
     }
 
-    public boolean func_73868_f() {
-        return false;
-    }
 
     private void render(int mouseX, int mouseY) {
         AetherUi.syncTheme();
@@ -92,14 +80,17 @@ public final class AetherMainMenuScreen extends GuiScreen {
     }
 
     private void drawBackground(int width, int height) {
-        // Dark gradient background
+        // The custom Aether background art, stretched to fill, with a light dark scrim on top
+        // so text stays readable without hiding the artwork.
+        Mc189Compat.drawTexture("background.png", 0, 0, width, height);
         int steps = 20;
         for (int i = 0; i < steps; i++) {
             int top = i * height / steps;
             int bottom = (i + 1) * height / steps + 1;
             float t = (float) i / steps;
-            int color = AetherUi.lerpColor(0xFF0A0C12, 0xFF05070A, t);
-            Mc189Compat.drawRect(0, top, width, bottom, color);
+            int alpha = (int) (0x5E + (0x3C - 0x5E) * t);
+            int base = AetherUi.lerpColor(0x0A0C12, 0x05070A, t);
+            Mc189Compat.drawRect(0, top, width, bottom, (alpha << 24) | (base & 0x00FFFFFF));
         }
     }
 

@@ -157,7 +157,6 @@ public final class AetherModMenuScreen extends GuiScreen {
         propertyPanel.setModule(selectedModule);
     }
 
-    public void func_73866_w_() { initGui(); }
 
     /* ------------------------------------------------------------------ */
     /*  Rendering                                                          */
@@ -168,9 +167,6 @@ public final class AetherModMenuScreen extends GuiScreen {
         render(mouseX, mouseY, partialTicks);
     }
 
-    public void func_73863_a(int mouseX, int mouseY, float partialTicks) {
-        render(mouseX, mouseY, partialTicks);
-    }
 
     private void render(int mouseX, int mouseY, float partialTicks) {
         AetherUi.syncTheme();
@@ -195,9 +191,6 @@ public final class AetherModMenuScreen extends GuiScreen {
         click(mouseX, mouseY, btn);
     }
 
-    protected void func_73864_a(int mouseX, int mouseY, int btn) throws IOException {
-        click(mouseX, mouseY, btn);
-    }
 
     private void click(int mouseX, int mouseY, int btn) {
         ensurePanels();
@@ -213,10 +206,6 @@ public final class AetherModMenuScreen extends GuiScreen {
         }
     }
 
-    // MCP 1.8.9 obfuscated alias for mouseClickMove
-    protected void func_73862_b(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
-        mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
-    }
 
     @Override
     protected void mouseReleased(int mouseX, int mouseY, int state) {
@@ -229,10 +218,6 @@ public final class AetherModMenuScreen extends GuiScreen {
         }
     }
 
-    // MCP 1.8.9 obfuscated alias for mouseReleased
-    protected void func_73861_b(int mouseX, int mouseY, int state) {
-        mouseReleased(mouseX, mouseY, state);
-    }
 
     @Override
     protected void keyTyped(char c, int keyCode) throws IOException {
@@ -256,12 +241,10 @@ public final class AetherModMenuScreen extends GuiScreen {
         else if (keyCode == KEY_DOWN) moduleGridPanel.scrollBy(30);
     }
 
-    protected void func_73869_a(char c, int keyCode) throws IOException { keyTyped(c, keyCode); }
 
     @Override
     public boolean doesGuiPauseGame() { return false; }
 
-    public boolean func_73868_f() { return false; }
 
     @Override
     public void handleMouseInput() throws IOException {
@@ -290,9 +273,6 @@ public final class AetherModMenuScreen extends GuiScreen {
         }
     }
 
-    public void func_146274_d() throws IOException {
-        handleMouseInput();
-    }
 
     public void handleWheelScroll(int delta) {
         ensurePanels();

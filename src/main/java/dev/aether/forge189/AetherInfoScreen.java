@@ -23,9 +23,6 @@ public final class AetherInfoScreen extends GuiScreen {
         render(mouseX, mouseY);
     }
 
-    public void func_73863_a(int mouseX, int mouseY, float partialTicks) {
-        render(mouseX, mouseY);
-    }
 
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
         if (keyCode == KEY_ESCAPE) {
@@ -33,17 +30,11 @@ public final class AetherInfoScreen extends GuiScreen {
         }
     }
 
-    protected void func_73869_a(char typedChar, int keyCode) throws IOException {
-        keyTyped(typedChar, keyCode);
-    }
 
     public boolean doesGuiPauseGame() {
         return false;
     }
 
-    public boolean func_73868_f() {
-        return false;
-    }
 
     private void render(int mouseX, int mouseY) {
         AetherUi.syncTheme();

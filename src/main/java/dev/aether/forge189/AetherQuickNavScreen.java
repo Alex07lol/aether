@@ -39,16 +39,12 @@ public final class AetherQuickNavScreen extends GuiScreen {
     }
 
     @Override public void initGui()  { super.initGui(); }
-    public void func_73866_w_()      { initGui(); }
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         renderScreen(mouseX, mouseY, partialTicks);
     }
 
-    public void func_73863_a(int mouseX, int mouseY, float partialTicks) {
-        renderScreen(mouseX, mouseY, partialTicks);
-    }
 
     private void renderScreen(int mouseX, int mouseY, float partialTicks) {
         AetherUi.syncTheme();
@@ -216,9 +212,6 @@ public final class AetherQuickNavScreen extends GuiScreen {
         handleClick(mouseX, mouseY, mouseButton);
     }
 
-    protected void func_73864_a(int mouseX, int mouseY, int mouseButton) throws IOException {
-        handleClick(mouseX, mouseY, mouseButton);
-    }
 
     private void handleClick(int mouseX, int mouseY, int mouseButton) {
         if (mouseButton != 0) return;
@@ -252,12 +245,6 @@ public final class AetherQuickNavScreen extends GuiScreen {
         }
     }
 
-    protected void func_73869_a(char typedChar, int keyCode) throws IOException {
-        if (keyCode == KEY_ESCAPE || keyCode == KEY_RSHIFT) {
-            Mc189Compat.displayGuiScreen(parent);
-        }
-    }
 
     @Override public boolean doesGuiPauseGame() { return false; }
-    public boolean func_73868_f() { return false; }
 }

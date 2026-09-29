@@ -204,12 +204,56 @@ tasks.check {
     dependsOn coreSelfTests
 }
 
-// Dev runs: there is no jar manifest for FML to scan, so hand it the Mixin
-// bootstrap coremod through the command-line hook (CoreModManager reads
-// fml.coreMods.load) - the production jar carries the same plugin via its
-// FMLCorePlugin manifest attribute.
-tasks.withType(JavaExec).configureEach {
-    systemProperty "fml.coreMods.load", "dev.aether.forge189.mixin.AetherMixinPlugin"
+// Dev runs: FML discovers the @Mod container reliably only from a jar in
+// run/mods (the classpath candidate crawl does not pick it up in this setup).
+// The jar must be MCP-named, NOT the reobf'd build/libs artifact: a production
+// (SRG) jar in a deobfuscated workspace corrupts class loading - overrides of
+// GuiScreen lifecycle methods collide with their remapped names and the mod
+// container dies with ClassFormatError/NoClassDefFoundError. So assemble a
+// dev-named jar (same manifest, classes straight from build/classes) and drop
+// main.output from the game classpath so the jar is the single class source.
+task devModJar(type: Jar, dependsOn: tasks.classes) {
+    group = "build"
+    description = "Assembles the MCP-named mod jar used by runClient."
+    baseName = "aether-dev"
+    from(sourceSets.main.output) {
+        exclude "mcmod.info"
+    }
+    from(sourceSets.main.resources) {
+        include "mcmod.info"
+        expand "version": project.version, "mcversion": project.minecraft.version
+    }
+    manifest {
+        attributes(
+            "MixinConfigs": "mixins.aether.json",
+            "FMLCorePlugin": "dev.aether.forge189.mixin.AetherMixinPlugin",
+            "TweakClass": "org.spongepowered.asm.launch.MixinTweaker",
+            "TweakOrder": 0,
+            "FMLCorePluginContainsFMLMod": "true",
+            "ForceLoadAsMod": "true"
+        )
+    }
+}
+task installModJar(type: Copy, dependsOn: tasks.devModJar) {
+    group = "build"
+    description = "Copies the dev mod jar into run/mods for dev launches."
+    from tasks.devModJar
+    into "run/mods"
+    doFirst {
+        delete fileTree("run/mods") { include "aether-*.jar" }
+    }
+}
+tasks.runClient {
+    dependsOn tasks.installModJar
+    doFirst {
+        // TEMPORARY: -PaetherDebugShots=true launches the visual debugger hook.
+        if (project.hasProperty("aetherDebugShots")) {
+            jvmArgs "-Daether.debugShots=true"
+        }
+        // The mod's classes now come from the jar in run/mods only; leaving
+        // build/classes on the classpath would define every class twice.
+        classpath = classpath.filter { File f -> !sourceSets.main.output.contains(f) }
+    }
 }
 
 // Gradle 9 removed the project-level property; set it where it is meaningful.

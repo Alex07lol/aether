@@ -83,17 +83,18 @@ public final class AetherClickGuiScreen extends GuiScreen {
     private final ModuleSearch search = new ModuleSearch();
 
     private final ControlCenterLayout layoutEngine = new ControlCenterLayout();
-    private final ControlCenterRenderer renderer = new ControlCenterRenderer();
     private final ControlCenterInput inputHandler = new ControlCenterInput(this);
     private final ToastSystem toastSystem = new ToastSystem();
 
-    // Pages - all implemented in the new UI package
+    // Pages - the single source of truth, shared by rendering and the click path
     private final ModulesPage modulesPage = new ModulesPage();
     private final ProfilesPage profilesPage = new ProfilesPage();
     private final ThemesPage themesPage = new ThemesPage();
     private final CosmeticsPage cosmeticsPage = new CosmeticsPage();
     private final ScreenshotsPage screenshotsPage = new ScreenshotsPage();
     private final SettingsPage settingsPage = new SettingsPage();
+    private final ControlCenterRenderer renderer = new ControlCenterRenderer(
+        modulesPage, profilesPage, themesPage, cosmeticsPage, screenshotsPage, settingsPage);
 
     // UI components
     private final AetherToggle aetherToggle = new AetherToggle();
@@ -168,11 +169,6 @@ public final class AetherClickGuiScreen extends GuiScreen {
         }
     }
 
-    // MCP alias for initGui, matching the other Aether screens
-    public void func_73866_w_() {
-        initGui();
-    }
-
     @Override
     public void onGuiClosed() {
         // Transient input state belongs to this screen instance: close it out so a slider drag that
@@ -194,10 +190,6 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     @Override
     public boolean doesGuiPauseGame() {
-        return false;
-    }
-
-    public boolean func_73868_f() {
         return false;
     }
 
@@ -287,17 +279,6 @@ public final class AetherClickGuiScreen extends GuiScreen {
         render(scaledX, scaledY, partialTicks);
     }
 
-    public void func_73863_a(int mouseX, int mouseY, float partialTicks) {
-        int w = Mc189Compat.screenWidth(this);
-        int h = Mc189Compat.screenHeight(this);
-        if (w <= 0 || h <= 0) {
-            return;
-        }
-        int scaledX = scaledMouseX(w);
-        int scaledY = scaledMouseY(h);
-        render(scaledX, scaledY, partialTicks);
-    }
-
     private void render(int mouseX, int mouseY, float partialTicks) {
         int w = Mc189Compat.screenWidth(this);
         int h = Mc189Compat.screenHeight(this);
@@ -330,10 +311,6 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     @Override
     protected void mouseClicked(int mx, int my, int button) throws IOException {
-        inputHandler.click(mx, my, button);
-    }
-
-    protected void func_73864_a(int mx, int my, int button) throws IOException {
         inputHandler.click(mx, my, button);
     }
 
@@ -437,6 +414,18 @@ public final class AetherClickGuiScreen extends GuiScreen {
             case SETTINGS: return settingsPage;
             default: return modulesPage;
         }
+    }
+
+    /** Closes the deck, returning to whatever screen opened it (or the game). */
+    public void closeDeck() {
+        Mc189Compat.displayGuiScreen(parent);
+    }
+
+    /** True when the click lands in the header's search box (rect cached by the renderer). */
+    public boolean isInsideSearchBox(int x, int y) {
+        int[] rect = renderer.lastSearchBox();
+        return rect != null && x >= rect[0] && x <= rect[0] + rect[2]
+            && y >= rect[1] && y <= rect[1] + rect[3];
     }
 
     public void handleSidebarClick(int mx, int my, int button) {
@@ -600,6 +589,14 @@ public final class AetherClickGuiScreen extends GuiScreen {
 
     public float getScroll() {
         return scroll;
+    }
+
+    public float getMaxScroll() {
+        return maxScroll;
+    }
+
+    public void setMaxScroll(float value) {
+        maxScroll = value;
     }
 
     public void clampScroll() {

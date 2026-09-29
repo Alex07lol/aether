@@ -45,25 +45,13 @@ public final class AetherFontDiagScreen extends GuiScreen {
         render();
     }
 
-    public void func_73863_a(int mouseX, int mouseY, float partialTicks) {
-        render();
-    }
-
     protected void keyTyped(char typedChar, int keyCode) {
         if (keyCode == KEY_ESCAPE) {
             Mc189Compat.displayGuiScreen(parent);
         }
     }
 
-    protected void func_73869_a(char typedChar, int keyCode) {
-        keyTyped(typedChar, keyCode);
-    }
-
     public boolean doesGuiPauseGame() {
-        return false;
-    }
-
-    public boolean func_73868_f() {
         return false;
     }
 

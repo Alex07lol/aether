@@ -5,6 +5,7 @@ import dev.aether.graphics.FirstPersonAnims;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.ScaledResolution;
 import net.minecraftforge.client.GuiIngameForge;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.settings.KeyBinding;
@@ -18,6 +19,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.ResourceLocation;
+import org.lwjgl.opengl.GL11;
 import net.minecraft.util.BlockPos;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.block.Block;
@@ -1056,7 +1058,7 @@ public final class Mc189Compat {
         color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
-    static void drawTexture(String path, int x, int y, int width, int height) {
+    public static void drawTexture(String path, int x, int y, int width, int height) {
         if (path == null || path.length() == 0 || width <= 0 || height <= 0) {
             return;
         }
@@ -1706,6 +1708,56 @@ public final class Mc189Compat {
 
     public static void drawRectangle(int x, int y, int width, int height, int color) {
         drawRect(x, y, x + width, y + height, color);
+    }
+
+    /** GUI-scale space size of the current window, matching what Minecraft passes to drawScreen. */
+    public static int guiScaleWidth() {
+        try {
+            Minecraft mc = Minecraft.getMinecraft();
+            return new ScaledResolution(mc).getScaledWidth();
+        } catch (Throwable ignored) {
+            return 0;
+        }
+    }
+
+    public static int guiScaleHeight() {
+        try {
+            Minecraft mc = Minecraft.getMinecraft();
+            return new ScaledResolution(mc).getScaledHeight();
+        } catch (Throwable ignored) {
+            return 0;
+        }
+    }
+
+    /**
+     * Restricts drawing to the rectangle in GUI-scale coordinates. Everything the Control Center
+     * draws inside the module list (cards, accordions, sliders) runs between the scissor pair so
+     * scrolled content cannot paint over the deck's header or footer.
+     */
+    public static void pushScissor(int x, int y, int width, int height) {
+        try {
+            Minecraft mc = Minecraft.getMinecraft();
+            ScaledResolution resolution = new ScaledResolution(mc);
+            float scale = resolution.getScaleFactor();
+            int scaledWidth = resolution.getScaledWidth();
+            int scaledHeight = resolution.getScaledHeight();
+            // GL scissors count from the bottom-left corner; MC GUI coordinates from the top-left.
+            int glX = Math.round(x * scale);
+            int glY = Math.round((scaledHeight - y - height) * scale);
+            int glW = Math.round(width * scale);
+            int glH = Math.round(height * scale);
+            GL11.glEnable(GL11.GL_SCISSOR_TEST);
+            GL11.glScissor(glX, glY, glW, glH);
+        } catch (Throwable ignored) {
+            // No clipping is visually worse than a crash; the rect simply draws unclipped.
+        }
+    }
+
+    public static void popScissor() {
+        try {
+            GL11.glDisable(GL11.GL_SCISSOR_TEST);
+        } catch (Throwable ignored) {
+        }
     }
 
     static void drawOutlinedRectangle(int x, int y, int w, int h, int t, int color) {
