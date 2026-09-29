@@ -386,7 +386,8 @@ final class ForgeClientEventBridge {
         boolean isDown = Mc189Compat.keyPressed(keyBindings.modMenu()) || Mc189Compat.keyboardKeyDown(code);
         if (isDown && !this.modMenuKeyDown) {
             client.eventBus().publish(new KeyInputEvent("mod_menu", code));
-            Mc189Compat.displayGuiScreen(new AetherClickGuiScreen(client));
+            dev.aether.gui.AetherGui.open(client,
+                dev.aether.ui.GuiSection.fromLabel(client.preferences().openSection(), dev.aether.ui.GuiSection.MODULES));
         }
         this.modMenuKeyDown = isDown;
     }
@@ -491,7 +492,7 @@ final class ForgeClientEventBridge {
         if (!enabled("interface.hud_editor")) {
             return;
         }
-        Mc189Compat.displayGuiScreen(new AetherHudEditorScreen(client));
+        dev.aether.gui.AetherGui.open(client, dev.aether.ui.GuiSection.HUD);
         client.modules().setEnabled("interface.hud_editor", false);
         saveQuietly();
     }
@@ -504,9 +505,7 @@ final class ForgeClientEventBridge {
         if (!enabled("interface.theme_selector")) {
             return;
         }
-        AetherClickGuiScreen screen = new AetherClickGuiScreen(client);
-        screen.focusCategory(ModuleCategory.INTERFACE);
-        Mc189Compat.displayGuiScreen(screen);
+        Mc189Compat.displayGuiScreen(dev.aether.gui.AetherGui.modulesForCategory(client, ModuleCategory.INTERFACE));
         client.modules().setEnabled("interface.theme_selector", false);
         saveQuietly();
     }
@@ -519,7 +518,7 @@ final class ForgeClientEventBridge {
         if (!enabled("cosmetics.manager")) {
             return;
         }
-        Mc189Compat.displayGuiScreen(new AetherCosmeticsScreen(client, null));
+        dev.aether.gui.AetherGui.open(client, dev.aether.ui.GuiSection.COSMETICS);
         client.modules().setEnabled("cosmetics.manager", false);
         saveQuietly();
     }

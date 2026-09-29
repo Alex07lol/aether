@@ -24,6 +24,8 @@ public final class AetherFontManager {
     private static AetherFontManager instance;
 
     private final GlyphPageFontRenderer[] bySize = new GlyphPageFontRenderer[4];
+    private final java.util.Map<Integer, GlyphPageFontRenderer> exactSizes =
+        new java.util.LinkedHashMap<Integer, GlyphPageFontRenderer>();
     private boolean failed;
     private String failure = "";
 
@@ -97,6 +99,52 @@ public final class AetherFontManager {
             + ", glyphs " + glyphPage.glyphCount()
             + ", pages " + renderer.pageCount()
             + ", " + glyphPage.textureSource();
+    }
+
+    /**
+     * A renderer at an exact point size, rasterised once and cached. The semantic type
+     * scale ({@code dev.aether.gui.AetherFont}) asks for whatever point size the current
+     * window scale makes correct, so the set of live sizes changes only when the window
+     * size or GUI scale does - never per frame.
+     *
+     * @param fontPt the requested point size, clamped into {@code 8..64}
+     * @return the renderer, or null when the custom font is unavailable
+     */
+    public GlyphPageFontRenderer sized(int fontPt) {
+        if (failed) {
+            return null;
+        }
+        int clamped = Math.max(8, Math.min(64, fontPt));
+        Integer key = Integer.valueOf(clamped);
+        GlyphPageFontRenderer cached = exactSizes.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        try {
+            GlyphPageFontRenderer renderer = GlyphPageFontRenderer.create(FONT_FAMILY, clamped, true, true, true);
+            if (!renderer.isUsable()) {
+                failed = true;
+                failure = "the glyph atlas has no OpenGL texture (" + renderer.regularPage().textureSource() + ")";
+                System.out.println("[Aether] Custom font unavailable: " + failure
+                    + "; the UI continues on the Minecraft font.");
+                return null;
+            }
+            exactSizes.put(key, renderer);
+            return renderer;
+        } catch (Error broken) {
+            failed = true;
+            failure = broken.getClass().getSimpleName() + ": " + broken.getMessage();
+            System.out.println("[Aether] The custom font cannot load because the artifact itself fails to"
+                + " link: " + failure + ". This is a build problem, not a font problem - build with"
+                + " -PaetherSrgMappings=<mcp-srg.srg> so the jar is remapped for production.");
+            throw broken;
+        } catch (RuntimeException unavailable) {
+            failed = true;
+            failure = unavailable.getClass().getSimpleName() + ": " + unavailable.getMessage();
+            System.out.println("[Aether] Custom font unavailable after " + failure
+                + "; the UI continues on the Minecraft font.");
+            return null;
+        }
     }
 
     private GlyphPageFontRenderer rendererFor(int slot, int size) {

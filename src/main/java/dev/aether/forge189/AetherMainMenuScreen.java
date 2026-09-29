@@ -40,7 +40,7 @@ public final class AetherMainMenuScreen extends GuiScreen {
             return;
         }
         if (typedChar == 'm' || typedChar == 'M') {
-            Mc189Compat.displayGuiScreen(new AetherQuickNavScreen(client, this));
+            dev.aether.gui.AetherGui.open(client, dev.aether.ui.GuiSection.MODULES);
         }
     }
 
@@ -122,7 +122,7 @@ public final class AetherMainMenuScreen extends GuiScreen {
 
         addIconButton("mod_menu", "icon/main_mod_menu.png", left, top, size, new ScreenAction() {
             public void run() {
-                Mc189Compat.displayGuiScreen(new AetherClickGuiScreen(client, AetherMainMenuScreen.this));
+                Mc189Compat.displayGuiScreen(dev.aether.gui.AetherGui.modules(client));
             }
         });
         addIconButton("resource_packs", "icon/main_resource_pack.png", left + size + gap, top, size, new ScreenAction() {

@@ -246,9 +246,10 @@ task installModJar(type: Copy, dependsOn: tasks.devModJar) {
 tasks.runClient {
     dependsOn tasks.installModJar
     doFirst {
-        // TEMPORARY: -PaetherDebugShots=true launches the visual debugger hook.
+        // TEMPORARY: -PaetherDebugShots=<true|WIDTHxHEIGHT> launches the visual
+        // debugger hook; a resolution resizes the window on the first tick.
         if (project.hasProperty("aetherDebugShots")) {
-            jvmArgs "-Daether.debugShots=true"
+            jvmArgs "-Daether.debugShots=${project.property('aetherDebugShots')}"
         }
         // The mod's classes now come from the jar in run/mods only; leaving
         // build/classes on the classpath would define every class twice.

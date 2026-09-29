@@ -1,5 +1,7 @@
 package dev.aether.hud;
 
+import dev.aether.config.ConfigDocument;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -67,6 +69,53 @@ public final class HudLayout {
 
     private int snap(int value) {
         return Math.round((float) value / (float) gridSize) * gridSize;
+    }
+
+    /**
+     * Persists every element's position, scale and opacity under {@code hud.<id>.*} in
+     * the shared config document, so an edited HUD layout survives a restart. Elements
+     * are moved through {@link #move}/{@link #scale}/{@link #opacity}; saving the
+     * client writes them with everything else.
+     */
+    public dev.aether.config.ConfigDocument toConfig() {
+        dev.aether.config.ConfigDocument.Builder builder = dev.aether.config.ConfigDocument.builder();
+        for (HudElement element : elements.values()) {
+            String prefix = "hud." + element.id();
+            builder.put(prefix + ".x", String.valueOf(element.x()));
+            builder.put(prefix + ".y", String.valueOf(element.y()));
+            builder.put(prefix + ".scale", String.valueOf(element.scale()));
+            builder.put(prefix + ".opacity", String.valueOf(element.opacity()));
+        }
+        return builder.build();
+    }
+
+    /** Restores persisted element geometry; unknown ids and malformed numbers are ignored. */
+    public void applyConfig(ConfigDocument document) {
+        for (HudElement element : elements.values()) {
+            String prefix = "hud." + element.id();
+            String x = document.get(prefix + ".x", null);
+            String y = document.get(prefix + ".y", null);
+            if (x != null && y != null) {
+                try {
+                    element.moveTo(Integer.parseInt(x.trim()), Integer.parseInt(y.trim()));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            String scale = document.get(prefix + ".scale", null);
+            if (scale != null) {
+                try {
+                    element.setScale(Float.parseFloat(scale.trim()));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            String opacity = document.get(prefix + ".opacity", null);
+            if (opacity != null) {
+                try {
+                    element.setOpacity(Float.parseFloat(opacity.trim()));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
     }
 }
 

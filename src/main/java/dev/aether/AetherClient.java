@@ -9,6 +9,7 @@ import dev.aether.event.EventBus;
 import dev.aether.fairplay.FairPlayPolicy;
 import dev.aether.hud.HudLayout;
 import dev.aether.module.ClientModule;
+import dev.aether.module.ModuleFavorites;
 import dev.aether.module.builtin.BuiltInModules;
 import dev.aether.module.ModuleRegistry;
 import dev.aether.runtime.ClientVersion;
@@ -36,6 +37,7 @@ public final class AetherClient {
     private final CosmeticLibrary cosmetics;
     private final ClientPreferences preferences = new ClientPreferences();
     private final ProfileStore profiles = new ProfileStore();
+    private final ModuleFavorites favorites = new ModuleFavorites();
     private final WaypointManager waypoints = new WaypointManager();
     private final ScreenshotManager screenshots;
 
@@ -60,15 +62,19 @@ public final class AetherClient {
         modules.applyConfig(config);
         preferences.applyConfig(config);
         profiles.applyConfig(config);
+        favorites.applyConfig(config);
+        hudLayout.applyConfig(config);
         waypoints.applyConfig(config);
     }
 
     public void save() throws IOException {
         ConfigDocument.Builder builder = ConfigDocument.builder();
         builder.putAll(modules.toConfig().values());
+        builder.putAll(hudLayout.toConfig().values());
         cosmetics.writeConfig(builder);
         preferences.writeConfig(builder);
         profiles.writeConfig(builder);
+        favorites.writeConfig(builder);
         waypoints.writeConfig(builder);
         configStore.save(builder.build());
     }
@@ -139,6 +145,11 @@ public final class AetherClient {
     /** Named snapshots of the module configuration, stored inside the same config file. */
     public ProfileStore profiles() {
         return profiles;
+    }
+
+    /** The modules the user starred in the GUI; persisted like every other module state. */
+    public ModuleFavorites favorites() {
+        return favorites;
     }
 
     /** Saved locations, stored inside the same config file. */

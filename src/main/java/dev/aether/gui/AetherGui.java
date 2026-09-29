@@ -1,0 +1,67 @@
+package dev.aether.gui;
+
+import dev.aether.AetherClient;
+import dev.aether.ui.GuiSection;
+import dev.aether.forge189.Mc189Compat;
+import dev.aether.gui.screens.AetherClientSettingsScreen;
+import dev.aether.gui.screens.AetherCosmeticScreen;
+import dev.aether.gui.screens.AetherHudEditorScreen;
+import dev.aether.gui.screens.AetherModScreen;
+
+/**
+ * Entry points of the Aether GUI: the factory that opens a section and the one place
+ * that knows how section names map to screens. Event bridges and module one-shots open
+ * the GUI through this class, never by constructing screens directly, so the
+ * navigation graph has exactly one definition.
+ */
+public final class AetherGui {
+
+    private AetherGui() {
+    }
+
+    /** Opens the section as a fresh screen (fresh components, no stale scroll state). */
+    public static void open(AetherClient client, GuiSection section) {
+        Mc189Compat.displayGuiScreen(create(client, section));
+    }
+
+    /**
+     * Creates the screen for a section without displaying it, for callers that need to
+     * seed state first (for example opening Modules pre-filtered to a category).
+     */
+    public static AetherModScreen modules(AetherClient client) {
+        return new AetherModScreen(client);
+    }
+
+    public static AetherModScreen modulesForCategory(AetherClient client,
+                                                     dev.aether.module.ClientModule.ModuleCategory category) {
+        AetherModScreen screen = new AetherModScreen(client);
+        screen.focusCategory(category);
+        return screen;
+    }
+
+    public static AetherCosmeticScreen cosmetics(AetherClient client) {
+        return new AetherCosmeticScreen(client);
+    }
+
+    public static AetherHudEditorScreen hudEditor(AetherClient client) {
+        return new AetherHudEditorScreen(client);
+    }
+
+    public static AetherClientSettingsScreen settings(AetherClient client) {
+        return new AetherClientSettingsScreen(client);
+    }
+
+    public static dev.aether.gui.screens.AetherGuiScreen create(AetherClient client, GuiSection section) {
+        switch (section) {
+            case COSMETICS:
+                return cosmetics(client);
+            case HUD:
+                return hudEditor(client);
+            case SETTINGS:
+                return settings(client);
+            case MODULES:
+            default:
+                return modules(client);
+        }
+    }
+}

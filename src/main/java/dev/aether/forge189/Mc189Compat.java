@@ -46,7 +46,7 @@ public final class Mc189Compat {
     private Mc189Compat() {
     }
 
-    static Object minecraft() {
+    public static Object minecraft() {
         return invokeStatic(Minecraft.class, new String[] {"getMinecraft", "func_71410_x"});
     }
 
@@ -65,7 +65,7 @@ public final class Mc189Compat {
         return value instanceof Integer ? ((Integer) value).intValue() : 0;
     }
 
-    static Object fontRenderer(Object minecraft) {
+    public static Object fontRenderer(Object minecraft) {
         return getField(minecraft, new String[] {"fontRendererObj", "field_71466_p"});
     }
 
@@ -165,12 +165,12 @@ public final class Mc189Compat {
         return getField(minecraft, new String[] {"entityRenderer", "field_71460_t"});
     }
 
-    static int displayWidth(Object minecraft) {
+    public static int displayWidth(Object minecraft) {
         Object value = getField(minecraft, new String[] {"displayWidth", "field_71443_c"});
         return value instanceof Integer ? ((Integer) value).intValue() : 1;
     }
 
-    static int displayHeight(Object minecraft) {
+    public static int displayHeight(Object minecraft) {
         Object value = getField(minecraft, new String[] {"displayHeight", "field_71440_d"});
         return value instanceof Integer ? ((Integer) value).intValue() : 1;
     }
@@ -892,7 +892,7 @@ public final class Mc189Compat {
         return value instanceof Integer ? ((Integer) value).intValue() : 0;
     }
 
-    static int scaleFactor(Object resolution) {
+    public static int scaleFactor(Object resolution) {
         Object value = invoke(resolution, new String[] {"getScaleFactor", "func_78325_e"});
         return value instanceof Integer ? ((Integer) value).intValue() : 1;
     }
@@ -978,7 +978,7 @@ public final class Mc189Compat {
         return value instanceof Integer ? ((Integer) value).intValue() : text.length() * 6;
     }
 
-    static void displayGuiScreen(GuiScreen screen) {
+    public static void displayGuiScreen(GuiScreen screen) {
         Object minecraft = minecraft();
         invoke(minecraft, new String[] {"displayGuiScreen", "func_147108_a"}, new Class<?>[] {GuiScreen.class}, screen);
     }
@@ -987,13 +987,13 @@ public final class Mc189Compat {
         invoke(minecraft(), new String[] {"shutdown", "func_71400_g"});
     }
 
-    static void loadBlurShader() {
+    public static void loadBlurShader() {
         Object renderer = entityRenderer(minecraft());
         invoke(renderer, new String[] {"loadShader", "func_175069_a"},
             new Class<?>[] {ResourceLocation.class}, new ResourceLocation("shaders/post/blur.json"));
     }
 
-    static void stopShader() {
+    public static void stopShader() {
         Object renderer = entityRenderer(minecraft());
         invoke(renderer, new String[] {"stopUseShader", "func_181022_b"});
     }
@@ -1008,7 +1008,7 @@ public final class Mc189Compat {
         return value instanceof Integer ? ((Integer) value).intValue() : 0;
     }
 
-    static Object screenFontRenderer(GuiScreen screen) {
+    public static Object screenFontRenderer(GuiScreen screen) {
         Object value = getField(screen, new String[] {"fontRendererObj", "field_146289_q"});
         return value == null ? fontRenderer(minecraft()) : value;
     }
@@ -1243,25 +1243,25 @@ public final class Mc189Compat {
     // belongs to a different toggle would still resolve, so the GL11 call (which is exactly
     // what GlStateManager wraps) is the safer second attempt.
 
-    static void disableCull() {
+    public static void disableCull() {
         if (invokeStatic(glStateManagerClass(), new String[] {"disableCull"}) == null) {
             invokeStatic(gl11Class(), new String[] {"glDisable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(2884));
         }
     }
 
-    static void enableCull() {
+    public static void enableCull() {
         if (invokeStatic(glStateManagerClass(), new String[] {"enableCull"}) == null) {
             invokeStatic(gl11Class(), new String[] {"glEnable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(2884));
         }
     }
 
-    static void disableLighting() {
+    public static void disableLighting() {
         if (invokeStatic(glStateManagerClass(), new String[] {"disableLighting"}) == null) {
             invokeStatic(gl11Class(), new String[] {"glDisable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(2896));
         }
     }
 
-    static void enableLighting() {
+    public static void enableLighting() {
         if (invokeStatic(glStateManagerClass(), new String[] {"enableLighting"}) == null) {
             invokeStatic(gl11Class(), new String[] {"glEnable"}, new Class<?>[] {Integer.TYPE}, Integer.valueOf(2896));
         }
@@ -1369,7 +1369,7 @@ public final class Mc189Compat {
      * Returns {@code null} when GL or the buffer cannot be reached, so the caller can show a
      * failure instead of throwing inside a render pass.
      */
-    static int[] readFramePixels(int width, int height) {
+    public static int[] readFramePixels(int width, int height) {
         try {
             Class<?> gl = gl11Class();
             // Row order and channel order both get fixed up below; see the comment in the loop.
@@ -1402,7 +1402,7 @@ public final class Mc189Compat {
         }
     }
 
-    static int mouseWheelDelta() {
+    public static int mouseWheelDelta() {
         try {
             Class<?> mouse = Class.forName("org.lwjgl.input.Mouse");
             Method method = mouse.getMethod("getEventDWheel");
@@ -1413,7 +1413,7 @@ public final class Mc189Compat {
         }
     }
 
-    static int mouseX() {
+    public static int mouseX() {
         try {
             Class<?> mouse = Class.forName("org.lwjgl.input.Mouse");
             Method method = mouse.getMethod("getX");
@@ -1424,7 +1424,7 @@ public final class Mc189Compat {
         }
     }
 
-    static int mouseY() {
+    public static int mouseY() {
         try {
             Class<?> mouse = Class.forName("org.lwjgl.input.Mouse");
             Method method = mouse.getMethod("getY");
@@ -1435,7 +1435,7 @@ public final class Mc189Compat {
         }
     }
 
-    static int getEventButton() {
+    public static int getEventButton() {
         try {
             Class<?> mouse = Class.forName("org.lwjgl.input.Mouse");
             Method method = mouse.getMethod("getEventButton");
@@ -1446,7 +1446,7 @@ public final class Mc189Compat {
         }
     }
 
-    static boolean getEventButtonState() {
+    public static boolean getEventButtonState() {
         try {
             Class<?> mouse = Class.forName("org.lwjgl.input.Mouse");
             Method method = mouse.getMethod("getEventButtonState");
@@ -1760,7 +1760,7 @@ public final class Mc189Compat {
         }
     }
 
-    static void drawOutlinedRectangle(int x, int y, int w, int h, int t, int color) {
+    public static void drawOutlinedRectangle(int x, int y, int w, int h, int t, int color) {
         drawRectangle(x, y, w, t, color);
         drawRectangle(x + w - t, y, t, h, color);
         drawRectangle(x, y + h - t, w, t, color);
@@ -1773,7 +1773,7 @@ public final class Mc189Compat {
         }
     }
 
-    static void drawRoundedRectangle(int x, int y, int w, int h, int radius, int color, int index) {
+    public static void drawRoundedRectangle(int x, int y, int w, int h, int radius, int color, int index) {
         if (w <= 0 || h <= 0) return;
         if (radius <= 0) {
             drawRectangle(x, y, w, h, color);
@@ -1796,7 +1796,7 @@ public final class Mc189Compat {
         color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
-    static void drawGradientRectangle(float x, float y, float w, float h, int startColor, int endColor) {
+    public static void drawGradientRectangle(float x, float y, float w, float h, int startColor, int endColor) {
         float f1 = (float) (startColor >> 24 & 255) / 255.0F;
         float f2 = (float) (startColor >> 16 & 255) / 255.0F;
         float f3 = (float) (startColor >> 8 & 255) / 255.0F;
@@ -1824,7 +1824,7 @@ public final class Mc189Compat {
         color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
-    static void drawHorizontalGradientRectangle(float x, float y, float w, float h, int startColor, int endColor) {
+    public static void drawHorizontalGradientRectangle(float x, float y, float w, float h, int startColor, int endColor) {
         float f1 = (float) (startColor >> 24 & 255) / 255.0F;
         float f2 = (float) (startColor >> 16 & 255) / 255.0F;
         float f3 = (float) (startColor >> 8 & 255) / 255.0F;

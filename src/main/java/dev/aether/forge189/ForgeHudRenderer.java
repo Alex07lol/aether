@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-final class ForgeHudRenderer {
+public final class ForgeHudRenderer {
     /**
      * Fallbacks for HUD elements that carry no colour setting of their own. Both are
      * refreshed from the shared {@link AetherUi} theme tokens every frame, so the HUD
@@ -81,7 +81,7 @@ final class ForgeHudRenderer {
     private final List<String> reusableFormattedLines = new ArrayList<String>(16);
     private final List<String> reusableFormattedScores = new ArrayList<String>(16);
 
-    ForgeHudRenderer(AetherClient client) {
+    public ForgeHudRenderer(AetherClient client) {
         this(client, null);
     }
 
@@ -133,7 +133,7 @@ final class ForgeHudRenderer {
         Mc189Compat.enableTexture2D();
     }
 
-    void renderForEditor() {
+    public void renderForEditor() {
         Object minecraft = Mc189Compat.minecraft();
         Object fontRenderer = Mc189Compat.fontRenderer(minecraft);
         if (minecraft == null || fontRenderer == null) {
@@ -956,7 +956,7 @@ final class ForgeHudRenderer {
             Mc189Compat.drawRect(centerX - dotHalf, centerY - dotHalf, centerX + dotHalf + dotRem, centerY + dotHalf + dotRem, color);
     }
 
-    boolean enabled(String moduleId) {
+    public boolean enabled(String moduleId) {
         return client.modules().get(moduleId).state() == ModuleState.ENABLED;
     }
 
@@ -1163,7 +1163,7 @@ final class ForgeHudRenderer {
         return Math.max(min, Math.min(max, value));
     }
 
-    Dimension getDimensions(String id, Object fontRenderer, Object minecraft) {
+    public Dimension getDimensions(String id, Object fontRenderer, Object minecraft) {
         int width = 70;
         int height = 12;
         net.minecraft.client.Minecraft mc = (net.minecraft.client.Minecraft) minecraft;

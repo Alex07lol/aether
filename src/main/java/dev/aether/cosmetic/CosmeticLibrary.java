@@ -131,6 +131,23 @@ public final class CosmeticLibrary {
         if (asset.type() == DEFAULT_SLOT) selectedId = asset.id();
     }
 
+    /**
+     * Empties a slot, so the player can wear nothing of that type. The stored selection
+     * is removed and {@link #effective} returns null unless a built-in fallback exists
+     * for the type; the in-world renderer and the preview both treat null as "draw
+     * nothing", which is exactly what an emptied slot should look like.
+     */
+    public void clear(CosmeticType type) {
+        if (type == null) return;
+        selection.remove(type);
+        if (type == DEFAULT_SLOT) selectedId = null;
+    }
+
+    /** @return true when the slot has no selection of its own. */
+    public boolean isCleared(CosmeticType type) {
+        return type != null && selection.get(type) == null;
+    }
+
     public List<CosmeticAsset> forType(CosmeticType type) {
         List<CosmeticAsset> matches = new ArrayList<>();
         for (CosmeticAsset asset : assets.values()) {

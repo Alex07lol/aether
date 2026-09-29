@@ -1,6 +1,6 @@
 package dev.aether.config;
 
-import dev.aether.ui.ControlCenterSection;
+import dev.aether.ui.GuiSection;
 
 /**
  * Client-wide preferences: the handful of options that belong to Aether itself rather than to one
@@ -16,10 +16,10 @@ public final class ClientPreferences {
     public static final String KEY_OPEN_SECTION = "preference.open_section";
 
     /**
-     * The Control Center sections, in the order they are shown in the sidebar. The list itself
+     * The GUI sections, in the order they are shown in the navigation bar. The list itself
      * lives in core next to the navigation model; this is the config-facing spelling of it.
      */
-    public static final String[] SECTIONS = ControlCenterSection.labels();
+    public static final String[] SECTIONS = GuiSection.labels();
 
     private boolean saveOnClose = true;
     private boolean showTooltips = true;
@@ -64,11 +64,11 @@ public final class ClientPreferences {
 
     /** @return the closest known section name; an unknown value falls back to Modules. */
     public static String normalizeSection(String value) {
-        return ControlCenterSection.fromLabel(value, ControlCenterSection.MODULES).label();
+        return GuiSection.fromLabel(value, GuiSection.MODULES).label();
     }
 
     /** @return the index of {@code section} in {@link #SECTIONS}, or 0 when it is unknown. */
     public static int sectionIndex(String section) {
-        return ControlCenterSection.fromLabel(section, ControlCenterSection.MODULES).ordinal();
+        return GuiSection.fromLabel(section, GuiSection.MODULES).ordinal();
     }
 }
