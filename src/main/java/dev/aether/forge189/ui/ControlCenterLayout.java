@@ -18,10 +18,10 @@ public final class ControlCenterLayout {
     private static final int CARD_GAP = 10;
 
     public Layout compute(AetherClickGuiScreen screen, int width, int height) {
-        // Deck sized proportionally to the user's own screen: ~86% wide, ~84% tall, so it
-        // scales with any window size and resolution instead of hard-coding a pixel box.
-        int deckW = Math.max(400, (int) (width * 0.86f));
-        int deckH = Math.max(230, (int) (height * 0.84f));
+        // Deck: a compact centered panel, not a fullscreen sheet. Target size follows the
+        // screen a little but is capped hard, so it stays a modest window at any resolution.
+        int deckW = Math.max(380, Math.min(560, (int) (width * 0.55f)));
+        int deckH = Math.max(240, Math.min(360, (int) (height * 0.72f)));
         int deckX = (width - deckW) / 2;
         int deckY = (height - deckH) / 2;
 
