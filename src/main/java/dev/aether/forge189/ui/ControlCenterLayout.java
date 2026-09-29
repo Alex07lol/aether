@@ -1,17 +1,30 @@
 package dev.aether.forge189.ui;
 
 import dev.aether.forge189.AetherClickGuiScreen;
+import dev.aether.forge189.ui.pages.ModulesPage;
+import dev.aether.module.ClientModule;
 
 /**
  * Computes layout geometry for the Control Center.
+ * <p>
+ * The deck is a centered card with comfortable margins over a dimmed backdrop (never a
+ * near-fullscreen slab), and {@link Layout#maxScroll} is computed from the real content
+ * height of the modules page - expanded accordions included - so the list can scroll.
  */
 public final class ControlCenterLayout {
+
+    /** Visible height of the module list, matching the page's own drawing constants. */
+    static final int LIST_CONTENT_TOP = 90;
+    private static final int CARD_GAP = 10;
+
     public Layout compute(AetherClickGuiScreen screen, int width, int height) {
-        int margin = Math.min(Math.max(width / 24, 6), 16);
-        int deckW = Math.min(1040, width - margin * 2);
-        int deckH = height - margin * 2;
+        // Deck sized proportionally to the user's own screen: ~86% wide, ~84% tall, so it
+        // scales with any window size and resolution instead of hard-coding a pixel box.
+        int deckW = Math.max(400, (int) (width * 0.86f));
+        int deckH = Math.max(230, (int) (height * 0.84f));
         int deckX = (width - deckW) / 2;
-        int deckY = margin;
+        int deckY = (height - deckH) / 2;
+
         int headerH = AetherMetrics.HEADER_HEIGHT;
         int footerH = AetherMetrics.FOOTER_HEIGHT;
         int bodyTop = deckY + headerH;
@@ -31,7 +44,10 @@ public final class ControlCenterLayout {
         int listY = sidebarY;
         int listH = footerY - listY - 6;
 
-        float maxScroll = 0f;
+        // Real scroll range: the full height of the modules page content. Also mirrored
+        // into the screen so the wheel handler's clampScroll() sees the same bound.
+        float maxScroll = Math.max(0f, contentHeight(screen) - listH);
+        screen.setMaxScroll(maxScroll);
         float scroll = Math.max(0f, Math.min(screen.getScroll(), maxScroll));
 
         return new Layout(deckX, deckY, deckW, deckH,
@@ -42,5 +58,20 @@ public final class ControlCenterLayout {
                 footerY,
                 width, height,
                 scroll, maxScroll);
+    }
+
+    /** Height of the module list content in pixels, expanded accordions included. */
+    public static int contentHeight(AetherClickGuiScreen screen) {
+        int total = LIST_CONTENT_TOP;
+        for (ClientModule module : screen.getVisibleModules()) {
+            total += ModulesPage.rowHeight(screen, module);
+            total += CARD_GAP;
+        }
+        return total;
+    }
+
+    /** Pixels from the top of the list content to the first row. */
+    public static int listContentTop() {
+        return LIST_CONTENT_TOP;
     }
 }

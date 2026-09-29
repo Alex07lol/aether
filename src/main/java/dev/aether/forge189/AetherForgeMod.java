@@ -52,6 +52,11 @@ public final class AetherForgeMod {
         MinecraftForge.EVENT_BUS.register(new ForgeGuiEventBridge(client));
         MinecraftForge.EVENT_BUS.register(clientEventBridge);
         FMLCommonHandler.instance().bus().register(clientEventBridge);
+
+        // TEMPORARY dev-only visual debugger for the UI work (see the class javadoc).
+        if (System.getProperty("aether.debugShots") != null) {
+            FMLCommonHandler.instance().bus().register(new AetherVisualDebugHook(client));
+        }
     }
 
     @Mod.EventHandler

@@ -18,12 +18,32 @@ import dev.aether.forge189.ui.pages.SettingsPage;
  * AetherClickGuiScreen.
  */
 public final class ControlCenterRenderer {
-    private final ModulesPage modulesPage = new ModulesPage();
-    private final ProfilesPage profilesPage = new ProfilesPage();
-    private final ThemesPage themesPage = new ThemesPage();
-    private final CosmeticsPage cosmeticsPage = new CosmeticsPage();
-    private final ScreenshotsPage screenshotsPage = new ScreenshotsPage();
-    private final SettingsPage settingsPage = new SettingsPage();
+    /** The screen's own page instances - the same objects the click path dispatches to. */
+    private final ModulesPage modulesPage;
+    private final ProfilesPage profilesPage;
+    private final ThemesPage themesPage;
+    private final CosmeticsPage cosmeticsPage;
+    private final ScreenshotsPage screenshotsPage;
+    private final SettingsPage settingsPage;
+
+    /** x, y, w, h of the search box drawn in the header, for the click path. */
+    private final int[] searchBoxRect = new int[4];
+
+    public ControlCenterRenderer(ModulesPage modulesPage, ProfilesPage profilesPage,
+                                 ThemesPage themesPage, CosmeticsPage cosmeticsPage,
+                                 ScreenshotsPage screenshotsPage, SettingsPage settingsPage) {
+        this.modulesPage = modulesPage;
+        this.profilesPage = profilesPage;
+        this.themesPage = themesPage;
+        this.cosmeticsPage = cosmeticsPage;
+        this.screenshotsPage = screenshotsPage;
+        this.settingsPage = settingsPage;
+    }
+
+    /** Geometry of the header search box from the last frame, or null before the first draw. */
+    public int[] lastSearchBox() {
+        return searchBoxRect[2] > 0 ? searchBoxRect : null;
+    }
 
     public void render(AetherClickGuiScreen screen, Object font, int mouseX, int mouseY, Layout layout) {
         drawBackground(screen, font, layout);
@@ -39,13 +59,14 @@ public final class ControlCenterRenderer {
         int h = layout.screenH;
         if (w <= 0 || h <= 0) return;
 
-        // Dark gradient backdrop
-        int steps = 24;
+        // Translucent scrim over the world/game behind the GUI: dark enough for contrast,
+        // light enough that the world reads through (this is what makes the deck feel like glass).
+        int steps = 12;
         for (int i = 0; i < steps; i++) {
             int top = i * h / steps;
             int bottom = (i + 1) * h / steps + 1;
             float t = (float) i / steps;
-            int color = AetherUi.lerpColor(0xFF0A0C12, 0xFF05070A, t);
+            int color = AetherUi.lerpColor(AetherUi.SCRIM_TOP, AetherUi.SCRIM_BOTTOM, t);
             Mc189Compat.drawRect(0, top, w, bottom, color);
         }
 
@@ -78,17 +99,18 @@ public final class ControlCenterRenderer {
         int headerY = layout.deckY;
         int headerH = layout.headerH;
 
-        // Header background strip
-        int headerBg = AetherUi.withAlpha(AetherUi.PANEL, 0xCC);
-        Mc189Compat.drawRect(layout.deckX + 1, headerY,
-                layout.deckX + layout.deckW - 1, headerY + headerH - 2, headerBg);
+        // Header panel: translucent, rounded at the top to follow the deck silhouette
+        int headerBg = AetherUi.withAlpha(AetherUi.PANEL, 0xB3);
+        AetherUi.drawRoundRect(layout.deckX + 1, headerY,
+                layout.deckX + layout.deckW - 1, headerY + headerH, 12, headerBg);
 
         // Top accent line
         Mc189Compat.drawRect(layout.deckX + 1, headerY,
                 layout.deckX + layout.deckW - 1, headerY + 2, AetherUi.withAlpha(AetherUi.ACCENT, 0x44));
 
-        // Branding on left
-        AetherUi.textSmooth(font, "AETHER", layout.deckX + 16, headerY + 14, AetherUi.ACCENT);
+        // Branding on left: the Aether logo with the wordmark beside it
+        Mc189Compat.drawTexture("aetherlogo.png", layout.deckX + 12, headerY + 8, 28, 28);
+        AetherUi.textSmooth(font, "AETHER", layout.deckX + 48, headerY + 14, AetherUi.ACCENT);
 
         // Page title centered
         ControlCenterSection section = screen.nav().section();
@@ -96,18 +118,33 @@ public final class ControlCenterRenderer {
         int centerX = layout.deckX + layout.deckW / 2;
         AetherUi.centeredSmooth(font, pageTitle, centerX, headerY + 14, layout.deckW, AetherUi.TEXT_PRIMARY);
 
-        // Search icon on right
-        int searchIconX = layout.deckX + layout.deckW - 40;
-        int searchIconY = headerY + 14;
-        boolean searchHover = mouseX >= searchIconX && mouseX <= searchIconX + 24
-                && mouseY >= searchIconY && mouseY <= searchIconY + 24;
-        if (searchHover) {
-            Mc189Compat.drawRect(searchIconX - 2, searchIconY - 2,
-                    searchIconX + 26, searchIconY + 26,
-                    AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x0D));
-        }
+        // Search box (right aligned), then the icon inside its right edge
+        boolean searching = screen.nav().isSearching();
+        int boxW = 150;
+        int boxH = 22;
+        int boxX = layout.deckX + layout.deckW - boxW - 14;
+        int boxY = headerY + (headerH - boxH) / 2;
+        searchBoxRect[0] = boxX;
+        searchBoxRect[1] = boxY;
+        searchBoxRect[2] = boxW;
+        searchBoxRect[3] = boxH;
+
+        String query = screen.getQuery();
+        boolean hover = mouseX >= boxX && mouseX <= boxX + boxW
+                && mouseY >= boxY && mouseY <= boxY + boxH;
+        int boxBg = searching ? AetherUi.SEARCH_FOCUS : hover ? AetherUi.SEARCH_FOCUS : AetherUi.SEARCH;
+        AetherUi.drawRoundRect(boxX, boxY, boxX + boxW, boxY + boxH, 6, boxBg);
+        AetherUi.outline(boxX, boxY, boxX + boxW, boxY + boxH,
+                searching ? AetherUi.withAlpha(AetherUi.ACCENT, 0x66) : AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x30));
+        String shown = query.length() > 0 ? query
+                : (searching ? "Type to search..." : "Search modules");
+        AetherUi.textSmooth(font, shown, boxX + 8, boxY + 6,
+                query.length() > 0 || searching ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_DISABLED);
+
+        int searchIconX = boxX + boxW - 18;
+        int searchIconY = boxY + 3;
         AetherIcon.SEARCH.draw(searchIconX, searchIconY,
-                searchHover ? AetherUi.ACCENT_ON : AetherUi.TEXT_SECONDARY);
+                searching ? AetherUi.ACCENT_ON : AetherUi.TEXT_SECONDARY);
     }
 
     private void drawSidebar(AetherClickGuiScreen screen, Object font, Layout layout,

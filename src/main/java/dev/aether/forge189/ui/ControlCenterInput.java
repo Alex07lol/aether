@@ -27,6 +27,14 @@ public final class ControlCenterInput {
         Layout layout = screen.getLayout();
         if (layout == null) return;
 
+        // 0. the header search box starts a search (or accepts clicks while searching)
+        if (screen.isInsideSearchBox(mouseX, mouseY)) {
+            if (!screen.nav().isSearching()) {
+                screen.nav().beginSearch();
+            }
+            return;
+        }
+
         // 1. hit-test the sidebar
         if (layout.sidebarW > 0 &&
             mouseX >= layout.sidebarX &&
@@ -86,13 +94,15 @@ public final class ControlCenterInput {
                     nav.toggleExpanded(module.metadata().id());
                 }
                 break;
-            case 1: // Escape: close search/settings/palettes/keybinds
+            case 1: // Escape: close search/settings/palettes/keybinds, then the deck itself
                 if (!nav.focus().isIdle()) {
                     nav.clearFocus();
                 } else if (nav.isSearching()) {
                     nav.endSearch();
                 } else if (nav.state() == ControlCenterState.MenuState.MODULE_SETTINGS) {
                     nav.closeModuleSettings();
+                } else {
+                    screen.closeDeck();
                 }
                 break;
             case 200: // Up arrow
