@@ -1,5 +1,12 @@
 # Production build and runtime audit
 
+> **Status: the migration this audit argued for is DONE.** The build is now real ForgeGradle 2.1
+> + MixinGradle 0.6 + embedded Mixin 0.7.11 (see `build.gradle` for the full decision record).
+> Sections 1-7 below describe the pre-migration build and the hand-written remapper it once
+> shipped; that remapper, the 89 compile stubs and the mapping-supply environment variables were
+> deleted once the ForgeGradle pipeline was proven end to end (`runClient` with all five mixins
+> applying, `reobfJar` verified by `scripts/verify.sh`). The text is kept as the record of *why*.
+
 Aether's rendering problems are not, at bottom, rendering problems. They are build problems that
 surface as rendering problems. This document records what the shipped artifact actually contains,
 why it is not the artifact a Forge 1.8.9 mod needs to be, and what was changed so that it can be.

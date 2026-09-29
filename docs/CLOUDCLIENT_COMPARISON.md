@@ -11,7 +11,7 @@ architectural comparison only - no CloudClient source is copied into Aether.
 | --- | --- | --- |
 | Status | Archived / discontinued | Active (foundation) |
 | Build | ForgeGradle 2.1 + Mixin 0.7.11, one Gradle project per MC version | Plain `javac`-friendly Gradle build, Java 8, no mandatory dependencies |
-| Core vs platform | One tree; modules call Minecraft directly | MC-free core (`src/main/java`) plus a Forge 1.8.9 adapter (`src/forge189`) and compile stubs (`src/forge189Stubs`) |
+| Core vs platform | One tree; modules call Minecraft directly | MC-free core (`src/main/java` under `dev.aether.*`) plus a Forge 1.8.9 adapter in the same source set (`dev.aether.forge189.*`) - ForgeGradle supplies the real classes, stubs removed |
 | Registry | `ModManager` with 34 mods, `Type` enum (All/Hud/Mechanic/Visual/Tweaks) | `ModuleRegistry` with 57 registered modules, fair-play validated at registration |
 | Settings | `Setting` objects with sliders/checkboxes/colour pickers inside the mod menu | `Setting<T>` on each module (bool/number/text/choice/colour/keybind) that also carries its own slider bounds and choice list, JSON persisted |
 | Config | JSON via `Config`/`ConfigLoader`/`ConfigSaver`/`ModConfig` | JSON via `JsonConfigStore` + `ConfigDocument` (module states + every setting) |
