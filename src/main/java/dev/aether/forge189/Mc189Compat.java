@@ -5,6 +5,7 @@ import dev.aether.graphics.FirstPersonAnims;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
+import net.minecraftforge.client.GuiIngameForge;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.client.renderer.RenderGlobal;
@@ -621,6 +622,14 @@ public final class Mc189Compat {
     /** @return the local player, or {@code null} when the client is not in a world. */
     public static Object localPlayer() {
         return player(minecraft());
+    }
+
+    /**
+     * @return whether {@code entity} is the client's own player. Used by hooks that fire for
+     *         every entity (the Entity-level rotation freeze during freelook) to act on exactly one.
+     */
+    public static boolean isLocalPlayer(Object entity) {
+        return entity != null && entity == localPlayer();
     }
 
     /** @return the arm swing progress for this frame, or {@code 0} when the entity cannot report it. */
@@ -1685,14 +1694,14 @@ public final class Mc189Compat {
         return Tessellator.getInstance();
     }
 
+    /**
+     * Gates Forge's own sidebar. {@code GuiIngameForge.renderObjective} is public static, so the
+     * write is a plain field access now that the build compiles against real Forge - the old
+     * per-frame Class.forName reflection (with a silent catch) existed only because the stub
+     * build had no Forge classes to link against.
+     */
     static void setScoreboardDisabled(boolean disabled) {
-        try {
-            Class<?> guiIngameForge = Class.forName("net.minecraftforge.client.GuiIngameForge");
-            Field field = guiIngameForge.getDeclaredField("renderObjective");
-            field.setAccessible(true);
-            field.setBoolean(null, !disabled);
-        } catch (Throwable ignored) {
-        }
+        GuiIngameForge.renderObjective = !disabled;
     }
 
     public static void drawRectangle(int x, int y, int width, int height, int color) {

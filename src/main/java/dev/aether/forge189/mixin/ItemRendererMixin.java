@@ -1,7 +1,9 @@
 package dev.aether.forge189.mixin;
 
 import dev.aether.forge189.Mc189Compat;
+import dev.aether.forge189.MixinFeatures;
 import dev.aether.graphics.FirstPersonAnims;
+import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.client.renderer.ItemRenderer;
 import net.minecraft.client.renderer.block.model.ItemCameraTransforms;
 import net.minecraft.entity.EntityLivingBase;
@@ -34,34 +36,22 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * the member cannot be resolved the whole mixin fails and the client crashes on start, which is what
  * a production runtime without a generated refmap would do. Vanilla's own transforms and the held
  * item are reached through {@link Mc189Compat} instead, which tries the development name and then
- * the SRG name and simply does not enhance the pose when neither is present.
+ * the SRG name and simply does not enhance the pose when neither is present. The published state
+ * lives on {@link MixinFeatures.ItemRenderer} - a mixin class may not carry non-private static
+ * fields, and even private statics here are shared state that belongs with the bridge that writes
+ * it.
  */
 @Mixin(ItemRenderer.class)
 public abstract class ItemRendererMixin {
-
-    /** Set by ForgeClientEventBridge while graphics.animation > block_animation is on. */
-    public static boolean blockAnimationEnabled = false;
-
-    /** Set by ForgeClientEventBridge while graphics.animation > eat_drink_animation is on. */
-    public static boolean eatDrinkAnimationEnabled = false;
-
-    /** Set by ForgeClientEventBridge while graphics.animation > bow_animation is on. */
-    public static boolean bowAnimationEnabled = false;
-
-    /** Set by ForgeClientEventBridge while graphics.animation > rod_animation is on. */
-    public static boolean fishingRodAnimationEnabled = false;
 
     /** MCP first, then the SRG name a production runtime uses. */
     private static final String[] ITEM_TO_RENDER = {"itemToRender", "field_78453_b"};
     private static final String[] TRANSFORM_FIRST_PERSON = {"transformFirstPersonItem", "func_178096_b"};
     private static final String[] DO_BOW_TRANSFORMATIONS = {"doBowTransformations", "func_178098_a"};
 
-    /** Partial ticks of the frame being rendered; the redirects need them for the arm swing. */
-    private static float renderingPartialTicks;
-
     @Inject(method = "renderItemInFirstPerson", at = @At("HEAD"), require = 0)
     private void rememberPartialTicks(float partialTicks, CallbackInfo ci) {
-        renderingPartialTicks = partialTicks;
+        MixinFeatures.ItemRenderer.renderingPartialTicks = partialTicks;
     }
 
     /**
@@ -76,11 +66,13 @@ public abstract class ItemRendererMixin {
             Float.valueOf(equipProgress), Float.valueOf(legacySwing(swingProgress)));
     }
 
-    /** Lets vanilla build the bow pose, but on the 1.7 draw curve. */
+    /** Lets vanilla build the bow pose, but on the 1.7 draw curve. The vanilla
+     *  method takes AbstractClientPlayer, not EntityPlayer - the old stub-era
+     *  descriptor silently missed the mapping, so the redirect never bound. */
     @Redirect(method = "renderItemInFirstPerson", require = 0, at = @At(value = "INVOKE",
-        target = "Lnet/minecraft/client/renderer/ItemRenderer;doBowTransformations(FLnet/minecraft/entity/player/EntityPlayer;)V"))
-    private void legacyBowTransformations(ItemRenderer renderer, float partialTicks, EntityPlayer player) {
-        if (bowAnimationEnabled) {
+        target = "Lnet/minecraft/client/renderer/ItemRenderer;doBowTransformations(FLnet/minecraft/client/entity/AbstractClientPlayer;)V"))
+    private void legacyBowTransformations(ItemRenderer renderer, float partialTicks, AbstractClientPlayer player) {
+        if (MixinFeatures.ItemRenderer.bowAnimationEnabled) {
             Float compensated = Mc189Compat.legacyBowPartialTicks(player, partialTicks);
             if (compensated != null) {
                 callBowTransformations(renderer, compensated.floatValue(), player);
@@ -90,34 +82,44 @@ public abstract class ItemRendererMixin {
         callBowTransformations(renderer, partialTicks, player);
     }
 
-    private static void callBowTransformations(ItemRenderer renderer, float partialTicks, EntityPlayer player) {
-        Mc189Compat.call(renderer, DO_BOW_TRANSFORMATIONS, new Class<?>[] {Float.TYPE, EntityPlayer.class},
+    private static void callBowTransformations(ItemRenderer renderer, float partialTicks, AbstractClientPlayer player) {
+        Mc189Compat.call(renderer, DO_BOW_TRANSFORMATIONS, new Class<?>[] {Float.TYPE, AbstractClientPlayer.class},
             Float.valueOf(partialTicks), player);
     }
 
     private float legacySwing(float swingProgress) {
-        if (!blockAnimationEnabled && !eatDrinkAnimationEnabled) {
+        if (!MixinFeatures.ItemRenderer.blockAnimationEnabled
+            && !MixinFeatures.ItemRenderer.eatDrinkAnimationEnabled) {
             return swingProgress;
         }
         FirstPersonAnims.Action action = Mc189Compat.useActionKind(Mc189Compat.read(this, ITEM_TO_RENDER));
         if (action == FirstPersonAnims.Action.NONE || action == FirstPersonAnims.Action.BOW) {
             return swingProgress;
         }
-        float armSwing = Mc189Compat.swingProgress(Mc189Compat.localPlayer(), renderingPartialTicks);
+        float armSwing = Mc189Compat.swingProgress(Mc189Compat.localPlayer(),
+            MixinFeatures.ItemRenderer.renderingPartialTicks);
         return FirstPersonAnims.itemTransformSwing(action, swingProgress, armSwing,
-            blockAnimationEnabled, eatDrinkAnimationEnabled);
+            MixinFeatures.ItemRenderer.blockAnimationEnabled,
+            MixinFeatures.ItemRenderer.eatDrinkAnimationEnabled);
     }
 
+    /** NOTE on parameters: vanilla's own signature is {@code renderItem(EntityLivingBase,
+     *  ItemStack, TransformType)} - the entity comes FIRST, even though the
+     *  {@code renderItemModelForEntity} call inside it takes the item first. Mixin validated the
+     *  descriptor against the real method and rejects a swapped handler as a WARN.
+     *  (Proven against the decompiled 1.8.9 sources and a live runClient.) */
     @Inject(method = "renderItem", require = 0, at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/entity/RenderItem;renderItemModelForEntity(Lnet/minecraft/item/ItemStack;Lnet/minecraft/entity/EntityLivingBase;Lnet/minecraft/client/renderer/block/model/ItemCameraTransforms$TransformType;)V"))
-    public void renderItem(EntityLivingBase entity, ItemStack item, ItemCameraTransforms.TransformType transformType, CallbackInfo ci) {
+    private void aetherThirdPersonPose(EntityLivingBase entity, ItemStack item,
+        ItemCameraTransforms.TransformType transformType, CallbackInfo ci) {
         if (item == null) return;
 
         // 1.7 holds a cast rod closer to the camera than 1.8 does.
-        if (fishingRodAnimationEnabled && isInHand(transformType) && Mc189Compat.isFishingRod(item)) {
+        if (MixinFeatures.ItemRenderer.fishingRodAnimationEnabled && isInHand(transformType)
+            && Mc189Compat.isFishingRod(item)) {
             Mc189Compat.translate(0.0F, 0.0F, -0.35F);
         }
 
-        if (!blockAnimationEnabled) return;
+        if (!MixinFeatures.ItemRenderer.blockAnimationEnabled) return;
         if (!(item.getItem() instanceof ItemSword)) return;
         if (!(entity instanceof EntityPlayer)) return;
         if (transformType != ItemCameraTransforms.TransformType.THIRD_PERSON) return;
@@ -129,8 +131,8 @@ public abstract class ItemRendererMixin {
     }
 
     @Inject(method = "doBlockTransformations", at = @At("HEAD"), cancellable = true, require = 0)
-    public void swordBlockTransformations(CallbackInfo ci) {
-        if (!blockAnimationEnabled) return;
+    private void swordBlockTransformations(CallbackInfo ci) {
+        if (!MixinFeatures.ItemRenderer.blockAnimationEnabled) return;
         Mc189Compat.translate(-0.24F, 0.17F, 0.0F);
         Mc189Compat.rotate(30.0F, 0.0F, 1.0F, 0.0F);
         Mc189Compat.rotate(-80.0F, 1.0F, 0.0F, 0.0F);

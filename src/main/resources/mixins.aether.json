@@ -5,7 +5,7 @@
   "compatibilityLevel": "JAVA_8",
   "refmap": "mixins.aether.refmap.json",
   "client": [
-    "EntityPlayerSPMixin",
+    "EntityMixin",
     "EntityRendererMixin",
     "ItemRendererMixin",
     "RendererLivingEntityMixin",

@@ -623,7 +623,21 @@ final class ForgeHudRenderer {
             return;
         }
 
-        net.minecraft.scoreboard.ScoreObjective objective = Mc189Compat.objectiveInDisplaySlot(scoreboard, 1);
+        // Sidebar selection matches Forge's own: the player's team-colour sidebar, when one is
+        // set, wins over the general sidebar in slot 1. The old code read slot 1 only, so on
+        // servers using a coloured team sidebar this drew the wrong objective.
+        net.minecraft.scoreboard.ScoreObjective objective = null;
+        net.minecraft.client.entity.EntityPlayerSP ownPlayer = Mc189Compat.thePlayer((net.minecraft.client.Minecraft) minecraft);
+        if (ownPlayer != null) {
+            net.minecraft.scoreboard.ScorePlayerTeam ownTeam = Mc189Compat.playersTeam(scoreboard, ownPlayer.getName());
+            if (ownTeam != null && ownTeam.getChatFormat() != null
+                && ownTeam.getChatFormat().getColorIndex() >= 0) {
+                objective = Mc189Compat.objectiveInDisplaySlot(scoreboard, 3 + ownTeam.getChatFormat().getColorIndex());
+            }
+        }
+        if (objective == null) {
+            objective = Mc189Compat.objectiveInDisplaySlot(scoreboard, 1);
+        }
         if (objective == null) {
             return;
         }

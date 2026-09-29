@@ -1,267 +1,218 @@
-apply plugin: "java"
+// =============================================================================
+// Aether - a real ForgeGradle 1.8.9 build (official FG 2.1 line)
+//
+// Toolchain (decisions recorded in docs/BUILD_PIPELINE_AUDIT.md):
+//   Official ForgeGradle 2.1-SNAPSHOT (net.minecraftforge.gradle, last maintained
+//   build 42, Nov 2021 - still resolvable from the Forge maven). The anatawa12
+//   2.3 fork was tried first but is for the 1.12 era per its own README, and its
+//   forgeflower decompiler output cannot be patched by 1.8.9's MCP patches
+//   (43/57 failed in fixMcSources). FG 2.1 is the exact plugin the 1.8.9 MDK
+//   shipped with and decompiles with the fernflower the patches expect.
+//   MixinGradle 0.6-SNAPSHOT + Mixin 0.8.5 (Sponge maven), the target stack.
+//   Java 8, Minecraft 1.8.9, Forge 11.15.1.2318, mappings stable_22.
+//
+// Everything the mod needs is now in ONE source set (main):
+//   src/main/java  = common core (dev.aether.*) + Forge adapter (dev.aether.forge189.*)
+//   src/main/resources = assets, mixins.aether.json, mcmod.info
+// The old forge189/forge189Stubs source sets are gone: ForgeGradle supplies the
+// real Minecraft/Forge classes at compile time, so there is nothing to stub.
+//
+// The old hand-written MCP->SRG remapper (dev.aether.remap) and the compile stubs
+// (src/forge189Stubs) were deleted once this pipeline was proven: ForgeGradle supplies
+// the real Minecraft/Forge classes and reobfJar does the production remapping.
+// =============================================================================
+
+buildscript {
+    repositories {
+        mavenCentral()
+        maven {
+            name = "forge"
+            url = "https://maven.minecraftforge.net"
+        }
+        maven {
+            name = "sponge"
+            url = "https://repo.spongepowered.org/repository/maven-public"
+        }
+    }
+    dependencies {
+        classpath("net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT") {
+            changing = true
+        }
+        classpath("org.spongepowered:mixingradle:0.6-SNAPSHOT") {
+            changing = true
+        }
+    }
+}
+
+apply plugin: "net.minecraftforge.gradle.forge"
+apply plugin: "org.spongepowered.mixin"
 
 group = "dev.aether"
 version = "0.1.0"
 
-// Set on the compile tasks rather than the project: Gradle 9 removed the project-level property,
-// and the CI pins Gradle 7.6.4, which honours the task-level form as well.
-tasks.withType(JavaCompile).configureEach {
-    sourceCompatibility = "1.8"
-    targetCompatibility = "1.8"
+sourceCompatibility = targetCompatibility = "1.8"
+compileJava {
+    options.encoding = "UTF-8"
+}
+
+// ===========================================================================
+// Mixin: the annotation processor reads the SRG mappings ForgeGradle downloads,
+// writes mixins.aether.refmap.json next to the compiled classes and, through
+// reobf, keeps mixin targets correct in the production jar.
+// ===========================================================================
+mixin {
+    // MixinGradle detects ForgeGradle 2.x and sets the obfuscation environment itself.
+    // Leaf (a tweaker client) hardcodes "notch" here; Aether is a Forge mod, whose
+    // production environment is SRG - MixinGradle 0.6 reads that from ForgeGradle.
+    // DSL note: 0.6 takes the refmap name via ext.refMap on the source set (the
+    // add-variant silently does nothing - the AP then falls back to a default name
+    // under build/tmp, which never ships).
+    sourceSets {
+        main {
+            ext.refMap = "mixins.aether.refmap.json"
+        }
+    }
+}
+
+minecraft {
+    version = "1.8.9-11.15.1.2318-1.8.9"
+    runDir = "run"
+    mappings = "stable_22"
+    makeObfSourceJar = false
 }
 
 repositories {
     mavenCentral()
-    // Mixin's annotation processor, only resolved when the refmap step below is enabled.
     maven {
-        name = "Sponge"
-        url = "https://repo.spongepowered.org/maven"
+        name = "sponge"
+        url = "https://repo.spongepowered.org/repository/maven-public"
     }
 }
-
-def userForgeJar = System.getenv("AETHER_FORGE_189_JAR") ? file(System.getenv("AETHER_FORGE_189_JAR")) : null
-
-// Refmaps are only needed for obfuscated (production) builds, and generating one needs the
-// MCP -> SRG mapping file that ForgeGradle keeps in build/mappings. Pass it explicitly with
-// -PaetherSrgMappings=/path/to/mcp-srg.srg (or AETHER_SRG_MAPPINGS=...) to turn the step on;
-// without it the adapter compiles against MCP names and mixins still work in a dev runtime.
-def aetherSrgMappings = System.getenv("AETHER_SRG_MAPPINGS") ?: findProperty("aetherSrgMappings")
-def aetherMixinVersion = findProperty("aetherMixinVersion") ?: "0.7.11-SNAPSHOT"
-def hasSrgMappings = aetherSrgMappings != null && file(aetherSrgMappings).isFile()
-def localForgeJar = file("/home/laptop/.gradle/caches/minecraft/net/minecraftforge/forge/1.8.9-11.15.1.2318-1.8.9/stable/22/forgeSrc-1.8.9-11.15.1.2318-1.8.9.jar")
-
-ext.forge189ClasspathJar = (userForgeJar != null && userForgeJar.isFile()) ? userForgeJar : (localForgeJar.isFile() ? localForgeJar : null)
-
-// The processor validates every injection target against the compiled Minecraft classes, so the
-// refmap step also needs the real dev jar; against the local stubs it would (correctly) complain.
-def canGenerateRefmap = hasSrgMappings && forge189ClasspathJar != null
 
 configurations {
-    forge189Libraries {
-        canBeConsumed = false
-        canBeResolved = true
-    }
-    mixinProcessor {
-        canBeConsumed = false
-        canBeResolved = true
-    }
-}
-
-sourceSets {
-    forge189Stubs {
-        java.srcDirs = ["src/forge189Stubs/java"]
-    }
-    forge189 {
-        java.srcDirs = ["src/forge189/java"]
-        resources.srcDirs = ["src/forge189/resources"]
-        compileClasspath += sourceSets.main.output + sourceSets.forge189Stubs.output + configurations.forge189Libraries
-        runtimeClasspath += output + compileClasspath
-    }
-}
-
-tasks.withType(JavaCompile) {
-    options.encoding = "UTF-8"
-}
-
-tasks.withType(ProcessResources) {
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    embed
+    compile.extendsFrom embed
 }
 
 dependencies {
-    if (forge189ClasspathJar != null) {
-        forge189CompileOnly files(forge189ClasspathJar)
-        forge189Libraries files(forge189ClasspathJar)
-    }
-    if (canGenerateRefmap) {
-        mixinProcessor "org.spongepowered:mixin:${aetherMixinVersion}"
-    }
-}
-
-/**
- * Mixin's "searge" obfuscation environment reads a mapping resource named {@code searge.srg}
- * from the processor's classpath, which is how the processor learns the SRG names behind the
- * MCP names our mixins use. This packages the mapping file under that name; the same jar is
- * built by ForgeGradle when it runs the Mixin plugin.
- */
-task mixinMappingJar(type: Jar, group: "build") {
-    archiveFileName = "mixin-mappings.jar"
-    destinationDirectory = file("${buildDir}/mixins")
-    if (canGenerateRefmap) {
-        from(file(aetherSrgMappings)) {
-            rename { "searge.srg" }
-        }
+    // Mixin runtime: 0.7.11, NOT 0.8.x. Evidence: Forge 1.8.9's launch classpath is
+    // launchwrapper 1.12 + asm-debug-all 5.0.3 (see userdev dev.json) and org.objectweb.asm.*
+    // is parent-delegated, so the Mixin runtime must speak ASM 5 - which 0.7.x does and
+    // 0.8.x does not (it needs ASM 6+; MixinBootstrap's classpath tricks are out of scope).
+    // 0.7.11 is the exact version every proven 1.8.9 Forge client embeds (Leaf included).
+    // Embedded into the jar below (the embed configuration exists because FG 2.x also puts
+    // Minecraft/Forge on `compile` - embedding `compile` wholesale would ship the game);
+    // guava/gson/commons-io stay excluded: the 1.8.9 runtime provides them.
+    embed("org.spongepowered:mixin:0.7.11-SNAPSHOT") {
+        exclude module: "launchwrapper"
+        exclude module: "guava"
+        exclude module: "gson"
+        exclude module: "commons-io"
     }
 }
 
-// Regenerates mixins.aether.refmap.json next to the compiled adapter. The refmap maps the MCP
-// names in the mixin sources to SRG names, which is what Mixin needs on an obfuscated runtime.
-tasks.named("compileForge189Java") {
-    dependsOn mixinMappingJar
-    if (canGenerateRefmap) {
-        options.compilerArgs += [
-            "-AoutRefMapFile=${buildDir}/mixins/mixins.aether.refmap.json",
-            "-AdefaultObfuscationEnv=searge"
-        ]
-        options.annotationProcessorPath = configurations.mixinProcessor + files(mixinMappingJar)
+// Mixin 0.8.x embeds its own shaded dependencies; when the mod jar is reobf'd
+// ForgeGradle copies the compile dependencies in unless told otherwise. Forge
+// 1.8.9 already provides LaunchWrapper and Gson at runtime, and Mixin's shaded
+// jar does not need republishing, so nothing extra is bundled by default.
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "mcversion", project.minecraft.version
+
+    from(sourceSets.main.resources.srcDirs) {
+        include "mcmod.info"
+        expand "version": project.version, "mcversion": project.minecraft.version
+    }
+    from(sourceSets.main.resources.srcDirs) {
+        exclude "mcmod.info"
     }
 }
 
-compileForge189Java.dependsOn compileForge189StubsJava
-
-test {
-    enabled = false
+jar {
+    // Embed the Mixin runtime (shaded classes) - Forge 1.8.9 does not provide one.
+    from(configurations.embed.collect {
+        it.isDirectory() ? it : zipTree(it)
+    }) {
+        exclude "META-INF/MUMFREY.RSA",
+            "META-INF/maven/**",
+            "org/**/*.html"
+    }
+    manifest {
+        attributes(
+            "MixinConfigs": "mixins.aether.json",
+            // Registers mixins.aether.json in production (CoreModManager discovers
+            // coremods by this manifest attribute). In dev runs the equivalent hook
+            // is the fml.coreMods.load system property set on the run tasks below;
+            // both point at AetherMixinPlugin.
+            "FMLCorePlugin": "dev.aether.forge189.mixin.AetherMixinPlugin",
+            "TweakClass": "org.spongepowered.asm.launch.MixinTweaker",
+            "TweakOrder": 0,
+            "FMLCorePluginContainsFMLMod": "true",
+            "ForceLoadAsMod": "true"
+        )
+    }
 }
 
-task smokeTest(dependsOn: testClasses) {
-    def smokeTests = [
-        // The prod/dev texture-name resolution the custom font depends on.
-        "dev.aether.graphics.TextureIdResolverTest",
-        "dev.aether.event.EventBusTest",
-        "dev.aether.module.ModuleRegistryTest",
-        "dev.aether.config.JsonConfigStoreTest",
-        "dev.aether.hud.HudLayoutTest",
-        "dev.aether.runtime.PlatformDetectorTest",
-        "dev.aether.cosmetic.CosmeticLibraryTest"
-    ]
-
+// =====================================================================
+// Headless tests: plain-Java unit tests over the common core (config store,
+// module state machines, render maths, freelook/time/zoom views). They are
+// main() programs rather than JUnit classes (the project predates a test
+// framework on this stack), so :test would "pass" with zero tests executed.
+// Instead every compiled *Test class is discovered and run for real; any
+// non-zero exit fails the build.
+// =====================================================================
+task coreSelfTests {
+    group = "verification"
+    description = "Runs the plain main() self tests over the common core."
+    dependsOn tasks.testClasses
     doLast {
-        smokeTests.each { className ->
-            javaexec {
-                main = className
-                classpath = sourceSets.main.runtimeClasspath + sourceSets.test.runtimeClasspath
+        def testClasspath = files(sourceSets.main.output, sourceSets.test.output)
+        def scanned = 0
+        sourceSets.test.output.classesDirs.each { File dir ->
+            if (!dir.isDirectory()) {
+                return
+            }
+            dir.eachFileRecurse(groovy.io.FileType.FILES) { File file ->
+                if (!file.name.endsWith("Test.class") || file.name.contains("\$")) {
+                    return
+                }
+                def relName = file.path
+                    .substring(dir.path.length() + 1)
+                    .replace(File.separator, ".")
+                def className = relName.substring(0, relName.length() - ".class".length())
+                scanned++
+                logger.lifecycle("running " + className)
+                javaexec {
+                    classpath = testClasspath
+                    main = className
+                    workingDir = projectDir
+                }
             }
         }
+        if (scanned == 0) {
+            throw new GradleException("coreSelfTests found no *Test classes")
+        }
+        logger.lifecycle("coreSelfTests: ${scanned} test classes passed")
     }
 }
-
-check.dependsOn smokeTest
-check.dependsOn compileForge189Java
-
-// ---------------------------------------------------------------------------------------------
-// Production remapping
-//
-// The adapter is compiled with javac against stubs (or a development Minecraft jar), so its
-// constant pool holds development names: drawScreen, WorldRenderer.pos, DynamicTexture.getGlTextureId.
-// A production Minecraft 1.8.9 runtime has none of those - ForgeGradle's reobf task is what renames
-// them, and a plain Gradle build has nothing that does. An unremapped jar does not just lose a
-// feature: the JVM throws NoSuchMethodError the first time such a call site runs, Minecraft never
-// dispatches a screen's drawScreen at all, and the mixin targets never resolve.
-//
-// remapForge189 is that missing step. It rewrites the compiled classes with an SRG mapping file and
-// reports every game reference the file does not cover, so a release can refuse to ship a jar that
-// would crash on its first frame instead of leaving it to a bug report. The mapping file is the same
-// one the Mixin annotation processor consumes above, so one input unlocks both.
-//
-def nonShippedClasses = [
-    // The headless self-tests assert against the build's own stubs: they call members that exist only
-    // in the stubs, so shipping them would put classes in the jar that cannot link against Minecraft.
-    "**/*SelfTest*.class",
-    // The remapper is a build tool, not mod code.
-    "dev/aether/remap/**"
-]
-def remappedClassesDir = file("${buildDir}/remapped")
-def requireRemap = Boolean.parseBoolean(
-    System.getenv("AETHER_REQUIRE_REMAP") ?: (findProperty("aetherRequireRemap") ?: "false"))
-
-task remapForge189(type: JavaExec) {
-    group = "build"
-    description = "Rewrites development Minecraft names in the compiled classes into runtime names"
-    dependsOn classes, forge189Classes
-    onlyIf { hasSrgMappings }
-    // The tool writes one file per input class and never deletes, so an output left by an earlier
-    // run would leak stale classes into the jar the moment an input set changes.
-    doFirst {
-        delete remappedClassesDir
-    }
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = "dev.aether.remap.RemapTool"
-    // The arguments are built lazily inside a closure: aetherSrgMappings is unset for a plain dev
-    // build, and a task's configuration runs even when onlyIf will skip its execution, so an eager
-    // file(aetherSrgMappings) here would break every build that does not remap.
-    doFirst {
-        args "--mappings", file(aetherSrgMappings).path,
-             "--input", sourceSets.main.output.classesDirs.singleFile.path,
-             "--input", sourceSets.forge189.output.classesDirs.singleFile.path,
-             "--output", remappedClassesDir.path,
-             "--report", file("${buildDir}/reports/unmapped-game-references.txt").path,
-             // Self-tests and the remapper are compiled but not shipped; they link against this
-             // build's stubs, so they have no mapping and must not make a release look unmappable.
-             "--exclude", "SelfTest",
-             "--exclude", "dev/aether/remap/"
-        if (requireRemap) {
-            args "--require-complete"
-        }
-    }
+test {
+    // No JUnit classes exist; the real suite is coreSelfTests above.
+    enabled = false
+}
+tasks.check {
+    dependsOn coreSelfTests
 }
 
-/** Fails the build when the artifact still references game members nothing remaps. */
-task auditForge189(type: JavaExec) {
-    group = "verification"
-    description = "Reports game references that production remapping does not cover"
-    dependsOn classes, forge189Classes
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = "dev.aether.remap.RemapTool"
-    // Lazy for the same reason as remapForge189 above: the mappings property may be unset.
-    doFirst {
-        def placeholder = file("${buildDir}/empty-mappings.srg")
-        if (!placeholder.parentFile.exists()) {
-            placeholder.parentFile.mkdirs()
-        }
-        if (!placeholder.exists()) {
-            placeholder.text = "# No SRG mapping file was supplied, so this run reports every game reference.\n"
-        }
-        args "--mappings", hasSrgMappings ? file(aetherSrgMappings).path : placeholder.path,
-             "--input", sourceSets.main.output.classesDirs.singleFile.path,
-             "--input", sourceSets.forge189.output.classesDirs.singleFile.path,
-             "--output", file("${buildDir}/audit-remapped").path,
-             "--report", file("${buildDir}/reports/unmapped-game-references.txt").path,
-             "--exclude", "SelfTest",
-             "--exclude", "dev/aether/remap/"
-    }
+// Dev runs: there is no jar manifest for FML to scan, so hand it the Mixin
+// bootstrap coremod through the command-line hook (CoreModManager reads
+// fml.coreMods.load) - the production jar carries the same plugin via its
+// FMLCorePlugin manifest attribute.
+tasks.withType(JavaExec).configureEach {
+    systemProperty "fml.coreMods.load", "dev.aether.forge189.mixin.AetherMixinPlugin"
 }
 
-task forge189Jar(type: Jar, dependsOn: [classes, forge189Classes]) {
-    archiveClassifier = "forge189"
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    // Resources always come from the source sets; only the classes are replaced by the remapped tree.
-    from(sourceSets.main.output) {
-        exclude "**/*.class"
-    }
-    from(sourceSets.forge189.output) {
-        exclude "**/*.class"
-    }
-    if (hasSrgMappings) {
-        dependsOn remapForge189
-        from(remappedClassesDir) {
-            exclude nonShippedClasses
-        }
-    } else {
-        from(sourceSets.main.output.classesDirs) {
-            exclude nonShippedClasses
-        }
-        from(sourceSets.forge189.output.classesDirs) {
-            exclude nonShippedClasses
-        }
-        doFirst {
-            logger.warn("")
-            logger.warn("[Aether] This jar is NOT production-remapped: no SRG mapping file was supplied.")
-            logger.warn("[Aether] It carries development Minecraft names, so on a real 1.8.9 client it")
-            logger.warn("[Aether] will throw NoSuchMethodError and no Aether screen will be called.")
-            logger.warn("[Aether] Build a shippable jar with -PaetherSrgMappings=<path to mcp-srg.srg>")
-            logger.warn("[Aether] (-PaetherRequireRemap=true makes this an error).")
-            logger.warn("")
-        }
-    }
-    // The refmap generated by the Mixin processor (see mixinMappingJar above). It is only present
-    // when the build was given an SRG mapping file, as the config and the mixin targets then agree
-    // with the runtime names.
-    from("${buildDir}/mixins") {
-        include "*.refmap.json"
-    }
-    // Mixin reads the config list from the jar manifest.
-    manifest {
-        attributes "MixinConfigs": "mixins.aether.json"
-    }
+// Gradle 9 removed the project-level property; set it where it is meaningful.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
 }
-
-assemble.dependsOn forge189Jar

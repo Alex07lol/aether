@@ -1,11 +1,7 @@
 package dev.aether.forge189;
 
 import dev.aether.AetherClient;
-import dev.aether.forge189.mixin.EntityPlayerSPMixin;
-import dev.aether.forge189.mixin.EntityRendererMixin;
-import dev.aether.forge189.mixin.ItemRendererMixin;
-import dev.aether.forge189.mixin.RendererLivingEntityMixin;
-import dev.aether.forge189.mixin.WorldMixin;
+import dev.aether.forge189.MixinFeatures;
 import dev.aether.graphics.FreelookMath;
 import dev.aether.graphics.FreelookView;
 import dev.aether.graphics.HurtCamMath;
@@ -755,7 +751,7 @@ final class ForgeClientEventBridge {
      * weather on the very next frame - there is no captured state and nothing to lose.
      */
     private void applyWeatherToggle(Object minecraft) {
-        WorldMixin.weatherOverrideActive = false;
+        MixinFeatures.World.weatherOverrideActive = false;
         if (!enabled("graphics.weather_toggle") || Mc189Compat.world(minecraft) == null) {
             return;
         }
@@ -769,9 +765,9 @@ final class ForgeClientEventBridge {
             settingRangeValue("graphics.weather_toggle", "rain_strength"));
         Float thunder = WeatherValues.thunderStrength(mode,
             settingRangeValue("graphics.weather_toggle", "thunder_strength"));
-        WorldMixin.weatherRainStrength = rain == null ? 0.0F : rain.floatValue();
-        WorldMixin.weatherThunderStrength = thunder == null ? 0.0F : thunder.floatValue();
-        WorldMixin.weatherOverrideActive = true;
+        MixinFeatures.World.weatherRainStrength = rain == null ? 0.0F : rain.floatValue();
+        MixinFeatures.World.weatherThunderStrength = thunder == null ? 0.0F : thunder.floatValue();
+        MixinFeatures.World.weatherOverrideActive = true;
     }
 
     /**
@@ -809,18 +805,18 @@ final class ForgeClientEventBridge {
     private void applyTimeChanger(Object minecraft) {
         Object world = Mc189Compat.world(minecraft);
         if (!enabled("graphics.time_changer") || world == null) {
-            WorldMixin.visualTimeActive = false;
+            MixinFeatures.World.visualTimeActive = false;
             return;
         }
         Integer dimension = Mc189Compat.worldDimension(world);
         if (dimension != null && dimension.intValue() != 0) {
             // Only the overworld draws a sky; the Nether and the End keep vanilla's fixed light.
-            WorldMixin.visualTimeActive = false;
+            MixinFeatures.World.visualTimeActive = false;
             return;
         }
-        WorldMixin.visualTimeWorldSnapshot = Mc189Compat.worldTime(world);
-        WorldMixin.visualTimeOffset = configuredInt("graphics.time_changer", "offset");
-        WorldMixin.visualTimeActive = true;
+        MixinFeatures.World.visualTimeWorldSnapshot = Mc189Compat.worldTime(world);
+        MixinFeatures.World.visualTimeOffset = configuredInt("graphics.time_changer", "offset");
+        MixinFeatures.World.visualTimeActive = true;
     }
 
     /** Saves the scroll-to-zoom setting once the wheel has been still for a moment. */
@@ -838,13 +834,13 @@ final class ForgeClientEventBridge {
      */
     private void applyAnimationState() {
         boolean moduleEnabled = enabled("graphics.animation");
-        ItemRendererMixin.blockAnimationEnabled =
+        MixinFeatures.ItemRenderer.blockAnimationEnabled =
             moduleEnabled && settingBool("graphics.animation", "block_animation", true);
-        ItemRendererMixin.eatDrinkAnimationEnabled =
+        MixinFeatures.ItemRenderer.eatDrinkAnimationEnabled =
             moduleEnabled && settingBool("graphics.animation", "eat_drink_animation", true);
-        ItemRendererMixin.bowAnimationEnabled =
+        MixinFeatures.ItemRenderer.bowAnimationEnabled =
             moduleEnabled && settingBool("graphics.animation", "bow_animation", true);
-        ItemRendererMixin.fishingRodAnimationEnabled =
+        MixinFeatures.ItemRenderer.fishingRodAnimationEnabled =
             moduleEnabled && settingBool("graphics.animation", "rod_animation", true);
         if (moduleEnabled) {
             applyActionSwing();
@@ -906,8 +902,8 @@ final class ForgeClientEventBridge {
             // No player to seed the camera from; nothing to hold this tick.
             return;
         }
-        if (!EntityPlayerSPMixin.freelookFreezesRotation) {
-            EntityPlayerSPMixin.freelookFreezesRotation = true;
+        if (!MixinFeatures.Entity.freelookFreezesRotation) {
+            MixinFeatures.Entity.freelookFreezesRotation = true;
         }
         if (Mc189Compat.thirdPersonView(gameSettings) != 1) {
             Mc189Compat.setThirdPersonView(gameSettings, 1);
@@ -929,8 +925,8 @@ final class ForgeClientEventBridge {
         if (this.freelookView.isActive()) {
             this.freelookView.stop();
         }
-        if (EntityPlayerSPMixin.freelookFreezesRotation) {
-            EntityPlayerSPMixin.freelookFreezesRotation = false;
+        if (MixinFeatures.Entity.freelookFreezesRotation) {
+            MixinFeatures.Entity.freelookFreezesRotation = false;
         }
         if (gameSettings == null) {
             return;
@@ -949,12 +945,12 @@ final class ForgeClientEventBridge {
      */
     private void applyZoom() {
         if (!enabled("pvp.zoom")) {
-            EntityRendererMixin.resetZoomAnimation();
+            MixinFeatures.EntityRenderer.resetZoomAnimation();
             return;
         }
         int percent = settingRangeValue("pvp.zoom", "zoom_percent");
         int floor = settingMin("pvp.zoom", "zoom_percent", 5);
-        EntityRendererMixin.zoomTargetScale = Mc189Compat.keyboardKeyDown(configuredInt("pvp.zoom", "keybind"))
+        MixinFeatures.EntityRenderer.zoomTargetScale = Mc189Compat.keyboardKeyDown(configuredInt("pvp.zoom", "keybind"))
             ? ZoomMath.scaleFromPercent(percent, floor)
             : ZoomMath.NO_ZOOM;
     }
@@ -983,8 +979,8 @@ final class ForgeClientEventBridge {
      */
     private void applyNoHurtCamState() {
         boolean active = enabled("graphics.no_hurt_cam");
-        EntityRendererMixin.hurtCameraScaled = active;
-        EntityRendererMixin.hurtCameraScale = active
+        MixinFeatures.EntityRenderer.hurtCameraScaled = active;
+        MixinFeatures.EntityRenderer.hurtCameraScale = active
             ? HurtCamMath.scaleFromPercent(settingRangeValue("graphics.no_hurt_cam", "shake_amount"))
             : 1.0F;
     }
@@ -996,15 +992,15 @@ final class ForgeClientEventBridge {
      */
     private void applyHitColor() {
         boolean active = enabled("graphics.hit_color");
-        RendererLivingEntityMixin.customHitColorEnabled = active;
+        MixinFeatures.RendererLivingEntity.customHitColorEnabled = active;
         if (!active) {
             return;
         }
         int color = settingColor("graphics.hit_color", "color", 0xFFFF5555);
-        RendererLivingEntityMixin.hitColorRed = (color >> 16 & 255) / 255.0F;
-        RendererLivingEntityMixin.hitColorGreen = (color >> 8 & 255) / 255.0F;
-        RendererLivingEntityMixin.hitColorBlue = (color & 255) / 255.0F;
-        RendererLivingEntityMixin.hitColorAlpha = (color >>> 24 & 255) / 255.0F;
+        MixinFeatures.RendererLivingEntity.hitColorRed = (color >> 16 & 255) / 255.0F;
+        MixinFeatures.RendererLivingEntity.hitColorGreen = (color >> 8 & 255) / 255.0F;
+        MixinFeatures.RendererLivingEntity.hitColorBlue = (color & 255) / 255.0F;
+        MixinFeatures.RendererLivingEntity.hitColorAlpha = (color >>> 24 & 255) / 255.0F;
     }
 
     /**

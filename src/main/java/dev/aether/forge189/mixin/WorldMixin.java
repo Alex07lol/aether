@@ -1,5 +1,6 @@
 package dev.aether.forge189.mixin;
 
+import dev.aether.forge189.MixinFeatures;
 import dev.aether.graphics.TimeChangerMath;
 import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
@@ -23,48 +24,35 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * </ul>
  * Both injections are soft ({@code require = 0}): if a runtime's mappings disagree, the module
  * becomes a no-op instead of crashing the client, and because neither hook writes anything, a
- * skipped hook cannot leave state behind either.
+ * skipped hook cannot leave state behind either. The published state lives on
+ * {@link MixinFeatures.World} - a mixin class may not carry non-private static fields.
  */
 @Mixin(World.class)
 public abstract class WorldMixin {
 
-    /** Set by ForgeClientEventBridge while graphics.time_changer is on in the overworld. */
-    public static boolean visualTimeActive = false;
-
-    /** The real world time sampled on the last tick; never written back. */
-    public static long visualTimeWorldSnapshot = 0L;
-
-    /** The offset in ticks the sky is drawn with. */
-    public static int visualTimeOffset = 0;
-
-    /** Set by ForgeClientEventBridge while graphics.weather_toggle is overriding the weather. */
-    public static boolean weatherOverrideActive = false;
-
-    /** The strengths to report while the override is active, as 0-1 values. */
-    public static float weatherRainStrength = 0.0F;
-    public static float weatherThunderStrength = 0.0F;
-
     @Inject(method = "getCelestialAngle", at = @At("RETURN"), cancellable = true, require = 0)
     private void aetherVisualTime(float partialTicks, CallbackInfoReturnable<Float> cir) {
-        if (!visualTimeActive) {
+        if (!MixinFeatures.World.visualTimeActive) {
             return;
         }
         // Primitive return overload: this hook runs several times per frame, so it does not box.
         cir.setReturnValue(TimeChangerMath.celestialAngle(
-            TimeChangerMath.visualTime(visualTimeWorldSnapshot, visualTimeOffset), partialTicks));
+            TimeChangerMath.visualTime(MixinFeatures.World.visualTimeWorldSnapshot,
+                MixinFeatures.World.visualTimeOffset),
+            partialTicks));
     }
 
     @Inject(method = "getRainStrength", at = @At("RETURN"), cancellable = true, require = 0)
     private void aetherRainStrength(float partialTicks, CallbackInfoReturnable<Float> cir) {
-        if (weatherOverrideActive) {
-            cir.setReturnValue(weatherRainStrength);
+        if (MixinFeatures.World.weatherOverrideActive) {
+            cir.setReturnValue(MixinFeatures.World.weatherRainStrength);
         }
     }
 
     @Inject(method = "getThunderStrength", at = @At("RETURN"), cancellable = true, require = 0)
     private void aetherThunderStrength(float partialTicks, CallbackInfoReturnable<Float> cir) {
-        if (weatherOverrideActive) {
-            cir.setReturnValue(weatherThunderStrength);
+        if (MixinFeatures.World.weatherOverrideActive) {
+            cir.setReturnValue(MixinFeatures.World.weatherThunderStrength);
         }
     }
 }

@@ -3,5 +3,7 @@ out/
 .gradle/
 .gradle-home/
 .gradle-home-java8/
+.gradle-dist/
+run/
 *.class
 *.log

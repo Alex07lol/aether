@@ -1,5 +1,6 @@
 package dev.aether.forge189.mixin;
 
+import dev.aether.forge189.MixinFeatures;
 import net.minecraft.client.renderer.entity.RendererLivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -17,40 +18,38 @@ import java.nio.FloatBuffer;
  * The redirects are marked optional ({@code require = 0}) because they depend on the order of
  * the buffer writes in the mapped method. On a runtime where that order differs the tint is
  * skipped and logged instead of failing the whole mixin; the module's hit outline (drawn by the
- * bridge) still works.
+ * bridge) still works. The published state lives on
+ * {@link MixinFeatures.RendererLivingEntity} - a mixin class may not carry non-private static
+ * fields.
  */
 @Mixin(RendererLivingEntity.class)
 public abstract class RendererLivingEntityMixin {
 
-    /** Set by ForgeClientEventBridge while graphics.hit_color is on. */
-    public static boolean customHitColorEnabled = false;
-
-    public static float hitColorRed = 1.0F;
-    public static float hitColorGreen = 0.0F;
-    public static float hitColorBlue = 0.0F;
-    public static float hitColorAlpha = 0.3F;
-
     @Redirect(method = "setBrightness", require = 0,
         at = @At(value = "INVOKE", target = "Ljava/nio/FloatBuffer;put(F)Ljava/nio/FloatBuffer;", ordinal = 0))
-    public FloatBuffer setRed(FloatBuffer instance, float value) {
-        return instance.put(customHitColorEnabled ? hitColorRed : value);
+    private FloatBuffer setRed(FloatBuffer instance, float value) {
+        return instance.put(MixinFeatures.RendererLivingEntity.customHitColorEnabled
+            ? MixinFeatures.RendererLivingEntity.hitColorRed : value);
     }
 
     @Redirect(method = "setBrightness", require = 0,
         at = @At(value = "INVOKE", target = "Ljava/nio/FloatBuffer;put(F)Ljava/nio/FloatBuffer;", ordinal = 1))
-    public FloatBuffer setGreen(FloatBuffer instance, float value) {
-        return instance.put(customHitColorEnabled ? hitColorGreen : value);
+    private FloatBuffer setGreen(FloatBuffer instance, float value) {
+        return instance.put(MixinFeatures.RendererLivingEntity.customHitColorEnabled
+            ? MixinFeatures.RendererLivingEntity.hitColorGreen : value);
     }
 
     @Redirect(method = "setBrightness", require = 0,
         at = @At(value = "INVOKE", target = "Ljava/nio/FloatBuffer;put(F)Ljava/nio/FloatBuffer;", ordinal = 2))
-    public FloatBuffer setBlue(FloatBuffer instance, float value) {
-        return instance.put(customHitColorEnabled ? hitColorBlue : value);
+    private FloatBuffer setBlue(FloatBuffer instance, float value) {
+        return instance.put(MixinFeatures.RendererLivingEntity.customHitColorEnabled
+            ? MixinFeatures.RendererLivingEntity.hitColorBlue : value);
     }
 
     @Redirect(method = "setBrightness", require = 0,
         at = @At(value = "INVOKE", target = "Ljava/nio/FloatBuffer;put(F)Ljava/nio/FloatBuffer;", ordinal = 3))
-    public FloatBuffer setAlpha(FloatBuffer instance, float value) {
-        return instance.put(customHitColorEnabled ? hitColorAlpha : value);
+    private FloatBuffer setAlpha(FloatBuffer instance, float value) {
+        return instance.put(MixinFeatures.RendererLivingEntity.customHitColorEnabled
+            ? MixinFeatures.RendererLivingEntity.hitColorAlpha : value);
     }
 }
