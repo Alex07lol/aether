@@ -19,6 +19,50 @@ public final class MixinFeatures {
     private MixinFeatures() {
     }
 
+    /**
+     * State for {@code MouseHelperMixin}: the mouse delta of the frame currently being rendered.
+     * <p>
+     * Minecraft 1.8.9 runs its loop at two rates: {@code runGameLoop} calls {@code runTick()} once
+     * per <em>game tick</em> (which is where Forge posts {@code MouseEvent}, ~20 Hz) and
+     * {@code updateCameraAndRender} once per <em>frame</em>. Vanilla's own look path lives on the
+     * per-frame side ({@code MouseHelper.mouseXYChange()}). A camera driven by {@code MouseEvent}
+     * therefore turns in 50ms steps against a frame-rate render, which is exactly the freelook
+     * jitter this holder exists to remove: the mixin publishes what vanilla read this frame, and
+     * the camera consumes it once per frame.
+     * <p>
+     * Deltas accumulate, so a frame in which vanilla read the mouse more than once still applies
+     * the whole frame's movement; {@code takeDelta*} drains, so a delta is never applied twice.
+     */
+    public static final class Mouse {
+
+        private Mouse() {
+        }
+
+        /** Raw device units accumulated since the last drain; vanilla scales these by sensitivity. */
+        public static int frameDeltaX = 0;
+        public static int frameDeltaY = 0;
+
+        /** Called by the mixin on every per-frame mouse read. */
+        public static void capture(int deltaX, int deltaY) {
+            frameDeltaX += deltaX;
+            frameDeltaY += deltaY;
+        }
+
+        /** @return this frame's horizontal delta and reset it. */
+        public static int takeDeltaX() {
+            int value = frameDeltaX;
+            frameDeltaX = 0;
+            return value;
+        }
+
+        /** @return this frame's vertical delta and reset it. */
+        public static int takeDeltaY() {
+            int value = frameDeltaY;
+            frameDeltaY = 0;
+            return value;
+        }
+    }
+
     /** State for {@code EntityMixin}: the freelook rotation freeze. */
     public static final class Entity {
 

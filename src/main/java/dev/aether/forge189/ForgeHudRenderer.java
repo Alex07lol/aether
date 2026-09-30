@@ -1,7 +1,14 @@
 package dev.aether.forge189;
 
 import dev.aether.AetherClient;
+import dev.aether.animation.Anim;
+import dev.aether.animation.AnimationMath;
+import dev.aether.animation.Easing;
+import dev.aether.animation.FrameClock;
 import dev.aether.hud.HudElement;
+import dev.aether.hud.TargetHealthText;
+import dev.aether.module.impl.hud.TargetInfoModule;
+import net.minecraft.util.ResourceLocation;
 import dev.aether.module.ClientModule.ModuleState;
 import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
@@ -19,11 +26,9 @@ import java.util.ArrayList;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 public final class ForgeHudRenderer {
     /**
@@ -34,7 +39,27 @@ public final class ForgeHudRenderer {
     private int textColor = 0xFFF5FBFF;
     private int accentColor = 0xFF52BEEB;
 
-    private static final long FADE_FALLBACK_MILLIS = 120L;
+    /**
+     * Keystrokes key slots. A fixed index per key (rather than a map keyed by label) is what lets
+     * every key own an independent animation object that is never allocated or looked up during a
+     * frame - the thing the brief calls out explicitly ("do not use one shared animation value for
+     * all keys").
+     */
+    private static final int KEY_W = 0;
+    private static final int KEY_A = 1;
+    private static final int KEY_S = 2;
+    private static final int KEY_D = 3;
+    private static final int KEY_LMB = 4;
+    private static final int KEY_RMB = 5;
+    private static final int KEY_SPACE = 6;
+    private static final int KEY_SLOTS = 7;
+
+    /** Press travel time; short enough to read as immediate, long enough to be an animation. */
+    private static final float KEY_PRESS_MILLIS = 90.0F;
+
+    /** How much of a key's box the press animation takes away, as a fraction of its size. */
+    private static final float KEY_PRESS_SHRINK = 0.08F;
+
 
     private final AetherClient client;
     /** Provides live combat / toggle state; null when the renderer runs in the HUD editor. */
@@ -43,9 +68,72 @@ public final class ForgeHudRenderer {
     private final java.text.SimpleDateFormat clockFormat12 = new java.text.SimpleDateFormat("h:mm a", Locale.ENGLISH);
     private String cachedClockFormatId = "24h";
     private String cachedClockSample = "";
-    /** Per-key release timestamps so hud.keystrokes can fade a press out. */
-    private final Map<String, Long> keyReleaseTimes = new HashMap<String, Long>();
-    private final Map<String, Boolean> keyDownStates = new HashMap<String, Boolean>();
+    /**
+     * Per-key press feedback: 0 = idle, 1 = fully pressed. Each key animates independently and its
+     * release uses the module's own {@code fade_time}, so the setting drives a real duration.
+     */
+    private final Anim[] keyPress = new Anim[KEY_SLOTS];
+
+    /* ------------------------------------------------------------------ hud.target_info */
+
+    /** Inner padding of the target card. */
+    private static final int TARGET_PADDING = 3;
+    /** Side of the skin face drawn on the card. */
+    private static final int TARGET_FACE_SIZE = 20;
+    /** Thickness of the health bar. */
+    private static final int TARGET_BAR_HEIGHT = 3;
+    /** One line of the vanilla font, with a pixel of leading. */
+    private static final int TARGET_LINE_HEIGHT = 9;
+    /** How far the damage flash pushes the card's surface towards the damage colour. */
+    private static final float TARGET_DAMAGE_TINT = 0.55F;
+    /** Skin layout: the face, its hat overlay, and the tile both are addressed in. */
+    private static final int SKIN_FACE_U = 8;
+    private static final int SKIN_HAT_U = 40;
+    private static final int SKIN_HEAD_V = 8;
+    private static final int SKIN_TILE = 64;
+
+    /**
+     * Target Info's animation state. Soar v4 keeps an intro animation, a damage animation and a
+     * health animation for this widget; these are the Aether equivalents, all frame-clocked.
+     */
+    private final Anim targetEnter = new Anim(0.0F, 220.0F, Easing.EASE_OUT_CUBIC);
+    private final Anim targetDamage = new Anim(0.0F, 320.0F, Easing.EASE_OUT_QUAD);
+    /** The entity being drawn; kept while the close animation plays and null when nothing is shown. */
+    private Object targetDisplayed;
+    /** Smoothed health and its maximum for {@link #targetDisplayed}; {@code -1} means "unknown". */
+    private float targetHealthShown = -1.0F;
+    private float targetHealthShownMax = -1.0F;
+    /** The hurt timer of the previous frame, so a hit is detected as an edge and not re-fired. */
+    private int targetLastHurtTime;
+    /**
+     * The entity's real health last frame (not the smoothed bar value). The damage flash is an edge
+     * on this, so one hit produces exactly one flash of exactly {@code damage_flash_time} instead of
+     * staying pinned while the bar catches up.
+     */
+    private float targetLastHealth = -1.0F;
+    /** Cached display name, rebuilt only when the target entity changes. */
+    private Object targetNameOwner;
+    private String targetNameCache = "";
+    /** Reusable card geometry, so laying the widget out never allocates. */
+    private final TargetLayout targetLayout = new TargetLayout();
+
+    /** Where every part of the target card sits, relative to the HUD element's origin. */
+    private static final class TargetLayout {
+        int width;
+        int height;
+        int faceSize;
+        int textX;
+        int nameY;
+        int healthY;
+        int barX;
+        int barY;
+        int barWidth;
+        int barHeight;
+        boolean hasFace;
+        boolean hasName;
+        boolean hasHealthText;
+        boolean hasBar;
+    }
 
     // Optimized primitive click tracking buffers (zero GC)
     private final long[] leftClickTimes = new long[128];
@@ -88,6 +176,9 @@ public final class ForgeHudRenderer {
     ForgeHudRenderer(AetherClient client, ForgeClientEventBridge bridge) {
         this.client = client;
         this.bridge = bridge;
+        for (int slot = 0; slot < KEY_SLOTS; slot++) {
+            this.keyPress[slot] = new Anim(0.0F, KEY_PRESS_MILLIS, Easing.EASE_OUT_CUBIC);
+        }
     }
 
     void render() {
@@ -118,6 +209,7 @@ public final class ForgeHudRenderer {
         renderClock(fontRenderer);
         renderDeveloperOverlay(fontRenderer);
         renderBlockInfo(fontRenderer, minecraft);
+        renderTargetInfo(fontRenderer, minecraft);
         renderArmorStatus(fontRenderer, minecraft);
         renderPotionStatus(fontRenderer, minecraft);
 
@@ -165,6 +257,10 @@ public final class ForgeHudRenderer {
         drawEditorPreview(fontRenderer, "hud.combo", "Combo 5");
         drawEditorPreview(fontRenderer, "hud.day_counter", "Day 42");
         drawEditorPreview(fontRenderer, "pvp.toggle_sneak", "Sneak (Toggled)");
+        // The keystrokes and target-info elements are components, not text cards: the editor draws
+        // the real thing with real data rather than a label in a box.
+        renderKeystrokesPreview(fontRenderer);
+        renderTargetInfoPreview(fontRenderer, minecraft);
 
         Mc189Compat.color(1.0F, 1.0F, 1.0F, 1.0F);
         Mc189Compat.enableTexture2D();
@@ -292,25 +388,324 @@ public final class ForgeHudRenderer {
         int y = element.y();
 
         if (settingBool("hud.keystrokes", "show_movement_keys", true)) {
-            drawKeyBox(fontRenderer, arrows ? "^" : "W", Mc189Compat.keyForward(gameSettings), x + size + gap, y, size, size, background, backgroundColor, pressedColor, textColor, fadeTime);
+            drawKeyBox(fontRenderer, KEY_W, arrows ? "^" : "W", Mc189Compat.keyForward(gameSettings), x + size + gap, y, size, size, background, backgroundColor, pressedColor, textColor, fadeTime);
             int rowY = y + size + gap;
-            drawKeyBox(fontRenderer, arrows ? "<" : "A", Mc189Compat.keyLeft(gameSettings), x, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime);
-            drawKeyBox(fontRenderer, arrows ? "v" : "S", Mc189Compat.keyBack(gameSettings), x + size + gap, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime);
-            drawKeyBox(fontRenderer, arrows ? ">" : "D", Mc189Compat.keyRight(gameSettings), x + (size + gap) * 2, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime);
+            drawKeyBox(fontRenderer, KEY_A, arrows ? "<" : "A", Mc189Compat.keyLeft(gameSettings), x, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime);
+            drawKeyBox(fontRenderer, KEY_S, arrows ? "v" : "S", Mc189Compat.keyBack(gameSettings), x + size + gap, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime);
+            drawKeyBox(fontRenderer, KEY_D, arrows ? ">" : "D", Mc189Compat.keyRight(gameSettings), x + (size + gap) * 2, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime);
             y = rowY + size + gap;
         }
 
         if (settingBool("hud.keystrokes", "show_clicks", true)) {
             int totalMovementWidth = size * 3 + gap * 2;
             int clickWidth = (totalMovementWidth - gap) / 2;
-            drawKeyBox(fontRenderer, "LMB", Mc189Compat.keyAttack(gameSettings), x, y, clickWidth, clickHeight, background, backgroundColor, pressedColor, textColor, fadeTime);
-            drawKeyBox(fontRenderer, "RMB", Mc189Compat.keyUseItem(gameSettings), x + clickWidth + gap, y, clickWidth, clickHeight, background, backgroundColor, pressedColor, textColor, fadeTime);
+            drawKeyBox(fontRenderer, KEY_LMB, "LMB", Mc189Compat.keyAttack(gameSettings), x, y, clickWidth, clickHeight, background, backgroundColor, pressedColor, textColor, fadeTime);
+            drawKeyBox(fontRenderer, KEY_RMB, "RMB", Mc189Compat.keyUseItem(gameSettings), x + clickWidth + gap, y, clickWidth, clickHeight, background, backgroundColor, pressedColor, textColor, fadeTime);
             y += clickHeight + gap;
         }
 
         if (settingBool("hud.keystrokes", "show_spacebar", false)) {
-            drawKeyBox(fontRenderer, "SPACE", Mc189Compat.keyJump(gameSettings), x, y, size * 3 + gap * 2, spacebarHeight, background, backgroundColor, pressedColor, textColor, fadeTime);
+            drawKeyBox(fontRenderer, KEY_SPACE, "SPACE", Mc189Compat.keyJump(gameSettings), x, y, size * 3 + gap * 2, spacebarHeight, background, backgroundColor, pressedColor, textColor, fadeTime);
         }
+    }
+
+    /**
+     * The HUD editor's keystrokes preview: the real component, drawn with a fixed press state (W
+     * and LMB held) so the user can see both the idle and the pressed look while laying it out.
+     * Only the input state is faked - the geometry, colours and animation are the ones the HUD
+     * itself uses, which is the rule for editor previews.
+     */
+    private void renderKeystrokesPreview(Object fontRenderer) {
+        HudElement element = client.hudLayout().get("hud.keystrokes");
+        if (element == null) {
+            return;
+        }
+        int size = clamp(settingInt("hud.keystrokes", "box_size", 18), 14, 34);
+        int clickHeight = clamp(settingInt("hud.keystrokes", "click_size", 18), 14, 34);
+        int spacebarHeight = clamp(settingInt("hud.keystrokes", "spacebar_height", 15), 8, 24);
+        int gap = clamp(settingInt("hud.keystrokes", "gap", 1), 0, 8);
+        int textColor = settingColor("hud.keystrokes", "text_color", this.textColor);
+        int backgroundColor = settingColor("hud.keystrokes", "background_color", 0x6F000000);
+        int pressedColor = settingColor("hud.keystrokes", "pressed_color", accentColor);
+        boolean background = settingBool("hud.keystrokes", "show_background", true);
+        boolean arrows = settingBool("hud.keystrokes", "arrows", false);
+        float fadeTime = clamp(settingInt("hud.keystrokes", "fade_time", 75), 0, 500);
+        int x = element.x();
+        int y = element.y();
+
+        if (settingBool("hud.keystrokes", "show_movement_keys", true)) {
+            drawKeyBoxState(fontRenderer, KEY_W, arrows ? "^" : "W", x + size + gap, y, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, true);
+            int rowY = y + size + gap;
+            drawKeyBoxState(fontRenderer, KEY_A, arrows ? "<" : "A", x, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, false);
+            drawKeyBoxState(fontRenderer, KEY_S, arrows ? "v" : "S", x + size + gap, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, false);
+            drawKeyBoxState(fontRenderer, KEY_D, arrows ? ">" : "D", x + (size + gap) * 2, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, false);
+            y = rowY + size + gap;
+        }
+        if (settingBool("hud.keystrokes", "show_clicks", true)) {
+            int clickWidth = (size * 3 + gap * 2 - gap) / 2;
+            drawKeyBoxState(fontRenderer, KEY_LMB, "LMB", x, y, clickWidth, clickHeight, background, backgroundColor, pressedColor, textColor, fadeTime, true);
+            drawKeyBoxState(fontRenderer, KEY_RMB, "RMB", x + clickWidth + gap, y, clickWidth, clickHeight, background, backgroundColor, pressedColor, textColor, fadeTime, false);
+            y += clickHeight + gap;
+        }
+        if (settingBool("hud.keystrokes", "show_spacebar", false)) {
+            drawKeyBoxState(fontRenderer, KEY_SPACE, "SPACE", x, y, size * 3 + gap * 2, spacebarHeight, background, backgroundColor, pressedColor, textColor, fadeTime, false);
+        }
+    }
+
+    /**
+     * Target Info: the entity the crosshair is on (or the one just hit), as a card with its real
+     * skin, its name and an animated health bar.
+     * <p>
+     * Everything animates through the shared layer and none of it is tick-driven: the card opens and
+     * closes over {@code animation_time}, the bar interpolates towards the entity's real health at a
+     * rate taken from {@code damage_flash_time}, and a hit flashes the card towards
+     * {@code damage_color} for that same duration. A hit is detected as an edge (the hurt timer's
+     * first frame, or a health drop), so a target that stays hurt does not re-flash every frame.
+     * <p>
+     * The card keeps drawing the last target while it closes, which is what makes losing a target
+     * look like an exit rather than a pop.
+     */
+    private void renderTargetInfo(Object fontRenderer, Object minecraft) {
+        if (!enabled(TargetInfoModule.ID) || this.bridge == null) {
+            // Dropped, not faded: switching the module back on must start from idle.
+            this.targetEnter.set(0.0F);
+            this.targetDamage.set(0.0F);
+            this.targetDisplayed = null;
+            this.targetNameOwner = null;
+            return;
+        }
+        float openMillis = clamp(settingInt(TargetInfoModule.ID, "animation_time", 220), 60, 600);
+        float flashMillis = clamp(settingInt(TargetInfoModule.ID, "damage_flash_time", 320), 80, 1200);
+        this.targetEnter.duration(openMillis).easing(Easing.EASE_OUT_CUBIC);
+        this.targetDamage.duration(flashMillis).easing(Easing.EASE_OUT_QUAD);
+
+        Object target = this.bridge.targetEntity();
+        if (target != null) {
+            this.targetEnter.target(1.0F);
+            if (target != this.targetDisplayed) {
+                // A new target appears with its own health: the bar must not slide over from the
+                // previous entity's value, which would read as a phantom heal or hit.
+                this.targetDisplayed = target;
+                this.targetHealthShown = Mc189Compat.health(target);
+                this.targetLastHealth = this.targetHealthShown;
+                this.targetHealthShownMax = Mc189Compat.maxHealth(target);
+                this.targetLastHurtTime = Mc189Compat.hurtTime(target);
+                this.targetNameOwner = null;
+                this.targetDamage.set(0.0F);
+            }
+        } else {
+            this.targetEnter.target(0.0F);
+        }
+
+        float visibility = this.targetEnter.update();
+        if (this.targetDisplayed == null || visibility <= 0.004F) {
+            return;
+        }
+
+        Object displayed = this.targetDisplayed;
+        float health = Mc189Compat.health(displayed);
+        float maxHealth = Mc189Compat.maxHealth(displayed);
+        int hurtTime = Mc189Compat.hurtTime(displayed);
+        boolean hit = hurtTime > 0 && this.targetLastHurtTime == 0
+            || health >= 0.0F && this.targetLastHealth >= 0.0F && health < this.targetLastHealth - 0.05F;
+        this.targetLastHurtTime = hurtTime;
+        if (health >= 0.0F) {
+            this.targetLastHealth = health;
+        }
+        if (hit) {
+            this.targetDamage.set(1.0F);
+            this.targetDamage.target(0.0F);
+        }
+        float damage = this.targetDamage.update();
+
+        if (health >= 0.0F) {
+            this.targetHealthShown = this.targetHealthShown < 0.0F
+                ? health
+                : AnimationMath.approach(this.targetHealthShown, health, FrameClock.deltaMillis(),
+                    Math.max(40.0F, flashMillis * 0.4F));
+        }
+        if (maxHealth >= 0.0F) {
+            this.targetHealthShownMax = maxHealth;
+        }
+        if (this.targetNameOwner != displayed) {
+            this.targetNameOwner = displayed;
+            this.targetNameCache = plainText(Mc189Compat.displayName(displayed));
+        }
+
+        float fraction = TargetHealthText.fraction(this.targetHealthShown, this.targetHealthShownMax);
+        drawTargetInfo(fontRenderer, displayed, this.targetNameCache,
+            targetHealthText(this.targetHealthShown, this.targetHealthShownMax), fraction, damage, visibility);
+    }
+
+    /**
+     * The HUD editor's target preview: the real component, with the local player's own skin and name
+     * and a representative half-health value so the bar's fill is visible while laying the widget
+     * out. Only the entity is preview data - the geometry, colours and animation are the runtime
+     * ones, which is the rule for editor previews.
+     */
+    private void renderTargetInfoPreview(Object fontRenderer, Object minecraft) {
+        Object player = Mc189Compat.player(minecraft);
+        if (player == null) {
+            // No world (the editor can be opened from the menu): nothing real to preview.
+            return;
+        }
+        drawTargetInfo(fontRenderer, player, previewTargetName(player), targetHealthText(PREVIEW_HEALTH, 20.0F),
+            PREVIEW_HEALTH / 20.0F, 0.0F, 1.0F);
+    }
+
+    /** The health value the editor preview and the editor's measuring box both use. */
+    private static final float PREVIEW_HEALTH = 13.5F;
+
+    /** The editor preview shows the local player, so its name is the player's own display name. */
+    private String previewTargetName(Object player) {
+        String name = plainText(Mc189Compat.displayName(player));
+        if (name.trim().isEmpty()) {
+            name = plainText(Mc189Compat.username());
+        }
+        return name;
+    }
+
+    /**
+     * Lays the card out from the module's own settings. Shared by the renderer, the editor preview
+     * and {@link #getDimensions}, so the editor's selection box can never disagree with the card.
+     */
+    private void layoutTargetInfo(Object fontRenderer, String name, String healthText, Object target) {
+        TargetLayout layout = this.targetLayout;
+        layout.hasFace = settingBool(TargetInfoModule.ID, "show_skin", true)
+            && Mc189Compat.skinLocation(target) != null;
+        layout.hasName = settingBool(TargetInfoModule.ID, "show_name", true)
+            && name != null && !name.isEmpty();
+        layout.hasHealthText = settingBool(TargetInfoModule.ID, "show_health_text", true)
+            && healthText != null && !healthText.isEmpty();
+        layout.hasBar = settingBool(TargetInfoModule.ID, "show_health_bar", true);
+        layout.faceSize = layout.hasFace ? TARGET_FACE_SIZE : 0;
+        layout.barWidth = clamp(settingInt(TargetInfoModule.ID, "bar_width", 72), 30, 140);
+        layout.barHeight = TARGET_BAR_HEIGHT;
+
+        int nameWidth = layout.hasName ? Mc189Compat.stringWidth(fontRenderer, name) : 0;
+        int healthWidth = layout.hasHealthText ? Mc189Compat.stringWidth(fontRenderer, healthText) : 0;
+        int contentWidth = Math.max(Math.max(nameWidth, healthWidth), layout.hasBar ? layout.barWidth : 0);
+        int textX = TARGET_PADDING + (layout.hasFace ? layout.faceSize + 4 : 0);
+        layout.textX = textX;
+        layout.barX = textX;
+
+        int cursor = TARGET_PADDING;
+        layout.nameY = cursor;
+        if (layout.hasName) {
+            cursor += TARGET_LINE_HEIGHT;
+        }
+        layout.healthY = cursor;
+        if (layout.hasHealthText) {
+            cursor += TARGET_LINE_HEIGHT;
+        }
+        layout.barY = cursor + 1;
+        if (layout.hasBar) {
+            cursor = layout.barY + layout.barHeight;
+        }
+
+        layout.width = TARGET_PADDING * 2 + (layout.hasFace ? layout.faceSize + 4 : 0) + contentWidth;
+        layout.height = TARGET_PADDING * 2
+            + Math.max(cursor - TARGET_PADDING, layout.hasFace ? layout.faceSize : 0);
+    }
+
+    /** Draws the card. {@code visibility} is the 0-1 open/close value and fades the whole widget. */
+    private void drawTargetInfo(Object fontRenderer, Object target, String name, String healthText,
+                                float healthFraction, float damage, float visibility) {
+        HudElement element = client.hudLayout().get(TargetInfoModule.ID);
+        if (element == null || visibility <= 0.004F) {
+            return;
+        }
+        layoutTargetInfo(fontRenderer, name, healthText, target);
+        TargetLayout layout = this.targetLayout;
+
+        float opacity = element.opacity() * visibility;
+        if (opacity <= 0.004F) {
+            return;
+        }
+        // The card also grows into place, so the open reads as an animation and not only a fade.
+        float scale = element.scale() * AnimationMath.lerp(0.92F, 1.0F, visibility);
+        float inverse = 1.0F / scale;
+
+        int backgroundColor = AnimationMath.scaleAlpha(
+            settingColor(TargetInfoModule.ID, "background_color", 0x6F000000), opacity);
+        int textColor = AnimationMath.scaleAlpha(
+            settingColor(TargetInfoModule.ID, "text_color", this.textColor), opacity);
+        int barColor = AnimationMath.scaleAlpha(
+            settingColor(TargetInfoModule.ID, "bar_color", accentColor), opacity);
+        int barBackgroundColor = AnimationMath.scaleAlpha(
+            settingColor(TargetInfoModule.ID, "bar_background_color", 0x8A101014), opacity);
+        int damageColor = AnimationMath.scaleAlpha(
+            settingColor(TargetInfoModule.ID, "damage_color", 0xFFFF4D4D), opacity);
+        int cardColor = AnimationMath.lerpColor(backgroundColor, damageColor,
+            AnimationMath.clamp01(damage) * TARGET_DAMAGE_TINT);
+
+        Mc189Compat.pushMatrix();
+        try {
+            Mc189Compat.scale(scale, scale, 1.0F);
+            int x = Math.round(element.x() * inverse);
+            int y = Math.round(element.y() * inverse);
+
+            if (settingBool(TargetInfoModule.ID, "show_background", true)) {
+                Mc189Compat.drawRoundedRectangle(x, y, layout.width, layout.height, 2, cardColor, 0);
+            }
+            if (layout.hasFace) {
+                ResourceLocation skin = Mc189Compat.skinLocation(target);
+                int faceX = x + TARGET_PADDING;
+                int faceY = y + TARGET_PADDING;
+                // Face layer, then the hat overlay on top: exactly the two head textures a skin has.
+                Mc189Compat.drawTextureRegion(skin, faceX, faceY, layout.faceSize, layout.faceSize,
+                    SKIN_FACE_U, SKIN_HEAD_V, 8, 8, SKIN_TILE, SKIN_TILE, opacity);
+                Mc189Compat.drawTextureRegion(skin, faceX, faceY, layout.faceSize, layout.faceSize,
+                    SKIN_HAT_U, SKIN_HEAD_V, 8, 8, SKIN_TILE, SKIN_TILE, opacity);
+            }
+            if (layout.hasName) {
+                Mc189Compat.drawStringWithShadow(fontRenderer, name,
+                    x + layout.textX, y + layout.nameY, textColor);
+            }
+            if (layout.hasHealthText) {
+                Mc189Compat.drawStringWithShadow(fontRenderer, healthText,
+                    x + layout.textX, y + layout.healthY, textColor);
+            }
+            if (layout.hasBar) {
+                int barX = x + layout.barX;
+                int barY = y + layout.barY;
+                Mc189Compat.drawRoundedRectangle(barX, barY, layout.barWidth, layout.barHeight, 1,
+                    barBackgroundColor, 0);
+                int filled = Math.round(layout.barWidth * AnimationMath.clamp01(healthFraction));
+                if (filled > 0) {
+                    Mc189Compat.drawRoundedRectangle(barX, barY, filled, layout.barHeight, 1, barColor, 0);
+                }
+            }
+        } finally {
+            Mc189Compat.popMatrix();
+            Mc189Compat.color(1.0F, 1.0F, 1.0F, 1.0F);
+        }
+    }
+
+    /**
+     * The health line for the module's own {@code health_mode}. The formatting rules themselves are
+     * pure and live in {@link TargetHealthText}, which is where they are unit tested.
+     */
+    private String targetHealthText(float health, float maxHealth) {
+        return TargetHealthText.format(health, maxHealth,
+            settingString(TargetInfoModule.ID, "health_mode", TargetHealthText.VALUE));
+    }
+
+    /** Strips the section-sign formatting codes a display name can carry, for measuring and drawing. */
+    private static String plainText(String text) {
+        if (text == null || text.indexOf('\u00A7') < 0) {
+            return text == null ? "" : text;
+        }
+        StringBuilder plain = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) {
+            char character = text.charAt(i);
+            if (character == '\u00A7') {
+                i++;
+                continue;
+            }
+            plain.append(character);
+        }
+        return plain.toString();
     }
 
     private void updateClickCounters(Object gameSettings) {
@@ -960,37 +1355,49 @@ public final class ForgeHudRenderer {
         return client.modules().get(moduleId).state() == ModuleState.ENABLED;
     }
 
-    private void drawKeyBox(Object fontRenderer, String label, Object keyBinding, int x, int y, int width, int height,
-                            boolean background, int backgroundColor, int pressedColor, int textColor, int fadeTime) {
-        boolean down = Mc189Compat.keyDown(keyBinding);
-        long now = System.currentTimeMillis();
-        float intensity = down ? 1.0F : 0.0F;
+    /**
+     * One keystroke, animated per key.
+     * <p>
+     * Soar v4 keeps a persistent animation value per key and this is the Aether equivalent: the
+     * key's own {@link Anim} travels to 1 while it is held (fast, eased, with a small shrink so the
+     * press is felt) and back to 0 on release over the module's own {@code fade_time}. Nothing is
+     * shared between keys, nothing is allocated per frame, and the value drives both the colour
+     * blend and the press scale, so the exposed settings all have a visible effect.
+     */
+    private void drawKeyBox(Object fontRenderer, int keySlot, String label, Object keyBinding, int x, int y,
+                            int width, int height, boolean background, int backgroundColor, int pressedColor,
+                            int textColor, int fadeTime) {
+        drawKeyBoxState(fontRenderer, keySlot, label, x, y, width, height, background, backgroundColor,
+            pressedColor, textColor, fadeTime, Mc189Compat.keyDown(keyBinding));
+    }
 
+    private void drawKeyBoxState(Object fontRenderer, int keySlot, String label, int x, int y, int width, int height,
+                                 boolean background, int backgroundColor, int pressedColor, int textColor,
+                                 float fadeTime, boolean down) {
+        Anim anim = this.keyPress[keySlot];
         if (down) {
-            this.keyDownStates.put(label, Boolean.TRUE);
-            this.keyReleaseTimes.remove(label);
+            anim.duration(KEY_PRESS_MILLIS).easing(Easing.EASE_OUT_CUBIC).target(1.0F);
         } else {
-            if (Boolean.TRUE.equals(this.keyDownStates.put(label, Boolean.FALSE))) {
-                this.keyReleaseTimes.put(label, Long.valueOf(now));
-            }
-            Long releasedAt = this.keyReleaseTimes.get(label);
-            if (releasedAt != null) {
-                long age = now - releasedAt.longValue();
-                long fade = fadeTime > 0 ? fadeTime : FADE_FALLBACK_MILLIS;
-                if (age >= fade) {
-                    this.keyReleaseTimes.remove(label);
-                } else if (age >= 0L) {
-                    intensity = 1.0F - (float) age / (float) fade;
-                }
-            }
+            // fade_time is the release duration, and 0 means "snap back": the setting's own floor
+            // is honest instead of being silently replaced by a fallback constant.
+            anim.duration(fadeTime).easing(Easing.EASE_OUT_QUAD).target(0.0F);
         }
+        float intensity = anim.update();
 
-        if (background || intensity > 0.0F) {
-            int boxColor = intensity > 0.0F ? blend(backgroundColor, pressedColor, intensity) : backgroundColor;
-            Mc189Compat.drawRoundedRectangle(x, y, width, height, 2, boxColor, 0);
+        float scale = 1.0F - KEY_PRESS_SHRINK * intensity;
+        int insetX = Math.round(width * (1.0F - scale) * 0.5F);
+        int insetY = Math.round(height * (1.0F - scale) * 0.5F);
+        int boxX = x + insetX;
+        int boxY = y + insetY;
+        int boxWidth = Math.max(1, width - insetX * 2);
+        int boxHeight = Math.max(1, height - insetY * 2);
+
+        if (background || intensity > 0.001F) {
+            int boxColor = AnimationMath.lerpColor(backgroundColor, pressedColor, intensity);
+            Mc189Compat.drawRoundedRectangle(boxX, boxY, boxWidth, boxHeight, 2, boxColor, 0);
         }
-        int textX = x + (width - Mc189Compat.stringWidth(fontRenderer, label)) / 2;
-        int textY = y + height / 2 - 4;
+        int textX = boxX + (boxWidth - Mc189Compat.stringWidth(fontRenderer, label)) / 2;
+        int textY = boxY + boxHeight / 2 - 4;
         Mc189Compat.drawStringWithShadow(fontRenderer, label, textX, textY, textColor);
     }
 
@@ -1017,16 +1424,6 @@ public final class ForgeHudRenderer {
             }
         }
         return code.toString();
-    }
-
-    /** Linear ARGB blend, {@code t = 0} keeps {@code from}, {@code t = 1} returns {@code to}. */
-    private static int blend(int from, int to, float t) {
-        float clamped = Math.max(0.0F, Math.min(1.0F, t));
-        int a = Math.round(((from >> 24) & 0xFF) + (((to >> 24) & 0xFF) - ((from >> 24) & 0xFF)) * clamped);
-        int r = Math.round(((from >> 16) & 0xFF) + (((to >> 16) & 0xFF) - ((from >> 16) & 0xFF)) * clamped);
-        int g = Math.round(((from >> 8) & 0xFF) + (((to >> 8) & 0xFF) - ((from >> 8) & 0xFF)) * clamped);
-        int b = Math.round((from & 0xFF) + ((to & 0xFF) - (from & 0xFF)) * clamped);
-        return (a << 24) | (r << 16) | (g << 8) | b;
     }
 
     private int settingColor(String moduleId, String settingId, int fallback) {
@@ -1201,6 +1598,14 @@ public final class ForgeHudRenderer {
                     width += 6;
                     height += 6;
                 }
+                break;
+            }
+            case "hud.target_info": {
+                // Measured with the same layout the card draws, so the editor's box matches it.
+                layoutTargetInfo(fontRenderer, player != null ? previewTargetName(player) : "",
+                    targetHealthText(PREVIEW_HEALTH, 20.0F), player);
+                width = this.targetLayout.width;
+                height = this.targetLayout.height;
                 break;
             }
             case "hud.keystrokes": {

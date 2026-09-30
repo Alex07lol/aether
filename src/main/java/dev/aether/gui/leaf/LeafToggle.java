@@ -10,10 +10,11 @@ import net.minecraft.util.ResourceLocation;
 
 /**
  * Port of Leaf Client's {@code com.leafclient.screen.ui.ToggleButton} (GPLv3, see
- * docs/GUI_REBUILD.md): a state tile whose row label is drawn far to the left of the
- * control - Leaf draws the label 410 design units left of the tile's left edge, which
- * is what lines the labels up in the ClientSettings composition. Clicking flips the
- * state and fires the callback.
+ * docs/GUI_REBUILD.md): a switch tile whose row label is drawn far to the left of the control -
+ * Leaf draws the label 410 design units left of the tile's edge, which is what lines the labels up
+ * in the ClientSettings composition. Leaf swapped between {@code true.png} and {@code false.png}
+ * for the state; the art carries the state in the knob's position, and the brightness keeps the
+ * distinction readable in black and white. Clicking flips the state and fires the callback.
  */
 public final class LeafToggle extends UiComponent {
 
@@ -47,14 +48,13 @@ public final class LeafToggle extends UiComponent {
                 top + (h - labelSize) / 2, on ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_SECONDARY);
         }
 
-        int fill = on ? AetherUi.withAlpha(AetherUi.ACCENT_ON, hover ? 0xFF : 0xD9)
-            : hover ? AetherUi.withAlpha(AetherUi.TOGGLE_BG, 0xFF) : AetherUi.withAlpha(AetherUi.TOGGLE_BG, 0xCC);
-        AetherUi.drawRoundRect(left, top, left + w, top + h, GuiScale.h(8), fill);
-        AetherUi.outline(left, top, left + w, top + h,
-            on ? AetherUi.withAlpha(AetherUi.ACCENT_ON, 0x66) : AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x40));
-        int labelSize = AetherFont.height(AetherFont.Size.SMALL);
-        AetherFont.drawCenteredShadowed(AetherFont.Size.SMALL, on ? "ON" : "OFF", left,
-            top + (h - labelSize) / 2, w, on ? 0xFF0B1210 : AetherUi.TEXT_SECONDARY);
+        String art = on ? LeafArt.TOGGLE_ON : LeafArt.TOGGLE_OFF;
+        float brightness = on ? LeafArt.BRIGHT : LeafArt.NORMAL;
+        if (hover) {
+            LeafArt.drawHovered(art, left, top, w, h, brightness);
+        } else {
+            LeafArt.draw(art, left, top, w, h, brightness);
+        }
     }
 
     @Override

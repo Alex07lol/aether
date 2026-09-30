@@ -40,6 +40,7 @@ public final class BuiltInModules {
         hudLayout.add("hud.block_info", 8, 208);
         hudLayout.add("hud.armor", 260, 80);
         hudLayout.add("hud.fps_graph", 8, 220);
+        hudLayout.add("hud.target_info", 260, 164);
 
     }
 }

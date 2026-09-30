@@ -13,6 +13,20 @@ package dev.aether.theme;
  * handing out a fresh object per call would allocate in the render loop.
  */
 public final class ThemePalettes {
+    /**
+     * Translucent black and white - the palette the client ships on, and the one the Leaf screen
+     * art is recoloured for. Every surface is nearly black, every accent is the same white as the
+     * text, so state is carried by the art (a toggle's knob, a card's brightness) rather than by
+     * hue. The other palettes stay selectable for players who want colour.
+     */
+    private static final ThemePalette MONO = new ThemePalette(
+        ColorRgb.of(6, 7, 10),
+        ColorRgb.of(26, 27, 34),
+        ColorRgb.of(242, 242, 245),
+        ColorRgb.of(242, 242, 245),
+        ColorRgb.of(255, 255, 255)
+    );
+
     private static final ThemePalette AETHER_BLUE = new ThemePalette(
         ColorRgb.of(11, 18, 32),
         ColorRgb.of(27, 36, 56),
@@ -56,6 +70,11 @@ public final class ThemePalettes {
     private ThemePalettes() {
     }
 
+    /** @return the translucent black + white palette, which is also the client default. */
+    public static ThemePalette mono() {
+        return MONO;
+    }
+
     public static ThemePalette aetherBlue() {
         return AETHER_BLUE;
     }
@@ -74,11 +93,6 @@ public final class ThemePalettes {
 
     public static ThemePalette light() {
         return LIGHT;
-    }
-
-    /** @return every named palette, in menu order, paired with its display name. */
-    public static String[] names() {
-        return new String[] {"Aether Blue", "Midnight", "Aurora", "Frost", "Light"};
     }
 
     /** @return true when the palette surface is bright enough to need dark foreground text. */

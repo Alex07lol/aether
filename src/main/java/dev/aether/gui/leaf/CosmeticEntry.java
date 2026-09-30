@@ -10,9 +10,10 @@ import net.minecraft.util.ResourceLocation;
 
 /**
  * Port of Leaf Client's {@code com.leafclient.screen.ui.CosmeticButton} (GPLv3, see
- * docs/GUI_REBUILD.md): a 300x90 selectable pill with the entry name centered, a
- * distinct tint while it is the selected cosmetic, and a click callback. In the Leaf
- * composition the entries sit at x = 480 starting at y = 400 with a pitch of 100.
+ * docs/GUI_REBUILD.md): a 300x90 selectable pill with the entry name centered and a click callback.
+ * Leaf drew it from the same {@code select.png} as its select buttons and told the states apart by
+ * tint - white for the equipped entry, its dark tone for the rest - which here is the brightness of
+ * the art. The entries sit at x = 480 starting at y = 400 with a pitch of 100.
  */
 public final class CosmeticEntry extends UiComponent {
 
@@ -34,16 +35,18 @@ public final class CosmeticEntry extends UiComponent {
         int top = gy();
         int w = gw();
         int h = gh();
-        int fill = selected ? AetherUi.withAlpha(AetherUi.ACCENT, 0x40)
-            : hover ? AetherUi.withAlpha(AetherUi.GLASS_SOFT, 0xEE) : AetherUi.withAlpha(AetherUi.GLASS, 0xB3);
-        AetherUi.drawRoundRect(left, top, left + w, top + h, GuiScale.h(10), fill);
-        AetherUi.outline(left, top, left + w, top + h,
-            selected ? AetherUi.withAlpha(AetherUi.ACCENT, 0x99) : AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x40));
+        float brightness = selected ? LeafArt.BRIGHT : LeafArt.NORMAL;
+
+        if (hover) {
+            LeafArt.drawHovered(LeafArt.SELECT, left, top, w, h, brightness);
+        } else {
+            LeafArt.draw(LeafArt.SELECT, left, top, w, h, brightness);
+        }
 
         int labelSize = AetherFont.height(AetherFont.Size.BODY);
         String shown = AetherFont.trimTo(AetherFont.Size.BODY, name, w - GuiScale.w(20));
-        AetherFont.drawCenteredShadowed(AetherFont.Size.BODY, shown, left,
-            top + (h - labelSize) / 2, w, selected ? AetherUi.ACCENT : hover ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_SECONDARY);
+        AetherFont.drawCenteredShadowed(AetherFont.Size.BODY, shown, left, top + (h - labelSize) / 2, w,
+            selected ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_SECONDARY);
     }
 
     @Override

@@ -1,132 +1,139 @@
-# Aether In-Game GUI Rebuild
+# Aether In-Game GUI — the Leaf Client port
 
-Status: implemented. This document records the architecture decisions of the 2026-09-29
-rebuild: what was taken from the Leaf Client 1.8.9 GUI, what was deliberately done
-differently, and what was deleted.
+Status: implemented and building green. This document records how Aether's in-game screens came to
+be a copy of Leaf Client 1.8.9's screens, what is deliberately still Aether's own, and how the copy
+is verified. It is written as a decision record, not a plan.
 
 References:
 
-- Leaf Client (structural baseline): https://github.com/Lefiy/Leaf-Client
-  (`leafclient-1.8.9/src/main/java/com/leafclient/screen/**`). Leaf is GPLv3; the
-  adapted files carry the attribution header required by that license.
-- Aether core (`dev.aether.*`) is unchanged in spirit: the GUI keeps being a thin
-  consumer of `ModuleRegistry`, `Setting`, `CosmeticLibrary`, `HudLayout`,
-  `ClientPreferences` and `ProfileStore`.
+- Leaf Client (visual baseline): https://github.com/Lefiy/Leaf-Client — `leafclient-1.8.9`, read
+  from a local clone; GPLv3, same licence as Aether, so the port and the derived art are permitted
+  with attribution.
+- Aether core (`dev.aether.*`) is unchanged in spirit: the GUI remains a thin consumer of
+  `ModuleRegistry`, `Setting`, `CosmeticLibrary`, `HudLayout`, `ClientPreferences` and
+  `ProfileStore`. No screen owns state.
 
-## What was wrong with the old GUI
+---
 
-The previous implementation (the "Control Center" deck plus the legacy ModMenu) had:
+## 1. What "copy Leaf exactly" means here
 
-- two competing GUI implementations (`AetherClickGuiScreen` deck, `AetherModMenuScreen`
-  classic list) plus three screens that could never be reached at all;
-- three hand-rolled mouse-to-GUI coordinate conversions and four rounded-rect
-  implementations;
-- two scissor code paths, one of them dead;
-- index-based scrolling where a filter change silently desynced rendering and hit-testing;
-- GL state handled per-call-site with no discipline (the reported alpha bleed, category
-  chips painting through cards, and text at wrong positions);
-- heavy dead ballast (unused FPS sparkline, dead Box/Rect geometry, dead stubs,
-  an unused `ui/theme` package, duplicated icon painters).
+The first Aether rebuild took Leaf's *structure* (one screen per section, a nav row, a card grid)
+and drew everything procedurally in Aether's purple-on-charcoal palette; the original brief then
+changed twice, and the second version was explicit: **copy Leaf's UI exactly, in transparent black
+and white.** The second person's-eye version of that is:
 
-Per the brief, the old presentation was replaced instead of patched.
+1. **The art is Leaf's.** Every control is drawn from the original Leaf texture, with the shape and
+   the panel detail preserved 1:1 and only the colours replaced.
+2. **The geometry is Leaf's.** Same design coordinates, same sizes, same interaction split (a card's
+   top half toggles, its bottom half opens settings), same scrollbar behaviour.
+3. **The palette is black and white.** Translucent black surfaces, white detail, no second hue -
+   so the game stays visible through the UI.
 
-## Leaf 1.8.9 structure that was kept (as concepts, not copies)
+### The art pipeline (`scripts/leaf_assets.py`)
 
-| Leaf | Aether |
+The recolouring is a build-time step with Pillow; the mod only ever loads the results, so there is no
+image processing and no `ImageIO` in the shipped client.
+
+Measuring the source art first was necessary, because it is not photographic: nearly every texture
+uses two or three **flat luminance tones** and two or three **flat alpha plateaus**.
+
+| alpha | art |
 | --- | --- |
-| One `GuiScreen` per section (`ModSettings`, `CosmeticSettings`, `ModPosSettings`, `ClientSettings`) | `AetherModScreen`, `AetherCosmeticScreen`, `AetherHudEditorScreen`, `AetherClientSettingsScreen`, all extending one shared `AetherGuiScreen` shell |
-| `UIBase` render / onMouseMove / onMouseClick lifecycle | `dev.aether.gui.core.UiComponent` with render, mouseMove, mouseClick, mouseRelease, keyTyped, onResize, dispose |
-| `SystemButton` / `ModButton` / `CosmeticButton` / `SelectButton` / `ToggleButton` / `TextBox` | `gui/components/Button`, `Toggle`, `Slider`, `ChoicePill`, `TextField` — all procedural, no texture dependencies |
-| `ScrollBar` | `gui/ScrollContainer` (see below: real clipping, not index paging) |
-| `ScaleFixer` (design space -> display pixels) | `gui/GuiScale` (see below: single converter, no integer truncation) |
-| `CosmeticSettings` dedicated cosmetics screen with category selector + large player preview | `AetherCosmeticScreen` with the same shape; preview in `gui/preview/PlayerPreview` |
-| `CustomFont` centralized renderer | `AetherFontManager` (existing) behind the new semantic `gui/AetherFont` facade (TITLE / SECTION / BODY / SMALL / CAPTION) |
-| Cosmetic state updated immediately on click, renderer reads it next frame | unchanged: the screen calls `CosmeticLibrary.select(id)`, `ForgeCosmeticRenderer` keeps reading `effective(type)` |
+| 128 | every panel: cards, tabs, square buttons, selects, sliders, scrollbars, text fields |
+| 255 | pure glyphs: `gear_small`, `next`, `back`, `play`, `stop`, `hide`, `show`, `leaf` |
+| 192 | the toggles' knobs, on a 128 plate |
+| 38 / 142 | the backdrops: a fullscreen scrim with a rounded panel sitting on it |
 
-## What was deliberately done differently from Leaf
+The **shadow is the trap**: it is a ramp *below* the plateau and carries the *same* dark tone as the
+icons, so luminance cannot tell a shadow from a glyph. The plateau can, which is what the script
+keys on:
 
-1. **Scaling.** Leaf's `ScaleFixer` mixes `Toolkit` screen size with the window size,
-   truncates to `int` per call, and relies on every component remembering to convert. The
-   Aether `GuiScale` keeps a design canvas 1080 units tall whose width follows the window
-   aspect (exactly 1920x1080 at 16:9), converts with `double` math in one place, and
-   converts mouse coordinates back with the same object. Components are laid out and
-   hit-tested purely in design units. GUI scale, high-DPI and windowed/fullscreen are
-   inherited from `ScaledResolution`, which the design canvas sits on.
-2. **Scrolling.** Leaf's `ScrollBar` pages whole rows by index, so partially visible rows
-   and hit-testing disagree. Aether's `ScrollContainer` clips with a real scissor rect,
-   translates children by a clamped float offset, culls children fully outside the
-   viewport from both rendering and input, and converts mouse coordinates into content
-   space with the same offset that rendering used.
-3. **Input hierarchy.** Leaf forwards clicks to every visible component and lets each
-   component test containment. Aether routes input top-down: the shell first (nav, search,
-   footer), then the scroll viewport only when the cursor is inside it, then the topmost
-   component under the cursor. A click cannot fall through a card to whatever is behind it.
-4. **No database/GUI coupling.** Leaf's `CosmeticSettings` writes to its database inside
-   the click handler. Aether's cosmetics screen only touches `CosmeticLibrary` and relies
-   on the existing save path (`client.save()`).
-5. **Visual identity.** Leaf's green texture-backed surfaces are replaced by Aether's
-   dark glass tokens (`AetherUi`), restrained purple accent, and procedurally drawn
-   rounded rectangles, borders and controls. No Leaf textures, package names, URLs or
-   branding are used.
+- `surface_mask(image)` — `smoothstep(plateau*0.80, plateau*0.95, alpha)`: 1 inside the shape, 0 in
+  the shadow ramp.
+- `body_luminance(image, mask)` — the mode of the luminance over the fully-interior pixels, i.e. the
+  panel's own tone, measured per file instead of hand-tuned. This handles both polarities: Leaf's
+  tabs and cards are light bodies with dark glyphs, its arrow buttons are the reverse.
 
-## New architecture (`dev.aether.gui`)
+Rules: `glass(strength)`, `white(strength)`, `shade(strength, lo, hi)`, `detail(strength, lo, hi)`.
+`detail` composes a black-glass body with the texture's own detail (a luminance difference *inside*
+the surface) keyed to white.
 
-```
-dev.aether.gui
-├── AetherGui            screen registry + open() helpers + branding painter
-├── ScreenTab            MODULES / COSMETICS / HUD / SETTINGS (nav model)
-├── GuiScale             the single design-space converter
-├── AetherFont           semantic type scale over AetherFontManager
-├── core/
-│   ├── UiComponent      component lifecycle (Leaf UIBase equivalent)
-│   ├── ScrollContainer  viewport clip + translate + culling + clamped offset
-│   └── ScreenShell      shared header/nav/footer painter used by all four screens
-├── components/          Button, Toggle, Slider, ChoicePill, TextField, ScrollBar(view)
-├── screens/
-│   ├── AetherGuiScreen  base screen: shell, input routing, ESC model, GL guard
-│   ├── AetherModScreen  search + All/Live/Favorites + category chips + cards + settings panel
-│   ├── AetherCosmeticScreen  category selector + entries + import + player preview
-│   ├── AetherHudEditorScreen drag/snap/scale/opacity editor (logic ported from the old screen)
-│   └── AetherClientSettingsScreen  preferences, profiles, save/screenshot actions
-└── preview/PlayerPreview  isolated player render (own matrix/projection state, full restore)
-```
+    python scripts/leaf_assets.py --analyze      # classification table over the source art
+    python scripts/leaf_assets.py --convert      # write assets/aether/leaf/**
+    python scripts/leaf_assets.py --sheet        # contact sheet, source next to result
+    LEAF_SOURCE=<leaf asset dir>                  # override the source checkout
 
-State remains in the managers (no GUI-owned truth): module state in `ModuleRegistry`,
-cosmetic slots in `CosmeticLibrary`, HUD positions in `HudLayout` (now persisted under
-`hud.<id>.*`), preferences in `ClientPreferences`, profiles in `ProfileStore`.
+Twenty-nine textures are converted; the files Aether does not use (login fields, the panorama, the
+social buttons) are deliberately not. `assets/aether/leaf/NOTICE.txt` carries the attribution.
 
-### Input and focus model
+**An earlier version of the script gated its interior test on `alpha >= 200`, which is above every
+plateau in this art, and therefore silently dropped *every* icon** — the generated
+`button/setting.png` held 25 white pixels where the source has thousands. `--ascii` could not show
+it (black glass and full transparency both print as blank), which is exactly why `--sheet` exists:
+the result has to be looked at as an image, not as a text dump.
 
-- Keyboard goes to the focused control: search field, text setting, or keybind capture,
-  expressed with the existing tested `dev.aether.ui.ControlFocus` machine.
-- ESC: closes a module settings panel or defocuses search first, then returns to the
-  game. Navigation between tabs swaps `GuiScreen` instances (fresh components, no stale
-  scroll), while all durable state lives in the managers.
-- The mouse wheel scrolls the viewport under the cursor; over the player preview it
-  zooms; over the HUD editor it scales the selected element.
+### Drawing it
 
-### GL discipline
+- `Mc189Compat.drawTextureTinted(path, x, y, w, h, r, g, b, a)` — stretches one of Aether's own
+  textures with a uniform tint. It builds the quad by hand because `Gui`'s helpers force the vertex
+  colour back to opaque white, which would make every state change a no-op. `drawTexture` now
+  delegates to it.
+- `gui/leaf/LeafArt` — the asset names plus `draw` / `drawHovered`. A state is a **brightness**
+  (enabled 1.00, idle 0.74-0.86, disabled 0.42), and hover is the same art drawn a second time at
+  low alpha, so the *glass* brightens instead of the glyph being recoloured - Leaf could tint its
+  opaque panels, translucent ones have to be redrawn.
 
-Every primitive goes through `Mc189Compat`, which resets colour to white and restores
-texture/blend after each draw. `ScrollContainer` opens and closes its scissor in a
-`finally`. `PlayerPreview` wraps the entity render in push/pop matrix, its own scissor,
-standard-item lighting teardown, rescale-normal disable and lightmap texture unit
-restore, mirroring the vanilla `GuiInventory.drawEntityOnScreen` teardown sequence.
+## 2. Leaf geometry, as ported
 
-## Removed
+| Screen | Leaf | Aether |
+| --- | --- | --- |
+| Nav tiles | `SystemButton(mod/cosmetic/location/setting, 430/650/1100/1320, 250, 170x106)` | same rectangles, `button/<name>.png`, the wording is baked into the art |
+| Module grid | `ModButton(mod, NAV_X[col], 400 + 220*row, 170x182)`, 8 per page | same, `mod.png` + the name centered at `h/4`; top half toggles, bottom half opens settings |
+| Card gear | `gear_small.png` at card-local (60, 110), 50x50, shifted 2 and grown 4 while hovered | identical, `ModuleCard` |
+| Grid scrollbar | `ScrollBar(mods, 945, 400, 32, 400, 8)` | same; thumb = track / page count, whole-page wheel steps |
+| Backdrops | `ModSettings`/`CosmeticSettings` → `main.png`, `ModDetailSettings`/`ClientSettings` → `main_mod.png`, fullscreen stretched | same files |
+| Detail screen | home tile `(640, 220, 80x80)`; toggles `100x60` at x=1120, selects `300x90` at x=920, sliders `255x90` at x=960, captions 410 / 210 / 250 to the left, rows from y=310 pitch 100 | same, generic over Aether's `Setting` rows |
+| Cosmetics | entries `300x90` at x=480 from y=400 pitch 100, 3 per page; category pill at `(480, 700, 300x90)`; scrollbar `(945, 400, 32, 400)`; player model at `(1300, 800)`, 200 tall, mouse-clamped +-30 | same, plus the real `CosmeticLibrary` and Aether's `PlayerPreview` |
+| Client settings | home tile; toggles `100x60` at x=1090 from y=310, captions 410 left; scrollbar `(1230, 310, 32, 460)` | the toggle column and the scrollbar are Leaf's; the field/profiles/actions are Aether's rows in the same idiom |
 
-- `AetherClickGuiScreen` + `forge189/ui/**` (ControlCenter layout/renderer/input, pages,
-  toasts, metrics, icons, duplicate components, the dead `ui/theme` package)
-- `AetherModMenuScreen` (classic three-panel manager)
-- `AetherCosmeticsScreen` (legacy import screen; import lives on the new cosmetics screen)
-- `AetherQuickNavScreen`, `AetherAccountManagerScreen`, `AetherInfoScreen`
-- `dev.aether.ui.ControlCenterState` / `ControlCenterSection` and their test
-  (`ModuleSearch` and `ControlFocus` stay; they are screen-agnostic)
-- the ModMenu wheel-forwarding branch in `ForgeGuiEventBridge`
+The panels were measured, not assumed: in the generated `main.png` the panel occupies design
+x 348..1571, y 175..901, and in `main_mod.png` x 598..1321, y 178..901. Every ported control was
+checked against those rectangles - that is why the module grid's category filter sits at y 806 (the
+free strip under the cards) and why the settings rows' captions all start at x 710.
 
-## Licensing
+## 3. What is deliberately still Aether's
 
-Leaf Client is GPLv3. The components whose structure is adapted from Leaf
-(`GuiScale`, the screen set, the cosmetics preview layout) carry a header noting the
-derivation. No Leaf source file is copied verbatim, no Leaf asset, texture, font or
-branding is used, and this document preserves the attribution the license requires.
+1. **Design space.** Leaf's `ScaleFixer` mixes `Toolkit` screen size with the window size and
+   truncates to `int` per call. Aether keeps `GuiScale`: a 1080-unit-tall canvas whose width follows
+   the window aspect, converted with `double` math in one place, mouse converted back with the same
+   object. Leaf's fixed 1920x1080 composition is why the ported coordinates are the literal ones.
+2. **The font.** Text is Aether's own `AetherFont` (TITLE/SECTION/BODY/SMALL/CAPTION) over the
+   existing glyph renderer, not Leaf's `CustomFont`. The nav and tile wording lives in Leaf's art, so
+   those are Leaf-sized; every caption Aether draws is Aether's type scale. (Leaf's `CustomFont` is
+   set once to 50 design units, noticeably larger than Aether's rows.)
+3. **Pages, not pixels.** The `PageBar` keeps Leaf's index paging *because it is Leaf's own screen
+   behaviour*; `ModuleSearch` behind it is Aether's and stays pure and tested.
+4. **Interaction hierarchy and GL discipline.** Every primitive goes through `Mc189Compat`, which
+   restores colour/texture/blend; `PlayerPreview` wraps the entity render in push/pop matrix, its own
+   scissor and the vanilla teardown sequence.
+5. **Extra controls, in the same idiom.** The category filter on the modules screen, the profile
+   manager on the settings screen and the module-name heading on the detail screen do not exist in
+   Leaf. They are drawn from the same art and placed inside Leaf's panels (verified against the
+   measured rectangles) rather than bolted onto the outside.
+6. **The HUD editor.** Leaf's `ModPosSettings` is a background plus one toggle; Aether's editor
+   keeps its drag/snap/scale/opacity machinery and its nav row, and uses the glass backdrop.
+
+## 4. Palette
+
+`ThemePalettes.mono()` (surface `#06070A`, raised `#1A1B22`, accent **white** `#F2F2F5`) is the
+default palette and also ships as the *Monochrome* theme module, so the default and the module cannot
+drift apart. `AetherUi.applyTheme` derives every token from it, and `ACCENT_ON` now follows the accent
+instead of a fixed green: on/off is carried by the art's own shape (a toggle's knob, a card's
+brightness), so a second fixed hue would only fight the palette. The five coloured palettes remain
+selectable.
+
+## 5. Licensing
+
+Leaf Client is GPLv3, the same licence as Aether. The components whose structure is adapted from
+Leaf, and the derived art, carry attribution: source headers name `docs/GUI_REBUILD.md`, and
+`assets/aether/leaf/NOTICE.txt` records the origin of every recoloured texture.

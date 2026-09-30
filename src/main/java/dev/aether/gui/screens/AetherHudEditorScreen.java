@@ -280,9 +280,11 @@ public final class AetherHudEditorScreen extends AetherGuiScreen {
         int toggleX = barX + 92;
         int toggleY = barY + 4;
         boolean hoverToggle = mouseX >= toggleX && mouseX <= toggleX + 32 && mouseY >= toggleY && mouseY <= toggleY + 18;
+        // Both states stay inside the palette: on is the white accent, off is the secondary text
+        // tone, so the bar reads in black and white like every other control.
         int toggleColor = isEnabled
             ? AetherUi.withAlpha(AetherUi.ACCENT_ON, hoverToggle ? 0xFF : 0xCC)
-            : AetherUi.withAlpha(AetherUi.WARN, hoverToggle ? 0xFF : 0xCC);
+            : AetherUi.withAlpha(AetherUi.TEXT_SECONDARY, hoverToggle ? 0xE6 : 0x99);
         Mc189Compat.drawRoundedRectangle(toggleX, toggleY, 32, 18, 2, toggleColor, 0);
         AetherFont.drawShadowed(AetherFont.Size.CAPTION, isEnabled ? "ON" : "OFF", toggleX + (isEnabled ? 9 : 6), toggleY + 5,
             AetherUi.readableOn(toggleColor));
@@ -290,7 +292,8 @@ public final class AetherHudEditorScreen extends AetherGuiScreen {
         int resetX = barX + barW - 38;
         int resetY = barY + 4;
         boolean hoverReset = mouseX >= resetX && mouseX <= resetX + 32 && mouseY >= resetY && mouseY <= resetY + 18;
-        Mc189Compat.drawRoundedRectangle(resetX, resetY, 32, 18, 2, AetherUi.withAlpha(AetherUi.WARN, hoverReset ? 0xCC : 0x44), 0);
+        Mc189Compat.drawRoundedRectangle(resetX, resetY, 32, 18, 2,
+            AetherUi.withAlpha(AetherUi.TEXT_SECONDARY, hoverReset ? 0xCC : 0x44), 0);
         AetherFont.drawShadowed(AetherFont.Size.CAPTION, "Reset", resetX + 4, resetY + 5, AetherUi.TEXT_PRIMARY);
     }
 

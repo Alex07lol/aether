@@ -109,7 +109,9 @@ public final class AetherModScreen extends AetherGuiScreen {
             labels.add(item == null ? "All" : displayLabel(item));
         }
         String current = category == null ? "All" : displayLabel(category);
-        return new SelectButton("Category", 430, 880, 300, 90, labels, current, new Runnable() {
+        // Leaf's panel ends at y = 901 and the card grid at y = 802, so the filter sits in the strip
+        // between them instead of hanging off the panel's bottom edge.
+        return new SelectButton("Category", 430, 806, 300, 90, labels, current, new Runnable() {
             public void run() {
                 String selected = categoryButton.current();
                 category = "All".equals(selected) ? null : ModuleCategory.valueOf(categoryValue(selected));
@@ -140,7 +142,7 @@ public final class AetherModScreen extends AetherGuiScreen {
             ClientModule module = visible.get(index + slot);
             int column = slot % 4;
             int row = (slot / 4) % 2;
-            page.add(new ModuleCard(module.metadata().name(), displayLabel(module.metadata().category()),
+            page.add(new ModuleCard(module.metadata().name(),
                 module.state() == ModuleState.ENABLED, !module.settings().isEmpty(),
                 NAV_X[column], GRID_TOP + row * GRID_PITCH_Y,
                 new ToggleAction(module), new SettingsAction(module)));

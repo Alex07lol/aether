@@ -1,18 +1,15 @@
 package dev.aether.gui.leaf;
 
-import dev.aether.gui.GuiScale;
 import dev.aether.gui.core.UiComponent;
-import dev.aether.forge189.AetherUi;
-import dev.aether.forge189.Mc189Compat;
 
 /**
- * Port of Leaf Client's {@code com.leafclient.screen.ui.ScrollBar} (GPLv3, see
- * docs/GUI_REBUILD.md): a page-based scrollbar. It knows how many items one page
- * holds ({@code amount}); scrolling advances by a whole page, the thumb height is the
- * track divided by the page count, and {@link #isScrollAble(int)} tells the screen
- * which item indexes of its list are on the current page. Leaf's wheel handling
- * ({@code onScroll}/{@code onUnScroll}) and render geometry (32-wide track, thumb at
- * {@code y + bar_point * page}) are preserved exactly.
+ * Port of Leaf Client's {@code com.leafclient.screen.ui.ScrollBar} (GPLv3, see docs/GUI_REBUILD.md):
+ * a page-based scrollbar. It knows how many items one page holds ({@code amount}); scrolling
+ * advances by a whole page, the thumb is the track divided by the page count, and
+ * {@link #isScrollAble(int)} tells the screen which item indexes of its list are on the current
+ * page. Leaf's wheel handling, its render geometry (the track stretched over the whole component,
+ * the thumb drawn at the current page's offset, the same width) and its 32x400 placement in the
+ * middle gap of the module grid are preserved exactly.
  */
 public final class PageBar extends UiComponent {
 
@@ -76,16 +73,15 @@ public final class PageBar extends UiComponent {
         int top = gy();
         int w = gw();
         int h = gh();
-        int pages = pageCount();
-        Mc189Compat.drawRect(left, top, left + w, top + h, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x30));
-        int barPoint = Math.max(GuiScale.h(28), h / pages);
+
+        LeafArt.draw(LeafArt.SCROLL_TRACK, left, top, w, h);
+
+        int barPoint = Math.max(1, h / pageCount());
         int barY = top + barPoint * page;
         if (barY + barPoint > top + h) {
             barY = top + h - barPoint;
         }
-        // A single-page list gets a quiet full-height thumb instead of a loud one.
-        int alpha = pages <= 1 ? 0x3C : 0x99;
-        AetherUi.drawRoundRect(left, barY, left + w, barY + barPoint, GuiScale.w(4), AetherUi.withAlpha(AetherUi.ACCENT, alpha));
+        LeafArt.draw(LeafArt.SCROLL_THUMB, left, barY, w, barPoint);
     }
 
     @Override

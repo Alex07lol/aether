@@ -1,0 +1,19 @@
+Leaf Client UI art, adapted
+===========================
+
+Every PNG in this folder is derived from the user-interface art of Leaf Client
+1.8.9 - https://github.com/Lefiy/Leaf-Client - which is licensed under the GNU
+General Public License, version 3 (see the repository for the full licence text).
+
+The adaptation is mechanical and is performed by scripts/leaf_assets.py in this
+repository: each source texture is recoloured into Aether's palette (translucent
+black surfaces, white detail). The geometry, the alpha channel and the luminance
+structure of the originals are preserved so the screens can reproduce Leaf's
+composition exactly - see docs/GUI_REBUILD.md for the port and docs/ARCHITECTURE.md
+for how the generated art is drawn.
+
+Source asset names (assets/minecraft/leafclient/ in Leaf) map 1:1 onto the names
+used here, with the two subfolders button/ and field/ preserved.
+
+Aether itself is distributed under the same licence, so the derived art stays
+under the GPLv3; keep this notice with the files if they are ever moved.

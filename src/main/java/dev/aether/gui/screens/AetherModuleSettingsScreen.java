@@ -10,6 +10,7 @@ import dev.aether.gui.AetherFont;
 import dev.aether.gui.GuiScale;
 import dev.aether.gui.core.UiComponent;
 import dev.aether.gui.leaf.ColorChart;
+import dev.aether.gui.leaf.LeafArt;
 import dev.aether.gui.leaf.LeafBar;
 import dev.aether.gui.leaf.LeafTextBox;
 import dev.aether.gui.leaf.LeafToggle;
@@ -45,7 +46,7 @@ public final class AetherModuleSettingsScreen extends AetherGuiScreen {
     private static final int ROWS_PER_PAGE = 5;
 
     private final String moduleId;
-    private final NavButton home = new NavButton("Home", 640, 220, 80, 80, new Runnable() {
+    private final NavButton home = new NavButton(LeafArt.HOME, 640, 220, 80, 80, new Runnable() {
         public void run() {
             dev.aether.gui.AetherGui.open(client, GuiSection.MODULES);
         }
@@ -84,6 +85,11 @@ public final class AetherModuleSettingsScreen extends AetherGuiScreen {
     @Override
     protected boolean showsNav() {
         return false; // Leaf's detail screen has only the home tile
+    }
+
+    @Override
+    protected String backdropArt() {
+        return LeafArt.BACKDROP_SETTINGS; // Leaf's ModDetailSettings backdrop
     }
 
     @Override
@@ -146,8 +152,11 @@ public final class AetherModuleSettingsScreen extends AetherGuiScreen {
                     break;
                 }
                 case TEXT: {
+                    // Leaf puts its text fields at x = 770 with no caption; Aether labels every row,
+                    // so the field sits in the same column as the choice rows (x = 920) where its
+                    // 210-left caption lines up with theirs and the field still fits Leaf's panel.
                     final LeafTextBox[] holder = new LeafTextBox[1];
-                    holder[0] = new LeafTextBox(setting.label(), 770, y, 400, 67,
+                    holder[0] = new LeafTextBox(setting.label(), 920, y, 400, 67,
                         String.valueOf(setting.value()), new Runnable() {
                             public void run() {
                                 setValue(setting, holder[0].text());
@@ -158,7 +167,7 @@ public final class AetherModuleSettingsScreen extends AetherGuiScreen {
                     break;
                 }
                 case COLOR: {
-                    int current = setting.value() instanceof Number ? ((Number) setting.value()).intValue() : 0xFF9B8CFF;
+                    int current = setting.value() instanceof Number ? ((Number) setting.value()).intValue() : 0xFFFFFFFF;
                     final ColorChart[] holder = new ColorChart[1];
                     holder[0] = new ColorChart(setting.label(), 960, y, 255, 40, current, new Runnable() {
                         public void run() {
@@ -365,11 +374,12 @@ public final class AetherModuleSettingsScreen extends AetherGuiScreen {
 
             int key = setting.value() instanceof Number ? ((Number) setting.value()).intValue() : 0;
             String name = capturing ? "< press a key >" : Keyboard.getKeyName(key);
-            int fill = capturing ? AetherUi.withAlpha(AetherUi.ACCENT, 0x40)
-                : hover ? AetherUi.withAlpha(AetherUi.GLASS_SOFT, 0xEE) : AetherUi.withAlpha(AetherUi.GLASS, 0xCC);
-            AetherUi.drawRoundRect(left, top, left + w, top + h, GuiScale.h(10), fill);
-            AetherUi.outline(left, top, left + w, top + h,
-                capturing ? AetherUi.withAlpha(AetherUi.ACCENT, 0x99) : AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x40));
+            float brightness = capturing || hover ? LeafArt.BRIGHT : LeafArt.NORMAL;
+            if (hover) {
+                LeafArt.drawHovered(LeafArt.SELECT, left, top, w, h, brightness);
+            } else {
+                LeafArt.draw(LeafArt.SELECT, left, top, w, h, brightness);
+            }
             int labelSize = AetherFont.height(AetherFont.Size.BODY);
             AetherFont.drawCenteredShadowed(AetherFont.Size.BODY, name, left, top + (h - labelSize) / 2, w,
                 capturing ? AetherUi.ACCENT : AetherUi.TEXT_PRIMARY);

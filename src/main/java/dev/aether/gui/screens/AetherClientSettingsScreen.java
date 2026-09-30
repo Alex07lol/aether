@@ -3,6 +3,7 @@ package dev.aether.gui.screens;
 import java.util.ArrayList;
 import java.util.List;
 
+import dev.aether.gui.leaf.LeafArt;
 import dev.aether.gui.leaf.LeafTextBox;
 import dev.aether.gui.leaf.LeafToggle;
 import dev.aether.gui.leaf.NavButton;
@@ -47,6 +48,11 @@ public final class AetherClientSettingsScreen extends AetherGuiScreen {
         return GuiSection.SETTINGS;
     }
 
+    @Override
+    protected String backdropArt() {
+        return LeafArt.BACKDROP_SETTINGS; // Leaf's ClientSettings backdrop
+    }
+
     /* ── rows ───────────────────────────────────────────────────────────── */
 
     private void buildRows() {
@@ -79,15 +85,17 @@ public final class AetherClientSettingsScreen extends AetherGuiScreen {
             }));
         y += ROW_PITCH;
 
+        // The field carries its own caption as a placeholder, so it can sit next to the button
+        // instead of pushing a label outside Leaf's panel.
         final LeafTextBox[] nameHolder = new LeafTextBox[1];
-        nameHolder[0] = new LeafTextBox("New profile", 770, y, 400, 67, "", new Runnable() {
+        nameHolder[0] = new LeafTextBox(null, 920, y, 400, 67, "", new Runnable() {
             public void run() {
                 // Leaf commits text on deselect; saving the profile is the button's job.
             }
-        });
+        }).setPlaceholder("New profile");
         rows.add(nameHolder[0]);
         final int saveY = y;
-        rows.add(new NavButton("Save", 1200, saveY, 170, 67, new Runnable() {
+        rows.add(new NavButton(LeafArt.SELECT, "Save", 720, saveY, 170, 67, new Runnable() {
             public void run() {
                 saveProfile(nameHolder[0]);
             }
@@ -97,14 +105,14 @@ public final class AetherClientSettingsScreen extends AetherGuiScreen {
         List<String> names = client.profiles().names();
         for (final String name : names) {
             rows.add(profileRowLabel(name, y));
-            rows.add(new NavButton("Apply", ROW_X, y, 170, 60, new Runnable() {
+            rows.add(new NavButton(LeafArt.SELECT, "Apply", 930, y, 170, 60, new Runnable() {
                 public void run() {
                     boolean applied = client.profiles().apply(name, client.modules());
                     flash(applied ? "Profile '" + name + "' applied." : "Could not apply the profile.");
                     saveQuietly();
                 }
             }));
-            rows.add(new NavButton("Delete", ROW_X + 180, y, 170, 60, new Runnable() {
+            rows.add(new NavButton(LeafArt.SELECT, "Delete", 1110, y, 170, 60, new Runnable() {
                 public void run() {
                     client.profiles().delete(name);
                     flash("Profile '" + name + "' deleted.");
@@ -115,14 +123,14 @@ public final class AetherClientSettingsScreen extends AetherGuiScreen {
             y += ROW_PITCH;
         }
 
-        rows.add(new NavButton("Save Config", ROW_X, y, 170, 60, new Runnable() {
+        rows.add(new NavButton(LeafArt.SELECT, "Save Config", ROW_X, y, 170, 60, new Runnable() {
             public void run() {
                 saveQuietly();
                 flash("Configuration saved.");
             }
         }));
         y += ROW_PITCH;
-        rows.add(new NavButton("Screenshot", ROW_X, y, 170, 60, new Runnable() {
+        rows.add(new NavButton(LeafArt.SELECT, "Screenshot", ROW_X, y, 170, 60, new Runnable() {
             public void run() {
                 screenshotRequested = true;
             }
@@ -143,13 +151,16 @@ public final class AetherClientSettingsScreen extends AetherGuiScreen {
     private UiComponent profileRowLabel(final String name, final int y) {
         return new UiComponent() {
             {
-                at(ROW_X - 410, y).size(380, 60);
+                // Same 410-left caption offset Leaf uses for its rows, clipped to stop short of the
+                // Apply pill so a long profile name cannot run underneath it.
+                at(680, y).size(240, 60);
             }
 
             @Override
             public void render() {
-                dev.aether.gui.AetherFont.draw(dev.aether.gui.AetherFont.Size.BODY, name, gx(), gy() + (gh()
-                    - dev.aether.gui.AetherFont.height(dev.aether.gui.AetherFont.Size.BODY)) / 2,
+                dev.aether.gui.AetherFont.draw(dev.aether.gui.AetherFont.Size.BODY,
+                    dev.aether.gui.AetherFont.trimTo(dev.aether.gui.AetherFont.Size.BODY, name, gw()),
+                    gx(), gy() + (gh() - dev.aether.gui.AetherFont.height(dev.aether.gui.AetherFont.Size.BODY)) / 2,
                     dev.aether.forge189.AetherUi.TEXT_SECONDARY);
             }
         };

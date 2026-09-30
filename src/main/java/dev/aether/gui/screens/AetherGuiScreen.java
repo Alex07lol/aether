@@ -3,8 +3,8 @@ package dev.aether.gui.screens;
 import dev.aether.AetherClient;
 import dev.aether.forge189.AetherUi;
 import dev.aether.forge189.Mc189Compat;
-import dev.aether.gui.AetherFont;
 import dev.aether.gui.GuiScale;
+import dev.aether.gui.leaf.LeafArt;
 import dev.aether.gui.leaf.NavButton;
 import dev.aether.module.ClientModule.ModuleState;
 import dev.aether.module.setting.Setting;
@@ -15,9 +15,13 @@ import java.io.IOException;
 
 /**
  * Base class of the Aether GUI screens, carrying the shared Leaf 1.8.9 composition
- * (see docs/GUI_REBUILD.md): a fullscreen dark backdrop with the Aether logo top-left
- * and the four navigation tiles at Leaf's exact positions (170x106 at x = 430, 650,
- * 1100, 1320, y = 250), with each screen drawing its content underneath.
+ * (see docs/GUI_REBUILD.md): Leaf's fullscreen backdrop art with the four navigation tiles
+ * at Leaf's exact positions (170x106 at x = 430, 650, 1100, 1320, y = 250), each drawn from
+ * its own {@code button/<name>.png} art, with the screen's content underneath.
+ * <p>
+ * The art itself carries the wording, the panel outline and the shadows, so this class no
+ * longer draws a logo or a gradient: the backdrop texture is Leaf's own screen art, recoloured
+ * to translucent black and white (see {@link dev.aether.gui.leaf.LeafArt}).
  * <p>
  * Kept from Aether's previous layer because they are objectively better than Leaf's
  * equivalents: the centralized {@link GuiScale} conversion, the GL-state discipline of
@@ -111,13 +115,33 @@ public abstract class AetherGuiScreen extends GuiScreen {
         nav = new NavButton[sections.length];
         for (int i = 0; i < sections.length; i++) {
             final GuiSection target = sections[i];
-            nav[i] = new NavButton(target.label(), NAV_X[i], NAV_Y, NAV_W, NAV_H, new Runnable() {
+            // Leaf's tiles carry their own wording in the art, so no label is drawn over them.
+            nav[i] = new NavButton(navArt(target), NAV_X[i], NAV_Y, NAV_W, NAV_H, new Runnable() {
                 public void run() {
                     if (target != section()) {
                         switchSection(target);
                     }
                 }
             });
+        }
+    }
+
+    /**
+     * Leaf's navigation tile for a section. Leaf names its tiles mod / cosmetic / location /
+     * setting, and "location" is the same screen Aether calls the HUD editor - the place a
+     * player moves their on-screen elements - so the mapping is one to one.
+     */
+    private static String navArt(GuiSection section) {
+        switch (section) {
+            case COSMETICS:
+                return LeafArt.NAV_COSMETICS;
+            case HUD:
+                return LeafArt.NAV_HUD;
+            case SETTINGS:
+                return LeafArt.NAV_SETTINGS;
+            case MODULES:
+            default:
+                return LeafArt.NAV_MODULES;
         }
     }
 
@@ -132,7 +156,6 @@ public abstract class AetherGuiScreen extends GuiScreen {
         mouseY = GuiScale.mouseY(rawMouseY);
 
         drawBackdrop();
-        drawBranding();
         if (showsNav()) {
             for (int i = 0; i < nav.length; i++) {
                 nav[i].setActive(GuiSection.ordered()[i] == section());
@@ -143,17 +166,16 @@ public abstract class AetherGuiScreen extends GuiScreen {
         Mc189Compat.color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
-    private void drawBackdrop() {
-        int w = GuiScale.guiWidth();
-        int h = GuiScale.guiHeight();
-        Mc189Compat.drawGradientRectangle(0, 0, w, h / 2, AetherUi.SCRIM_TOP, AetherUi.blend(AetherUi.SCRIM_TOP, AetherUi.SCRIM_BOTTOM, 0.5F));
-        Mc189Compat.drawGradientRectangle(0, h / 2, w, h - h / 2,
-            AetherUi.blend(AetherUi.SCRIM_TOP, AetherUi.SCRIM_BOTTOM, 0.5F), AetherUi.SCRIM_BOTTOM);
+    /**
+     * Leaf's backdrop: one fullscreen texture that already contains the scrim and the panel the
+     * screen's controls sit on. Screens that Leaf gave its own backdrop override this.
+     */
+    protected String backdropArt() {
+        return LeafArt.BACKDROP_MAIN;
     }
 
-    private void drawBranding() {
-        Mc189Compat.drawTexture("aetherlogo.png", GuiScale.x(52), GuiScale.y(48), GuiScale.h(64), GuiScale.h(64));
-        AetherFont.drawShadowed(AetherFont.Size.TITLE, "AETHER", GuiScale.x(130), GuiScale.y(62), AetherUi.ACCENT);
+    private void drawBackdrop() {
+        LeafArt.draw(backdropArt(), 0, 0, GuiScale.guiWidth(), GuiScale.guiHeight());
     }
 
     private void syncTheme() {

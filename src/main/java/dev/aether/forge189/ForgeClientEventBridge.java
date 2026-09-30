@@ -28,7 +28,6 @@ import net.minecraft.util.IChatComponent;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.client.event.EntityViewRenderEvent;
-import net.minecraftforge.client.event.MouseEvent;
 import net.minecraftforge.client.event.DrawBlockHighlightEvent;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.client.event.RenderLivingEvent;
@@ -84,6 +83,10 @@ final class ForgeClientEventBridge {
     private long zoomPersistAtMillis;
     private int comboCount;
     private long lastComboMillis;
+    /** Last entity the local player hit, with the world it was hit in (see {@link #targetEntity()}). */
+    private Object lastTarget;
+    private long lastTargetMillis;
+    private Object lastTargetWorld;
     private long nextMemoryCleanupMillis;
     private boolean modMenuKeyDown;
 
@@ -133,30 +136,53 @@ final class ForgeClientEventBridge {
         updateZoomFromScroll(delta > 0 ? 1 : -1);
     }
 
+    /**
+     * Publishes this frame's elapsed time for every animation in the client.
+     * <p>
+     * FML fires {@code RenderTickEvent} once per rendered frame, which is the rate visual state has
+     * to advance at: 1.8.9 calls {@code runTick()} once per <em>elapsed game tick</em> (~20 Hz) and
+     * {@code updateCameraAndRender} once per frame, so anything stepped from a client-tick handler
+     * stutters against the display. See {@code dev.aether.animation.FrameClock}.
+     */
     @SubscribeEvent
-    public void onMouse(MouseEvent event) {
-        if (!this.freelookView.isActive() || event.dx == 0 && event.dy == 0) {
+    public void onRenderTick(TickEvent.RenderTickEvent event) {
+        if (event.phase == TickEvent.Phase.START) {
+            dev.aether.animation.FrameClock.beginFrame();
+        }
+    }
+
+    /**
+     * Freelook's camera, driven once per rendered frame.
+     * <p>
+     * The mouse delta comes from {@code MouseHelperMixin}, which publishes what vanilla's own look
+     * code read during this frame ({@code MouseHelper.mouseXYChange()}). Forge's {@code MouseEvent}
+     * is deliberately <em>not</em> used and is deliberately never cancelled: it fires at tick rate
+     * from {@code Minecraft.runTick()} - which is what made the camera stutter - and cancelling it
+     * makes {@code runTick} skip vanilla's own button and wheel handling for that event.
+     * <p>
+     * The deltas are drained even when freelook is off, so switching the module on can never apply
+     * movement that happened while the player was looking normally.
+     */
+    @SubscribeEvent
+    public void onCameraSetup(EntityViewRenderEvent.CameraSetup event) {
+        int deltaX = MixinFeatures.Mouse.takeDeltaX();
+        int deltaY = MixinFeatures.Mouse.takeDeltaY();
+        if (!this.freelookView.isActive()) {
             return;
         }
         String moduleId = freelookModuleId();
-        if (moduleId == null) {
-            return;
-        }
-        // Vanilla's own sensitivity curve, scaled by the module's dial: at the default slider and
-        // a sensitivity of 100 the camera turns exactly as fast as the player's head would.
-        float mouseSensitivity = Mc189Compat.mouseSensitivity(Mc189Compat.gameSettings(Mc189Compat.minecraft()));
-        this.freelookView.look(event.dx, event.dy, mouseSensitivity,
-            FreelookMath.moduleScale(configuredInt(moduleId, "sensitivity")),
-            configuredBool(moduleId, "invert_x"), configuredBool(moduleId, "invert_y"));
-        // The player is frozen inside the mixin as well; cancelling here is the primary guard so
-        // vanilla never even reads the delta.
-        event.setCanceled(true);
-    }
-
-    @SubscribeEvent
-    public void onCameraSetup(EntityViewRenderEvent.CameraSetup event) {
-        if (!this.freelookView.isActive()) {
-            return;
+        if (moduleId != null && (deltaX != 0 || deltaY != 0)) {
+            Object minecraft = Mc189Compat.minecraft();
+            Object gameSettings = Mc189Compat.gameSettings(minecraft);
+            // Vanilla's own sensitivity curve, scaled by the module's dial: at the default slider
+            // and a sensitivity of 100 the camera turns exactly as fast as the player's head would.
+            float mouseSensitivity = Mc189Compat.mouseSensitivity(gameSettings);
+            // The game's own "invert mouse" option is part of vanilla's pitch sign, so it has to be
+            // folded in here as well; the module's own toggle flips it back.
+            boolean invertY = configuredBool(moduleId, "invert_y") ^ Mc189Compat.invertMouse(gameSettings);
+            this.freelookView.look(deltaX, deltaY, mouseSensitivity,
+                FreelookMath.moduleScale(configuredInt(moduleId, "sensitivity")),
+                configuredBool(moduleId, "invert_x"), invertY);
         }
         event.yaw = this.freelookView.yaw();
         event.pitch = this.freelookView.pitch();
@@ -167,6 +193,7 @@ final class ForgeClientEventBridge {
     public void onAttackEntity(AttackEntityEvent event) {
         applyAttackParticles(event.target);
         registerComboHit();
+        rememberTarget(event.target);
     }
 
     @SubscribeEvent
@@ -541,6 +568,62 @@ final class ForgeClientEventBridge {
 
     boolean comboActive(int maxGapMillis) {
         return this.comboCount > 0 && System.currentTimeMillis() - this.lastComboMillis <= (long) maxGapMillis;
+    }
+
+    /** How long a hit target stays on screen after the crosshair leaves it. */
+    private static final long TARGET_MEMORY_MILLIS = 3000L;
+
+    /**
+     * The entity the target widgets should draw: whatever the crosshair is on, or the entity the
+     * player just hit.
+     * <p>
+     * The crosshair hit comes from the same ray trace vanilla uses for the block outline
+     * ({@code Minecraft.objectMouseOver.entityHit}), so the widget agrees with what the player sees.
+     * Combat needs the second half: in a fight the crosshair is rarely exactly on the target at the
+     * frame the widget renders, so the last hit is remembered for a few seconds - and it is dropped
+     * as soon as the world changes or the entity dies, so the widget can never show a ghost from
+     * another dimension or a corpse.
+     *
+     * @return the target entity, or {@code null} when there is nothing worth showing.
+     */
+    Object targetEntity() {
+        Object minecraft = Mc189Compat.minecraft();
+        Object world = Mc189Compat.world(minecraft);
+        if (world != this.lastTargetWorld) {
+            forgetTarget();
+        }
+        Object player = Mc189Compat.player(minecraft);
+        Object aimed = Mc189Compat.entityHit(Mc189Compat.objectMouseOver(minecraft));
+        if (aimed != null && aimed != player && aimed instanceof EntityLivingBase) {
+            rememberTarget(aimed);
+            return aimed;
+        }
+        if (this.lastTarget == null
+                || System.currentTimeMillis() - this.lastTargetMillis > TARGET_MEMORY_MILLIS) {
+            return null;
+        }
+        float health = Mc189Compat.health(this.lastTarget);
+        if (health >= 0.0F && health <= 0.0F) {
+            forgetTarget();
+            return null;
+        }
+        return this.lastTarget;
+    }
+
+    /** Remembers a hit entity so the target widgets keep showing it for a moment. */
+    private void rememberTarget(Object entity) {
+        if (!(entity instanceof EntityLivingBase)) {
+            return;
+        }
+        this.lastTargetWorld = Mc189Compat.world(Mc189Compat.minecraft());
+        this.lastTarget = entity;
+        this.lastTargetMillis = System.currentTimeMillis();
+    }
+
+    private void forgetTarget() {
+        this.lastTarget = null;
+        this.lastTargetMillis = 0L;
+        this.lastTargetWorld = null;
     }
 
     /**

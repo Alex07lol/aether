@@ -232,6 +232,15 @@ public final class Mc189Compat {
             : dev.aether.graphics.FreelookMath.DEFAULT_MOUSE_SENSITIVITY;
     }
 
+    /**
+     * The game's own "invert mouse" option. Vanilla applies it to the pitch delta inside
+     * {@code EntityRenderer.updateCameraAndRender} (it multiplies the vertical delta by -1), so any
+     * code that reads the raw mouse delta itself - freelook does - has to honour it too.
+     */
+    static boolean invertMouse(Object gameSettings) {
+        return booleanField(gameSettings, new String[] {"invertMouse", "field_74338_d"});
+    }
+
     static int particleSetting(Object gameSettings) {
         return intField(gameSettings, new String[] {"particleSetting", "field_74362_aa"});
     }
@@ -878,6 +887,40 @@ public final class Mc189Compat {
         return getField(movingObjectPosition, new String[] {"typeOfHit", "field_72313_a"});
     }
 
+    /**
+     * @return the entity half of a ray trace result, or {@code null} for a block hit or a miss.
+     *         Used by the target widgets, which care about what the crosshair is on.
+     */
+    static Object entityHit(Object movingObjectPosition) {
+        return movingObjectPosition == null
+            ? null
+            : getField(movingObjectPosition, new String[] {"entityHit", "field_72308_g"});
+    }
+
+    /** @return the entity's current health, or {@code -1} when it cannot report one. */
+    public static float health(Object entity) {
+        Object value = invoke(entity, new String[] {"getHealth", "func_110143_aJ"});
+        return value instanceof Number ? ((Number) value).floatValue() : -1.0F;
+    }
+
+    /** @return the entity's maximum health, or {@code -1} when it cannot report one. */
+    public static float maxHealth(Object entity) {
+        Object value = invoke(entity, new String[] {"getMaxHealth", "func_110138_aP"});
+        return value instanceof Number ? ((Number) value).floatValue() : -1.0F;
+    }
+
+    /**
+     * @return the player skin texture of {@code entity}, or {@code null} for anything that is not a
+     *         player. 1.8 registers the default skin for every player, so a real texture is always
+     *         available for a player entity and the target widget never has to draw a blank box.
+     */
+    public static ResourceLocation skinLocation(Object entity) {
+        Object location = invoke(entity, new String[] {
+            "getLocationSkin", "func_110306_p", "func_178837_g", "func_110311_f"
+        });
+        return location instanceof ResourceLocation ? (ResourceLocation) location : null;
+    }
+
     static Object blockPos(Object movingObjectPosition) {
         return getField(movingObjectPosition, new String[] {"blockPos", "field_178782_a"});
     }
@@ -1088,57 +1131,111 @@ public final class Mc189Compat {
         }
     }
 
-    public static void drawTexture(String path, int x, int y, int width, int height) {
-        if (path == null || path.length() == 0 || width <= 0 || height <= 0) {
+    /**
+     * Draws a sub-rectangle of an arbitrary bound texture into GUI space with a uniform alpha.
+     * <p>
+     * This is the primitive a HUD widget needs to draw a real player skin face
+     * ({@code u=8,v=8} of a 64x64 skin, or {@code u=40,v=8} for the hat overlay). It builds the
+     * quad by hand rather than calling {@code Gui}'s helpers because those force the vertex colour
+     * back to opaque white, which would make a widget's own fade and opacity settings silently do
+     * nothing to the skin.
+     * <p>
+     * {@code alpha} is clamped to 0-1; the texture is expected to be pre-multiplied by the caller
+     * (this method binds it, so pass the already-resolved resource location).
+     */
+    public static void drawTextureRegion(ResourceLocation texture, int x, int y, int width, int height,
+                                         int u, int v, int sourceWidth, int sourceHeight,
+                                         int tileWidth, int tileHeight, float alpha) {
+        if (texture == null || width <= 0 || height <= 0 || sourceWidth <= 0 || sourceHeight <= 0
+                || tileWidth <= 0 || tileHeight <= 0) {
+            return;
+        }
+        float opacity = Math.max(0.0F, Math.min(1.0F, alpha));
+        if (opacity <= 0.004F) {
             return;
         }
         Object minecraft = minecraft();
         Object textureManager = invoke(minecraft, new String[] {"getTextureManager", "func_110434_K"});
-        if (textureManager == null) return;
+        if (textureManager == null) {
+            return;
+        }
+        invoke(textureManager, new String[] {"bindTexture", "func_110577_a"},
+            new Class<?>[] {ResourceLocation.class}, texture);
+
+        float u0 = u / (float) tileWidth;
+        float v0 = v / (float) tileHeight;
+        float u1 = (u + sourceWidth) / (float) tileWidth;
+        float v1 = (v + sourceHeight) / (float) tileHeight;
 
         enableTexture2D();
         enableBlend();
         tryBlendFuncSeparate(770, 771, 1, 0);
-        color(1.0F, 1.0F, 1.0F, 1.0F);
+        try {
+            Tessellator tessellator = getTessellator();
+            WorldRenderer worldRenderer = tessellator.getWorldRenderer();
+            worldRenderer.begin(7, DefaultVertexFormats.POSITION_TEX_COLOR);
+            worldRenderer.pos(x, y + height, 0.0D).tex(u0, v1).color(1.0F, 1.0F, 1.0F, opacity).endVertex();
+            worldRenderer.pos(x + width, y + height, 0.0D).tex(u1, v1).color(1.0F, 1.0F, 1.0F, opacity).endVertex();
+            worldRenderer.pos(x + width, y, 0.0D).tex(u1, v0).color(1.0F, 1.0F, 1.0F, opacity).endVertex();
+            worldRenderer.pos(x, y, 0.0D).tex(u0, v0).color(1.0F, 1.0F, 1.0F, opacity).endVertex();
+            tessellator.draw();
+        } finally {
+            enableTexture2D();
+            disableBlend();
+            color(1.0F, 1.0F, 1.0F, 1.0F);
+        }
+    }
 
+    /** Draws one of this mod's own textures stretched over a GUI-space rectangle, untinted. */
+    public static void drawTexture(String path, int x, int y, int width, int height) {
+        drawTextureTinted(path, x, y, width, height, 1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
+    /**
+     * Draws a texture from this mod's assets stretched over a GUI-space rectangle with a uniform
+     * tint, the primitive the Leaf screen art needs: that art keeps its shape and its detail in the
+     * texture's own alpha, and every state (enabled, hovered, dimmed) is a multiplication of it.
+     * <p>
+     * The quad is built by hand instead of going through {@code Gui.drawModalRectWithCustomSizedTexture}
+     * because {@code Gui}'s helpers force the vertex colour back to opaque white, which would make the
+     * tint - and therefore every state change - silently do nothing.
+     *
+     * @param path  asset path inside the {@code aether} namespace, e.g. {@code "leaf/select.png"}
+     * @param red   tint red, 0-1
+     * @param green tint green, 0-1
+     * @param blue  tint blue, 0-1
+     * @param alpha opacity multiplier, 0-1
+     */
+    public static void drawTextureTinted(String path, int x, int y, int width, int height,
+                                         float red, float green, float blue, float alpha) {
+        if (path == null || path.length() == 0 || width <= 0 || height <= 0 || alpha <= 0.004F) {
+            return;
+        }
+        Object minecraft = minecraft();
+        Object textureManager = invoke(minecraft, new String[] {"getTextureManager", "func_110434_K"});
+        if (textureManager == null) {
+            return;
+        }
         invoke(textureManager, new String[] {"bindTexture", "func_110577_a"},
             new Class<?>[] {ResourceLocation.class}, new ResourceLocation("aether", path));
 
-        for (String name : new String[] {"drawModalRectWithCustomSizedTexture", "func_146110_a"}) {
-            Method method = findMethod(Gui.class, name, new Class<?>[] {
-                Integer.TYPE, Integer.TYPE, Float.TYPE, Float.TYPE, Integer.TYPE, Integer.TYPE, Float.TYPE, Float.TYPE
-            });
-            if (method != null) {
-                try {
-                    method.invoke(null, Integer.valueOf(x), Integer.valueOf(y), Float.valueOf(0.0F), Float.valueOf(0.0F),
-                        Integer.valueOf(width), Integer.valueOf(height), Float.valueOf((float) width), Float.valueOf((float) height));
-                    color(1.0F, 1.0F, 1.0F, 1.0F);
-                    return;
-                } catch (ReflectiveOperationException ignored) {
-                }
-            }
+        enableTexture2D();
+        enableBlend();
+        tryBlendFuncSeparate(770, 771, 1, 0);
+        try {
+            Tessellator tessellator = getTessellator();
+            WorldRenderer worldRenderer = tessellator.getWorldRenderer();
+            worldRenderer.begin(7, DefaultVertexFormats.POSITION_TEX_COLOR);
+            worldRenderer.pos(x, y + height, 0.0D).tex(0.0D, 1.0D).color(red, green, blue, alpha).endVertex();
+            worldRenderer.pos(x + width, y + height, 0.0D).tex(1.0D, 1.0D).color(red, green, blue, alpha).endVertex();
+            worldRenderer.pos(x + width, y, 0.0D).tex(1.0D, 0.0D).color(red, green, blue, alpha).endVertex();
+            worldRenderer.pos(x, y, 0.0D).tex(0.0D, 0.0D).color(red, green, blue, alpha).endVertex();
+            tessellator.draw();
+        } finally {
+            enableTexture2D();
+            disableBlend();
+            color(1.0F, 1.0F, 1.0F, 1.0F);
         }
-
-        Tessellator tessellator = getTessellator();
-        WorldRenderer worldRenderer = tessellator.getWorldRenderer();
-        worldRenderer.begin(7, DefaultVertexFormats.POSITION_TEX_COLOR);
-        worldRenderer.pos(x, y + height, 0.0D).tex(0.0D, 1.0D).color(1.0F, 1.0F, 1.0F, 1.0F).endVertex();
-        worldRenderer.pos(x + width, y + height, 0.0D).tex(1.0D, 1.0D).color(1.0F, 1.0F, 1.0F, 1.0F).endVertex();
-        worldRenderer.pos(x + width, y, 0.0D).tex(1.0D, 0.0D).color(1.0F, 1.0F, 1.0F, 1.0F).endVertex();
-        worldRenderer.pos(x, y, 0.0D).tex(0.0D, 0.0D).color(1.0F, 1.0F, 1.0F, 1.0F).endVertex();
-        tessellator.draw();
-        color(1.0F, 1.0F, 1.0F, 1.0F);
-    }
-
-    static boolean hasResource(String domain, String path) {
-        Object minecraft = minecraft();
-        Object resourceManager = invoke(minecraft, new String[] {"getResourceManager", "func_110442_L"});
-        if (resourceManager != null) {
-            Object res = invoke(resourceManager, new String[] {"getResource", "func_110549_a"},
-                new Class<?>[] {ResourceLocation.class}, new ResourceLocation(domain, path));
-            return res != null;
-        }
-        return false;
     }
 
     static void pushMatrix() {

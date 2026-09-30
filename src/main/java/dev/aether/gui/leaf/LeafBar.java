@@ -6,19 +6,15 @@ import dev.aether.gui.AetherFont;
 import dev.aether.gui.GuiScale;
 import dev.aether.gui.core.UiComponent;
 import dev.aether.forge189.AetherUi;
-import dev.aether.forge189.Mc189Compat;
 
 /**
- * Port of Leaf Client's {@code com.leafclient.screen.ui.Bar} (GPLv3, see
- * docs/GUI_REBUILD.md): a slider whose row label is drawn 250 design units left of
- * the track, whose knob follows the mouse while the button is held (Leaf polls
- * {@code Mouse.isButtonDown(0)} inside the move handler), and whose value text floats
- * above the knob. The commit fires when the button is released, like Leaf's
- * {@code doThings()}.
+ * Port of Leaf Client's {@code com.leafclient.screen.ui.Bar} (GPLv3, see docs/GUI_REBUILD.md): a
+ * slider drawn as Leaf's {@code bar_main.png} groove with {@code bar_point.png} as its knob, whose
+ * row label sits 250 design units left of the track, whose knob is a square as tall as the bar
+ * (Leaf draws it at {@code (x + x_point) - h/2}), and whose value text floats above the knob while
+ * the button is held. The commit fires when the button is released, like Leaf's {@code doThings()}.
  */
 public final class LeafBar extends UiComponent {
-
-    private static final int TRACK_RANGE = 255;
 
     private final String rowName;
     private final ValueReader reader;
@@ -66,30 +62,23 @@ public final class LeafBar extends UiComponent {
                 top + (h - labelSize) / 2, AetherUi.TEXT_SECONDARY);
         }
 
-        // Track centered vertically inside the hit area (Leaf's bar texture fills the
-        // 90-high slot; the groove itself is a thin line in the middle).
-        int trackH = GuiScale.h(8);
-        int trackY = top + (h - trackH) / 2;
-        AetherUi.drawRoundRect(left, trackY, left + w, trackY + trackH, trackH / 2, AetherUi.TRACK);
+        LeafArt.draw(LeafArt.BAR_TRACK, left, top, w, h, LeafArt.NORMAL);
 
         double value = reader.read();
-        double fraction = max > min ? (value - min) / (max - min) : 0.0D;
-        fraction = Math.max(0.0D, Math.min(1.0D, fraction));
-        int fillW = (int) (w * fraction);
-        if (fillW > 0) {
-            AetherUi.drawRoundRect(left, trackY, left + fillW, trackY + trackH, trackH / 2, AetherUi.ACCENT);
-        }
-
-        int knob = GuiScale.h(22);
-        int knobX = left + fillW - knob / 2;
-        int knobY = top + (h - knob) / 2;
-        AetherUi.drawRoundRect(knobX, knobY, knobX + knob, knobY + knob, knob / 2,
-            dragging || hover ? 0xFFFFFFFF : 0xFFD8DAE6);
+        double fraction = fraction(value);
+        int knobX = left + (int) Math.round(w * fraction) - h / 2;
+        LeafArt.draw(LeafArt.BAR_KNOB, knobX, top, h, h,
+            dragging || hover ? LeafArt.BRIGHT : LeafArt.NORMAL);
 
         String valueText = format(value) + suffix;
         AetherFont.drawShadowed(AetherFont.Size.SMALL, valueText,
-            knobX + knob / 2 - AetherFont.width(AetherFont.Size.SMALL, valueText) / 2,
-            knobY - GuiScale.h(18), AetherUi.TEXT_PRIMARY);
+            knobX + h / 2 - AetherFont.width(AetherFont.Size.SMALL, valueText) / 2,
+            top - AetherFont.height(AetherFont.Size.SMALL) - GuiScale.h(6), AetherUi.TEXT_PRIMARY);
+    }
+
+    private double fraction(double value) {
+        double raw = max > min ? (value - min) / (max - min) : 0.0D;
+        return Math.max(0.0D, Math.min(1.0D, raw));
     }
 
     private String format(double value) {
@@ -106,24 +95,29 @@ public final class LeafBar extends UiComponent {
         return Math.max(min, Math.min(max, snapped));
     }
 
+    private double valueAt(double mouseX) {
+        double fraction = (mouseX - x) / (double) Math.max(1, width);
+        fraction = Math.max(0.0D, Math.min(1.0D, fraction));
+        return snap(min + fraction * (max - min));
+    }
+
     @Override
     public void onMouseMove(double mouseX, double mouseY) {
         hover = contains(mouseX, mouseY);
-        if (hover && dragging) {
-            if (Mouse.isButtonDown(0)) {
-                double fraction = (mouseX - x) / (double) Math.max(1, width);
-                fraction = Math.max(0.0D, Math.min(1.0D, fraction));
-                double value = min + fraction * (max - min);
-                double snapped = snap(value);
-                double current = reader.read();
-                if (Math.abs(snapped - current) > 1.0E-9D) {
-                    writer.write(snapped);
-                }
-            } else {
-                dragging = false;
-                if (onCommit != null) {
-                    onCommit.run();
-                }
+        if (!dragging) {
+            return;
+        }
+        // Leaf keeps following the cursor while the button is down and polls the button in the move
+        // handler, so a drag that leaves the bar still updates and still commits on release.
+        if (Mouse.isButtonDown(0)) {
+            double value = valueAt(mouseX);
+            if (Math.abs(value - reader.read()) > 1.0E-9D) {
+                writer.write(value);
+            }
+        } else {
+            dragging = false;
+            if (onCommit != null) {
+                onCommit.run();
             }
         }
     }
@@ -134,9 +128,7 @@ public final class LeafBar extends UiComponent {
             return false;
         }
         dragging = true;
-        double fraction = (mouseX - x) / (double) Math.max(1, width);
-        fraction = Math.max(0.0D, Math.min(1.0D, fraction));
-        writer.write(snap(min + fraction * (max - min)));
+        writer.write(valueAt(mouseX));
         return true;
     }
 

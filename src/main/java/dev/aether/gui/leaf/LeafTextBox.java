@@ -10,17 +10,27 @@ import dev.aether.forge189.AetherUi;
 import dev.aether.forge189.Mc189Compat;
 
 /**
- * Port of Leaf Client's {@code com.leafclient.screen.ui.TextBox} (GPLv3, see
- * docs/GUI_REBUILD.md): a single-line field that commits on deselect (Leaf calls
- * {@code doThings()} when a click lands outside), with a caret while focused,
- * backspace, and Ctrl+V clipboard paste. Leaf draws a square icon at the field's right
- * edge; Aether draws a clear (x) glyph in that same square instead.
+ * Port of Leaf Client's {@code com.leafclient.screen.ui.TextBox} (GPLv3, see docs/GUI_REBUILD.md):
+ * Leaf's {@code field/search.png} stretched over the row, a single-line value that commits on
+ * deselect (Leaf calls {@code doThings()} when a click lands outside), with a caret while focused,
+ * backspace, and Ctrl+V clipboard paste. An optional row label is drawn 210 design units to the
+ * left, the same offset Leaf's select buttons use, which is what lines a text row up with the
+ * choice rows beside it.
+ * <p>
+ * The one addition is a clear button in the square at the field's right edge where Leaf draws its
+ * icon: clearing through a visible control beats an invisible click zone, and it is drawn from the
+ * same art set (Leaf's {@code close.png}).
  */
 public final class LeafTextBox extends UiComponent {
+
+    /** The clear button's square, in design units, inset from the field's right edge. */
+    private static final int CLEAR_SIZE = 34;
+    private static final int CLEAR_INSET = 8;
 
     private final String rowName;
     private final Runnable onCommit;
     private String text = "";
+    private String placeholder = "";
     private boolean focused;
     private boolean hover;
     private boolean pasteLatch;
@@ -34,12 +44,28 @@ public final class LeafTextBox extends UiComponent {
         at(x, y).size(width, height);
     }
 
+    /** Text shown greyed out while the field is empty; the field has no other caption. */
+    public LeafTextBox setPlaceholder(String value) {
+        this.placeholder = value == null ? "" : value;
+        return this;
+    }
+
     public String text() {
         return text;
     }
 
     public void setText(String value) {
         this.text = value == null ? "" : value;
+    }
+
+    private int clearLeft() {
+        return (int) Math.round(x + width - CLEAR_INSET - CLEAR_SIZE);
+    }
+
+    private boolean overClear(double mouseX, double mouseY) {
+        int left = clearLeft();
+        double top = y + (height - CLEAR_SIZE) / 2.0D;
+        return mouseX >= left && mouseX <= left + CLEAR_SIZE && mouseY >= top && mouseY <= top + CLEAR_SIZE;
     }
 
     @Override
@@ -51,23 +77,21 @@ public final class LeafTextBox extends UiComponent {
 
         if (rowName != null && !rowName.isEmpty()) {
             int labelSize = AetherFont.height(AetherFont.Size.BODY);
-            AetherFont.draw(AetherFont.Size.BODY, rowName, left - GuiScale.w(410),
+            AetherFont.draw(AetherFont.Size.BODY, rowName, left - GuiScale.w(210),
                 top + (h - labelSize) / 2, AetherUi.TEXT_SECONDARY);
         }
 
-        int fill = focused ? AetherUi.withAlpha(AetherUi.SEARCH_FOCUS, 0xF0)
-            : hover ? AetherUi.withAlpha(AetherUi.SEARCH, 0xF0) : AetherUi.withAlpha(AetherUi.SEARCH, 0xD9);
-        AetherUi.drawRoundRect(left, top, left + w, top + h, GuiScale.h(8), fill);
-        AetherUi.outline(left, top, left + w, top + h,
-            focused ? AetherUi.withAlpha(AetherUi.ACCENT, 0x88) : AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x40));
+        LeafArt.draw(LeafArt.FIELD, left, top, w, h, focused ? LeafArt.BRIGHT : LeafArt.NORMAL);
 
-        int pad = GuiScale.w(14);
+        int pad = GuiScale.w(16);
         int textSize = AetherFont.height(AetherFont.Size.BODY);
         int textY = top + (h - textSize) / 2;
+        int textSpace = w - pad - GuiScale.w(CLEAR_INSET + CLEAR_SIZE + 8);
 
-        String shown = AetherFont.trimTo(AetherFont.Size.BODY, text, w - pad * 2 - GuiScale.w(24));
+        boolean empty = text.isEmpty();
+        String shown = AetherFont.trimTo(AetherFont.Size.BODY, empty ? placeholder : text, textSpace);
         AetherFont.draw(AetherFont.Size.BODY, shown, left + pad, textY,
-            text.isEmpty() && !focused ? AetherUi.TEXT_DISABLED : AetherUi.TEXT_PRIMARY);
+            empty ? AetherUi.TEXT_DISABLED : AetherUi.TEXT_PRIMARY);
         if (focused) {
             boolean blink = (System.currentTimeMillis() / 500L) % 2L == 0L;
             if (blink) {
@@ -76,15 +100,10 @@ public final class LeafTextBox extends UiComponent {
             }
         }
 
-        // Clear glyph in the right-edge square where Leaf drew its show/hide icon.
-        int s = GuiScale.h(10);
-        int cx = left + w - pad - s;
-        int cy = top + (h - s) / 2;
-        int color = text.isEmpty() ? AetherUi.withAlpha(AetherUi.TEXT_DISABLED, 0x66)
-            : hover ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_SECONDARY;
-        for (int i = 0; i <= s; i++) {
-            Mc189Compat.drawRect(cx + i - s / 2, cy + i - s / 2, cx + i - s / 2 + 1, cy + i - s / 2 + 1, color);
-            Mc189Compat.drawRect(cx + s - i - s / 2, cy + i - s / 2, cx + s - i - s / 2 + 1, cy + i - s / 2 + 1, color);
+        if (!text.isEmpty()) {
+            int clear = GuiScale.w(CLEAR_SIZE);
+            LeafArt.draw(LeafArt.CLOSE, left + w - GuiScale.w(CLEAR_INSET) - clear,
+                top + (h - clear) / 2, clear, clear, LeafArt.BRIGHT);
         }
     }
 
@@ -98,15 +117,10 @@ public final class LeafTextBox extends UiComponent {
         if (button != 0 || !contains(mouseX, mouseY)) {
             return false;
         }
-        if (!text.isEmpty()) {
-            int pad = 14;
-            int s = 10;
-            double clearX = x + width - pad - s;
-            if (mouseX >= clearX - s && mouseX <= clearX + s * 2.0D) {
-                text = "";
-                commit();
-                return true;
-            }
+        if (!text.isEmpty() && overClear(mouseX, mouseY)) {
+            text = "";
+            commit();
+            return true;
         }
         focused = true;
         return true;

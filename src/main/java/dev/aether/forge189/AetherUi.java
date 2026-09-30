@@ -46,12 +46,20 @@ public final class AetherUi {
     public static int TEXT_DISABLED = 0xFF737585;
 
     /* ── accent ─────────────────────────────────────────────────────────── */
-    public static int ACCENT = 0xFF9B8CFF;
-    public static int ACCENT_DARK = 0xFF7B6CFF;
-    public static int ACCENT_SOFT = 0x669B8CFF;
-    /** Lamp colour for "this module is on"; kept green so a theme cannot blur the meaning. */
-    public static int ACCENT_ON = 0xFF38E0A8;
-    public static int ACCENT_GLOW = 0x559B8CFF;
+    /**
+     * The interactive highlight. It defaults to the same white as the text because the default
+     * palette is translucent black and white (see {@link ThemePalettes#mono()}).
+     */
+    public static int ACCENT = 0xFFF2F2F5;
+    public static int ACCENT_DARK = 0xFFC9CAD4;
+    public static int ACCENT_SOFT = 0x66F2F2F5;
+    /**
+     * Lamp colour for "this module is on". It follows the accent rather than staying a fixed hue:
+     * the ported Leaf art carries on/off in its own shape (a toggle's knob, a card's brightness),
+     * so a second fixed colour would only fight the palette.
+     */
+    public static int ACCENT_ON = 0xFFF2F2F5;
+    public static int ACCENT_GLOW = 0x55F2F2F5;
 
     /* ── click deck ─────────────────────────────────────────────────────── */
     public static int SCRIM_TOP = 0xF208090D;
@@ -60,8 +68,8 @@ public final class AetherUi {
     public static int DECK_EDGE = 0x20FFFFFF;
     public static int ROW_BG = 0x0AFFFFFF;
     public static int ROW_HOVER = 0x14FFFFFF;
-    public static int ROW_SELECTED = 0x269B8CFF;
-    public static int ROW_ON_TINT = 0x1A38E0A8;
+    public static int ROW_SELECTED = 0x26FFFFFF;
+    public static int ROW_ON_TINT = 0x1AFFFFFF;
 
     /* ── background gradient (title/menu screens) ───────────────────────── */
     public static int SKY_TOP = 0xFF08090D;
@@ -135,7 +143,7 @@ public final class AetherUi {
         ACCENT_DARK = blend(accent, 0xFF000000, 0.25F);
         ACCENT_SOFT = withAlpha(accent, 0x66);
         ACCENT_GLOW = withAlpha(accent, 0x55);
-        ACCENT_ON = light ? 0xFF1FA97A : 0xFF38E0A8;
+        ACCENT_ON = accent;
 
         SCRIM_TOP = withAlpha(blend(surface, shade, 0.22F), 0xF2);
         SCRIM_BOTTOM = withAlpha(blend(surface, shade, 0.08F), 0xF2);

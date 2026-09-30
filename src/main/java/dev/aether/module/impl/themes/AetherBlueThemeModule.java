@@ -11,7 +11,7 @@ public class AetherBlueThemeModule extends AbstractModule implements ThemeModule
     public AetherBlueThemeModule() {
         super(ModuleMetadata.builder("theme.aether_blue", "Aether Blue")
             .category(ModuleCategory.THEMES)
-            .description("Default Aether palette: deep navy surfaces with a blue accent.")
+            .description("Deep navy surfaces with a blue accent.")
             .group(ThemeModule.GROUP)
             .favoriteByDefault(true)
             .build());

@@ -4,31 +4,42 @@ import dev.aether.gui.AetherFont;
 import dev.aether.gui.GuiScale;
 import dev.aether.gui.core.UiComponent;
 import dev.aether.forge189.AetherUi;
-import dev.aether.forge189.Mc189Compat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.audio.PositionedSoundRecord;
 import net.minecraft.util.ResourceLocation;
 
 /**
  * Port of Leaf Client's {@code com.leafclient.screen.ui.SystemButton} (GPLv3, see
- * docs/GUI_REBUILD.md): a fixed-size clickable tile that plays the vanilla button
- * press sound and fires one action. Leaf draws it from a texture; Aether draws the
- * same shape procedurally in the Aether palette.
+ * docs/GUI_REBUILD.md): a fixed-size tile drawn from one stretched texture that plays the vanilla
+ * button press sound and fires one action. Leaf's tiles carry their own wording in the art, so a
+ * tile passes {@code null} for {@link #label} and only tiles that need a caption Aether's art does
+ * not have - the settings actions, for instance - draw text on top.
  * <p>
- * In the Leaf composition the four navigation tiles are 170x106 at
- * x = 430, 650, 1100, 1320, y = 250, and the "home" tile is 80x80 - the sizes this
- * component is used with.
+ * In the Leaf composition the four navigation tiles are 170x106 at x = 430, 650, 1100, 1320, y =
+ * 250, and the "home" tile is 80x80.
  */
 public class NavButton extends UiComponent {
 
+    /** The section this tile belongs to is the one on screen. */
+    private static final float ACTIVE = LeafArt.BRIGHT;
+    /** A tile that is available but not the current screen; Leaf had no such state, so the tile
+     * keeps its own art and only dims. */
+    private static final float IDLE = 0.70F;
+
+    private final String art;
     private final String label;
     private final Runnable action;
-    /** Visual state flags mirroring Leaf's isCover logic. */
     private boolean hover;
-    /** The active navigation tile keeps a distinct tint (Leaf tinted it per state). */
-    private boolean active;
+    private boolean active = true;
 
-    public NavButton(String label, int x, int y, int width, int height, Runnable action) {
+    /** A tile whose wording is baked into its art. */
+    public NavButton(String art, int x, int y, int width, int height, Runnable action) {
+        this(art, null, x, y, width, height, action);
+    }
+
+    /** A tile that draws {@code label} over its art. */
+    public NavButton(String art, String label, int x, int y, int width, int height, Runnable action) {
+        this.art = art;
         this.label = label;
         this.action = action;
         at(x, y).size(width, height);
@@ -45,16 +56,20 @@ public class NavButton extends UiComponent {
         int top = gy();
         int w = gw();
         int h = gh();
-        int radius = GuiScale.h(10);
-        int fill = active ? AetherUi.withAlpha(AetherUi.ACCENT, 0x40)
-            : hover ? AetherUi.withAlpha(AetherUi.GLASS_SOFT, 0xEE) : AetherUi.withAlpha(AetherUi.GLASS, 0xCC);
-        AetherUi.drawRoundRect(left, top, left + w, top + h, radius, fill);
-        AetherUi.outline(left, top, left + w, top + h,
-            active || hover ? AetherUi.withAlpha(AetherUi.ACCENT, 0x88) : AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x40));
-        int labelSize = AetherFont.height(AetherFont.Size.SECTION);
-        String shown = AetherFont.trimTo(AetherFont.Size.SECTION, label, w - GuiScale.w(10));
-        AetherFont.drawCenteredShadowed(AetherFont.Size.SECTION, shown, left,
-            top + (h - labelSize) / 2, w, active ? AetherUi.ACCENT : hover ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_SECONDARY);
+        float brightness = active ? ACTIVE : IDLE;
+
+        if (hover) {
+            LeafArt.drawHovered(art, left, top, w, h, brightness);
+        } else {
+            LeafArt.draw(art, left, top, w, h, brightness);
+        }
+
+        if (label != null) {
+            int size = AetherFont.height(AetherFont.Size.BODY);
+            String shown = AetherFont.trimTo(AetherFont.Size.BODY, label, w - GuiScale.w(12));
+            AetherFont.drawCenteredShadowed(AetherFont.Size.BODY, shown, left, top + (h - size) / 2, w,
+                active ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_SECONDARY);
+        }
     }
 
     @Override

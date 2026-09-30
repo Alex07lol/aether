@@ -19,6 +19,7 @@ import dev.aether.module.impl.hud.DayCounterModule;
 import dev.aether.module.impl.hud.DirectionModule;
 import dev.aether.module.impl.hud.FpsGraphModule;
 import dev.aether.module.impl.hud.SpeedIndicatorModule;
+import dev.aether.module.impl.hud.TargetInfoModule;
 
 final class HudModules {
     private HudModules() {
@@ -43,5 +44,6 @@ final class HudModules {
         modules.register(new ArmorStatusModule());
         modules.register(new FpsGraphModule());
         modules.register(new DayCounterModule());
+        modules.register(new TargetInfoModule());
     }
 }
