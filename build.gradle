@@ -246,6 +246,13 @@ task installModJar(type: Copy, dependsOn: tasks.devModJar) {
 tasks.runClient {
     dependsOn tasks.installModJar
     doFirst {
+        // Offline/dev account: -PaetherUsername=<name> launches with that username and no
+        // session server, i.e. a cracked/offline-mode account for dev runs. Without it the
+        // launchwrapper default ("Player<ticks>") applies.
+        if (project.hasProperty("aetherUsername")) {
+            args "--username", "${project.property('aetherUsername')}"
+            args "--accessToken", "0"
+        }
         // TEMPORARY: -PaetherDebugShots=<true|WIDTHxHEIGHT> launches the visual
         // debugger hook; a resolution resizes the window on the first tick.
         if (project.hasProperty("aetherDebugShots")) {

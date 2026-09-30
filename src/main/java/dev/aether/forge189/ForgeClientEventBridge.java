@@ -161,17 +161,19 @@ final class ForgeClientEventBridge {
      * makes {@code runTick} skip vanilla's own button and wheel handling for that event.
      * <p>
      * The deltas are drained even when freelook is off, so switching the module on can never apply
-     * movement that happened while the player was looking normally.
+     * movement that happened while the player was looking normally. They are drained into
+     * {@link #frameDeltaX}/{@link #frameDeltaY} rather than into locals so other per-frame readers
+     * (the Mouse Display HUD) see the same movement without consuming the accumulating buffer.
      */
     @SubscribeEvent
     public void onCameraSetup(EntityViewRenderEvent.CameraSetup event) {
-        int deltaX = MixinFeatures.Mouse.takeDeltaX();
-        int deltaY = MixinFeatures.Mouse.takeDeltaY();
+        this.frameDeltaX = MixinFeatures.Mouse.takeDeltaX();
+        this.frameDeltaY = MixinFeatures.Mouse.takeDeltaY();
         if (!this.freelookView.isActive()) {
             return;
         }
         String moduleId = freelookModuleId();
-        if (moduleId != null && (deltaX != 0 || deltaY != 0)) {
+        if (moduleId != null && (this.frameDeltaX != 0 || this.frameDeltaY != 0)) {
             Object minecraft = Mc189Compat.minecraft();
             Object gameSettings = Mc189Compat.gameSettings(minecraft);
             // Vanilla's own sensitivity curve, scaled by the module's dial: at the default slider
@@ -180,13 +182,33 @@ final class ForgeClientEventBridge {
             // The game's own "invert mouse" option is part of vanilla's pitch sign, so it has to be
             // folded in here as well; the module's own toggle flips it back.
             boolean invertY = configuredBool(moduleId, "invert_y") ^ Mc189Compat.invertMouse(gameSettings);
-            this.freelookView.look(deltaX, deltaY, mouseSensitivity,
+            this.freelookView.look(this.frameDeltaX, this.frameDeltaY, mouseSensitivity,
                 FreelookMath.moduleScale(configuredInt(moduleId, "sensitivity")),
                 configuredBool(moduleId, "invert_x"), invertY);
         }
         event.yaw = this.freelookView.yaw();
         event.pitch = this.freelookView.pitch();
         event.roll = 0.0F;
+    }
+
+    /** The frame's drained horizontal mouse delta; cached per frame for every HUD consumer. */
+    int frameDeltaX = 0;
+    /** The frame's drained vertical mouse delta; cached per frame for every HUD consumer. */
+    int frameDeltaY = 0;
+
+    /**
+     * The mouse movement of the frame currently being rendered, for readers that must display it
+     * without consuming it (the Mouse Display HUD).
+     * <p>
+     * The accumulating buffer in {@code MixinFeatures.Mouse} is drained exactly once per frame, in
+     * {@link #onCameraSetup}; this returns that drained value, so a HUD widget can react to every
+     * flick without ever racing the freelook camera for the raw deltas. Readers must not call this
+     * before the camera hook of the same frame - the value then belongs to the previous frame.
+     *
+     * @return device-unit deltas as {@code [x, y]}
+     */
+    int[] frameMouseDelta() {
+        return new int[] {this.frameDeltaX, this.frameDeltaY};
     }
 
     @SubscribeEvent

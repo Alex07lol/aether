@@ -6,7 +6,9 @@ import dev.aether.animation.AnimationMath;
 import dev.aether.animation.Easing;
 import dev.aether.animation.FrameClock;
 import dev.aether.hud.HudElement;
+import dev.aether.hud.MouseIndicator;
 import dev.aether.hud.TargetHealthText;
+import dev.aether.module.impl.hud.MouseDisplayModule;
 import dev.aether.module.impl.hud.TargetInfoModule;
 import net.minecraft.util.ResourceLocation;
 import dev.aether.module.ClientModule.ModuleState;
@@ -210,6 +212,7 @@ public final class ForgeHudRenderer {
         renderDeveloperOverlay(fontRenderer);
         renderBlockInfo(fontRenderer, minecraft);
         renderTargetInfo(fontRenderer, minecraft);
+        renderMouseDisplay(fontRenderer);
         renderArmorStatus(fontRenderer, minecraft);
         renderPotionStatus(fontRenderer, minecraft);
 
@@ -257,10 +260,11 @@ public final class ForgeHudRenderer {
         drawEditorPreview(fontRenderer, "hud.combo", "Combo 5");
         drawEditorPreview(fontRenderer, "hud.day_counter", "Day 42");
         drawEditorPreview(fontRenderer, "pvp.toggle_sneak", "Sneak (Toggled)");
-        // The keystrokes and target-info elements are components, not text cards: the editor draws
-        // the real thing with real data rather than a label in a box.
+        // The keystrokes, target-info and mouse-display elements are components, not text cards:
+        // the editor draws the real thing with real data rather than a label in a box.
         renderKeystrokesPreview(fontRenderer);
         renderTargetInfoPreview(fontRenderer, minecraft);
+        renderMouseDisplayPreview(fontRenderer);
 
         Mc189Compat.color(1.0F, 1.0F, 1.0F, 1.0F);
         Mc189Compat.enableTexture2D();
@@ -689,6 +693,131 @@ public final class ForgeHudRenderer {
     private String targetHealthText(float health, float maxHealth) {
         return TargetHealthText.format(health, maxHealth,
             settingString(TargetInfoModule.ID, "health_mode", TargetHealthText.VALUE));
+    }
+
+    /* ------------------------------------------------------------------ hud.mouse_display */
+
+    /** Inner padding of the mouse pad, and the ring's inset from the pad edge. */
+    private static final int MOUSE_PADDING = 4;
+    /** The indicator dot's radius. */
+    private static final float MOUSE_DOT_RADIUS = 2.5F;
+    /** The preview's fixed flick, in raw units, so the editor shows an offset worth laying out. */
+    private static final int[] MOUSE_PREVIEW_DELTA = {220, -140};
+
+    /** The rendered offset from the pad's centre, persistent between frames; see {@link MouseIndicator}. */
+    private float mouseOffsetX;
+    private float mouseOffsetY;
+
+    /**
+     * The Mouse Display: a small pad whose indicator drifts in the direction the mouse is moving
+     * and springs back to centre when it stops.
+     * <p>
+     * The raw per-frame delta comes from the bridge's cached copy of what the freelook camera
+     * drained this frame ({@link ForgeClientEventBridge#frameMouseDelta()}), never from
+     * {@code MixinFeatures.Mouse} directly - the accumulating buffer belongs to the camera, and a
+     * second consumer calling {@code takeDelta*} would steal its movement. The travel itself is the
+     * pure {@link MouseIndicator} maths: a target offset clamped to the pad, approached with the
+     * frame-clocked {@code AnimationMath.approach}, so the spring is frame-rate independent.
+     */
+    private void renderMouseDisplay(Object fontRenderer) {
+        if (!enabled(MouseDisplayModule.ID)) {
+            // Reset, not frozen: re-enabling starts from centre like a fresh widget.
+            this.mouseOffsetX = 0.0F;
+            this.mouseOffsetY = 0.0F;
+            return;
+        }
+        int side = clamp(settingInt(MouseDisplayModule.ID, "size", 24), 14, 48);
+        float radius = side / 2.0F - MOUSE_PADDING;
+        float speed = clamp(settingInt(MouseDisplayModule.ID, "movement_speed", 240), 40, 1000);
+        // The dial is how far a 1000-unit flick reaches; the approach time constant falls as the
+        // dial rises, so a faster indicator is also a snappier one.
+        float speedScale = speed / 1000.0F;
+        float rateMillis = Math.max(16.0F, 1000.0F / speed);
+
+        int[] delta = this.bridge != null ? this.bridge.frameMouseDelta() : new int[] {0, 0};
+        float[] next = MouseIndicator.next(this.mouseOffsetX, this.mouseOffsetY, delta,
+            radius, speedScale, FrameClock.deltaMillis(), rateMillis);
+        this.mouseOffsetX = next[0];
+        this.mouseOffsetY = next[1];
+
+        drawMouseDisplay(fontRenderer, side, this.mouseOffsetX, this.mouseOffsetY,
+            settingBool(MouseDisplayModule.ID, "show_direction", false)
+                ? MouseIndicator.direction(this.mouseOffsetX, this.mouseOffsetY) : "");
+    }
+
+    /** The editor's preview: the real component with a fixed representative flick. */
+    private void renderMouseDisplayPreview(Object fontRenderer) {
+        int side = clamp(settingInt(MouseDisplayModule.ID, "size", 24), 14, 48);
+        float radius = side / 2.0F - MOUSE_PADDING;
+        float speed = clamp(settingInt(MouseDisplayModule.ID, "movement_speed", 240), 40, 1000);
+        float[] offset = MouseIndicator.next(this.mouseOffsetX, this.mouseOffsetY, MOUSE_PREVIEW_DELTA,
+            radius, speed / 1000.0F, 16.7F, Math.max(16.0F, 1000.0F / speed));
+        this.mouseOffsetX = offset[0];
+        this.mouseOffsetY = offset[1];
+        drawMouseDisplay(fontRenderer, side, offset[0], offset[1],
+            settingBool(MouseDisplayModule.ID, "show_direction", false)
+                ? MouseIndicator.direction(offset[0], offset[1]) : "");
+    }
+
+    /** Draws the pad. Shared by the live renderer and the editor preview. */
+    private void drawMouseDisplay(Object fontRenderer, int side, float offsetX, float offsetY,
+                                  String direction) {
+        // Same travel limit the indicator was clamped to: half the pad minus the ring's inset.
+        float radius = side / 2.0F - MOUSE_PADDING;
+        HudElement element = client.hudLayout().get(MouseDisplayModule.ID);
+        if (element == null) {
+            return;
+        }
+        float opacity = element.opacity();
+        if (opacity <= 0.004F) {
+            return;
+        }
+        int backgroundColor = AnimationMath.scaleAlpha(
+            settingColor(MouseDisplayModule.ID, "background_color", 0x6F000000), opacity);
+        int indicatorColor = AnimationMath.scaleAlpha(
+            settingColor(MouseDisplayModule.ID, "indicator_color", this.textColor), opacity);
+        int ringColor = AnimationMath.withAlpha(this.textColor, 0x33 * opacity);
+
+        int x = element.x();
+        int y = element.y();
+        if (settingBool(MouseDisplayModule.ID, "show_background", true)) {
+            Mc189Compat.drawRoundedRectangle(x, y, side, side, 2, backgroundColor, 0);
+        }
+        float centreX = x + side / 2.0F;
+        float centreY = y + side / 2.0F;
+        // The ring is the pad's travel limit; a circle of radius r needs half-step samples to close.
+        int segments = Math.max(12, (int) (radius * 1.6F));
+        float previousX = centreX + radius;
+        float previousY = centreY;
+        for (int i = 1; i <= segments; i++) {
+            double angle = Math.PI * 2.0D * i / segments;
+            float segmentX = centreX + (float) Math.cos(angle) * radius;
+            float segmentY = centreY + (float) Math.sin(angle) * radius;
+            Mc189Compat.drawRect((int) Math.min(previousX, segmentX), (int) Math.min(previousY, segmentY),
+                (int) Math.min(previousX, segmentX) + 1, (int) Math.min(previousY, segmentY) + 1, ringColor);
+            previousX = segmentX;
+            previousY = segmentY;
+        }
+        // The dot: a small filled disc around the offset.
+        float dotX = centreX + offsetX;
+        float dotY = centreY + offsetY;
+        int dotRadius = Math.round(MOUSE_DOT_RADIUS);
+        for (int dy = -dotRadius; dy <= dotRadius; dy++) {
+            int half = (int) Math.sqrt(dotRadius * dotRadius - dy * dy);
+            Mc189Compat.drawRect((int) (dotX - half), (int) (dotY + dy), (int) (dotX + half) + 1,
+                (int) (dotY + dy) + 1, indicatorColor);
+        }
+        if (!direction.isEmpty()) {
+            int textX = (int) (centreX - Mc189Compat.stringWidth(fontRenderer, direction) / 2.0F);
+            Mc189Compat.drawStringWithShadow(fontRenderer, direction, textX, y + side + 2, indicatorColor);
+        }
+    }
+
+    /** The Mouse Display's box, with two pixels under it for the optional direction word. */
+    private Dimension mouseDisplayDimensions() {
+        int side = clamp(settingInt(MouseDisplayModule.ID, "size", 24), 14, 48);
+        boolean showDirection = settingBool(MouseDisplayModule.ID, "show_direction", false);
+        return new Dimension(side, side + (showDirection ? 11 : 0));
     }
 
     /** Strips the section-sign formatting codes a display name can carry, for measuring and drawing. */
@@ -1606,6 +1735,12 @@ public final class ForgeHudRenderer {
                     targetHealthText(PREVIEW_HEALTH, 20.0F), player);
                 width = this.targetLayout.width;
                 height = this.targetLayout.height;
+                break;
+            }
+            case "hud.mouse_display": {
+                Dimension mouse = mouseDisplayDimensions();
+                width = mouse.width;
+                height = mouse.height;
                 break;
             }
             case "hud.keystrokes": {

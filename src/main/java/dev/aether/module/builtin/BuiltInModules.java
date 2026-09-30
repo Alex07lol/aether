@@ -41,6 +41,6 @@ public final class BuiltInModules {
         hudLayout.add("hud.armor", 260, 80);
         hudLayout.add("hud.fps_graph", 8, 220);
         hudLayout.add("hud.target_info", 260, 164);
-
+        hudLayout.add("hud.mouse_display", 260, 128);
     }
 }

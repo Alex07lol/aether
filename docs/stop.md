@@ -7,10 +7,10 @@ Update it every time work pauses.
 
 ## CURRENT PHASE
 
-**Phase 6 — Mouse Display** has not been started. Phases 1-5 are complete, and the mid-plan request
-that interrupted them - *"also copy the leaf client UI exactly with colour changes of transparent
-black and white"* - is **complete in code and green**, but has **not been looked at on a running
-client** (see TEST STATUS).
+**Phase 6 — Mouse Display** is complete in code and green (module, cached-delta wiring, animated
+renderer, editor preview, unit test; 62 modules / 214 settings). Phases 1-5 and the Leaf UI copy are
+done; the GUI pass was screenshot-verified live. Outstanding: freelook/keystrokes/Target-Info feel
+and the new Mouse Display still need hands-on `runClient` time (see TEST STATUS).
 
 ## CURRENT OBJECTIVE
 
@@ -211,11 +211,10 @@ None. Keystrokes settings keep their ids, labels, defaults and ranges.
 
 ## BUILD STATUS
 
-Green. `scripts/verify.sh` passed end to end after the GUI pass:
-`compileJava` → `coreSelfTests` (29/29) → `build` → jar proof (refmap searge+notch tables, every
-compiled mixin present in `mixins.aether.json`, manifest bootstrap attributes, reobf clean), and the
-jar now contains the 33 `assets/aether/leaf/**` entries.
-`AetherSettingsMetadataTest` reports **61 modules, 208 settings, 54 ranges, 26 choice lists**; it
+Green. `scripts/verify.sh` passed end to end after Phase 6:
+`compileJava` → `coreSelfTests` (30/30, incl. `MouseIndicatorTest`) → `build` → jar proof, and the
+jar contains the 33 `assets/aether/leaf/**` entries.
+`AetherSettingsMetadataTest` reports **62 modules, 214 settings, 56 ranges, 26 choice lists**; it
 validates that every new numeric setting carries its own range and every choice carries its options,
 which is the guard against guessed slider bounds.
 
@@ -239,38 +238,50 @@ which is the guard against guessed slider bounds.
   3. Target Info: aim at a mob (card should grow in), hit it (one red flash of `damage_flash_time`,
      bar drains smoothly), look away (card shrinks out), kill it (card must not linger), and check
      the HUD editor preview shows the real skin.
+  4. Mouse Display: enable `hud.mouse_display`, wiggle the mouse (dot leans in the flick direction
+     and pins to the rim on hard flicks), stop (dot springs back to centre), and confirm freelook
+     still feels identical with the widget on — both read the same cached delta, neither should
+     starve the other.
 
 ---
 
 ## CURRENT PROBLEM
 
-Nothing blocking. The next phase has not been started.
+Nothing blocking.
 
 ## NEXT EXACT STEPS
 
-1. **Phase 6 — Mouse Display** (`hud.mouse_display`), the same shape as Phase 5 — copy that file
-   layout, do not invent a new one:
-   1. New `dev.aether.module.impl.hud.MouseDisplayModule` (id `hud.mouse_display`, category HUD,
-      `favoriteByDefault(false)`), registered in `HudModules.register`; add the `HudElement` in
-      `BuiltInModules.registerHudLayout` (a free slot near the right column).
-   2. Settings: `show_delta` (bool), `show_direction` (bool), `size` (number 6-24),
-      `movement_speed` (number: how fast the dot travels, 40-1000), `background_color`,
-      `indicator_color`, `show_background` (bool). The layout must be measured for `getDimensions`
-      with the same method the widget draws with.
-   3. Delta source: `MixinFeatures.Mouse.takeDeltaX()/takeDeltaY()` — **careful**: the freelook
-      camera drains those in `onCameraSetup`. Either drain into a per-frame store in
-      `ForgeClientEventBridge` (preferred: one drain, both consumers read the cached value) or move
-      the drain into the bridge's render-tick handler. Do not call `takeDelta*` from two places.
-   4. Movement: keep two `Anim`s (x and y) per axis of the *dot's offset*, or better a single
-      offset vector `Anim` for its distance plus an `Anim` for its angle — whichever is implemented,
-      it must be frame-rate independent, clamped to the widget's radius, and must visibly react to
-      direction. `AnimationMath.approach` with a rate derived from `movement_speed` is the intended
-      way (teleporting the dot is exactly what the brief forbids).
-   5. Editor preview: real component (a static offset), same measuring method.
-2. **Phase 7** — animate `hud.block_info` enter/exit (one `Anim`, `EASE_OUT_CUBIC`, driven by
-   whether a block is looked at; keep the existing cached name/meta lookup).
-3. **Phase 8** — Damage Tint: new `graphics.damage_tint` module, animated overlay intensity
+1. **Phase 7 — Block Info transition.** One `Anim` (EASE_OUT_CUBIC) on `hud.block_info`'s
+   visibility, driven by whether a block is looked at, exactly like `targetEnter` in
+   `renderTargetInfo`: fade *and keep drawing the last block while closing* so losing a block reads
+   as an exit, not a pop. The cached name/meta lookup stays as it is; only the visibility animates.
+   Add the `Anim` field next to `targetEnter`, set its duration from nothing (this widget has no
+   time setting — use a constant ~160 ms) and fade `background_color`/text alpha by
+   `element.opacity() * visibility` in `renderBlockInfo`, plus the editor preview (always visible).
+2. **Phase 8** — Damage Tint: new `graphics.damage_tint` module, animated overlay intensity
    (`Anim` driving alpha), health threshold preserved as a setting.
+3. **Phase 9** — Smooth zoom: per-frame clock instead of per-call `nanoTime`, scroll target
+   smoothing (`docs/progress.md` Phase 9 note).
+4. Then Phases 10-19 in order (`docs/progress.md` has the full list, `docs/architecture.md` §15 has
+   the module-by-module plan).
+6. After **every** phase: `gradle compileJava coreSelfTests`, then update all three docs.
+7. When the user says "run the game", relaunch with
+   `export JAVA_HOME="$(pwd)/.gradle-dist/jdk8u504-b01"` and
+   `"$(pwd)/.gradle-dist/gradle-4.10.3/bin/gradle" --no-daemon runClient --rerun-tasks`
+   (`-PaetherUsername=<name>` for an offline/cracked account, `-PaetherDebugShots=true` for the
+   screenshot walker — never both at once), then read `build/runClient-*.log` and
+   `run/logs/latest.log`.
+
+### Mouse Display — how it landed (for future changes)
+
+- `ForgeClientEventBridge.onCameraSetup` drains `MixinFeatures.Mouse` into cached
+  `frameDeltaX/Y` (it always drained; it now *keeps* the values) and `frameMouseDelta()` hands the
+  cached copy to HUD readers. **Never call `MixinFeatures.Mouse.takeDelta*` from a second place** —
+  the camera owns the drain; the HUD reads the cache. Order matters: the camera hook runs before
+  the HUD renders in a frame, which is what makes the cache fresh.
+- The offset maths is `dev.aether.hud.MouseIndicator` (pure, unit tested): direction-preserving
+  target clamped to the pad radius, `AnimationMath.approach` with rate `1000/movement_speed`.
+  Keep it pure — the renderer only holds the two float fields.
 4. Then Phases 9-19 in order (`docs/progress.md` has the full list, `docs/architecture.md` §15 has
    the module-by-module plan).
 6. After **every** phase: `gradle compileJava coreSelfTests`, then update all three docs.

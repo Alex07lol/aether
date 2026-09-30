@@ -15,8 +15,8 @@ Rules this tracker enforces (from the task brief):
 
 ## CURRENT PHASE
 
-**Phase 6 — Mouse Display** (Phases 1-5 complete, and the Leaf UI copy asked for mid-plan is
-complete; see below). Next exact task is recorded in `docs/stop.md`.
+**Phase 7 — Block Info transition** (Phases 1-6 complete; see below). Next exact task is recorded
+in `docs/stop.md`.
 
 ---
 
@@ -184,9 +184,31 @@ coordinates, in a two-colour palette.
       (build + jar proof) green
 - [ ] Live confirmation in `runClient` (the screens have not been looked at on a running client)
 
-## Phases 6-19 (planned)
+## Phase 6 — Mouse Display (`hud.mouse_display`)
 
-- [ ] **Phase 6 — Mouse Display** (delta → clamped target → interpolated indicator)
+- [x] `MouseDisplayModule` (id `hud.mouse_display`, category HUD, registered in `HudModules`);
+      `HudElement` added in `BuiltInModules` at (260, 128)
+- [x] Settings: `show_background`, `show_direction`, `size` (14-48, step 2), `movement_speed`
+      (40-1000, step 20), `background_color`, `indicator_color`
+- [x] **Delta without stealing:** `ForgeClientEventBridge.onCameraSetup` drains
+      `MixinFeatures.Mouse` once per frame into cached `frameDeltaX/Y` fields (where it always
+      drained); `frameMouseDelta()` now exposes that drained copy. The HUD reads the cache, so the
+      freelook camera and the widget both see every flick and neither can consume the other's
+      movement — the one-drain-many-readers shape the stop notes called for
+- [x] Movement is the pure `dev.aether.hud.MouseIndicator` maths: the raw delta sets a direction-
+      preserving target offset clamped to the pad's radius, and `AnimationMath.approach` (rate from
+      `movement_speed`) travels towards it — so stillness is the same code springing back to centre.
+      No teleporting, no per-frame allocation beyond the tiny result arrays
+- [x] Renderer in `ForgeHudRenderer`: pad + travel ring + disc dot + optional direction word,
+      driven by `FrameClock`, scaled/faded by the element's own `scale()`/`opacity()`; real editor
+      preview with a fixed representative flick; `getDimensions` matches the drawn size (incl. the
+      direction line)
+- [x] `MouseIndicatorTest` under `coreSelfTests` (convergence on the rim, diagonal vector clamp,
+      spring-back, 100 ms ≈ 20×5 ms, no NaN on zero delta, eight-way direction words)
+- [ ] Live confirmation (needs `runClient`: wiggle the mouse, watch the dot lean and recentre)
+
+## Phases 7-19 (planned)
+
 - [ ] Phase 7 — Block Info enter/exit transition around real block data
 - [ ] Phase 8 — Damage Tint animated intensity (threshold preserved)
 - [ ] Phase 9 — Smooth zoom (already partially done via `ZoomMath.smooth` + `EntityRendererMixin`;
@@ -219,6 +241,8 @@ coordinates, in a two-colour palette.
 | 2026-09-30 | 2/3/4 | `compileJava` green; `coreSelfTests` **28/28** (27 pre-existing + `AnimationTest`); `scripts/verify.sh` green end to end (jar proof: refmap searge+notch, every compiled mixin present in the config, manifest bootstrap, reobf) |
 | 2026-09-30 | 5 | `scripts/verify.sh` green again: **60 modules / 208 settings / 54 ranges / 26 choice lists**, `coreSelfTests` **29/29** (`TargetHealthTextTest` added), jar proof still OK |
 | 2026-09-30 | 18 (pull-forward) | Leaf UI copy + art pass: `leaf_assets.py --convert` wrote 29 textures (verified numerically), `compileJava` green, `coreSelfTests` **29/29** (**61 modules** - the Monochrome theme), `scripts/verify.sh` green end to end, jar contains `assets/aether/leaf/**` |
+| 2026-09-30 | GUI verified live | `runClient -PaetherDebugShots=1920x1080` walked every screen; panel fit, white glyphs, state brightness and the enabled/disabled card split all confirmed from the screenshots (see `docs/stop.md` TEST STATUS 0) |
+| 2026-09-30 | 6 | Mouse Display: `compileJava` green, `coreSelfTests` **30/30** (`MouseIndicatorTest` added), **62 modules / 214 settings**, `scripts/verify.sh` green end to end |
 
 Proof that the new mixin binds in production as well as dev: `build/tmp/compileJava/compileJava-refmap.json`
 contains `dev/aether/forge189/mixin/MouseHelperMixin → mouseXYChange -> Lnet/minecraft/util/MouseHelper;func_74374_c()V`.
@@ -234,12 +258,11 @@ are preserved in §13b.
 
 ## Remaining work (this pass)
 
-- Live verification in `runClient`: freelook smoothness and keystrokes animation, Target Info
-  enter/flash/exit, and - new - the ported Leaf screens themselves (nothing in the GUI has been
-  looked at on a running client yet; only the assets were verified numerically).
-- Phases 5-19 above.
+- Live verification in `runClient`: freelook smoothness, keystrokes animation, Target Info
+  enter/flash/exit, Mouse Display drift/recentre, and the ported Leaf screens (the screens were
+  screenshot-verified once; freelook feel still needs hands on it).
+- Phases 7-19 above.
 
 ## Exact next task
 
-**Phase 6 — Mouse Display.** Full spec and the exact first edit are in `docs/stop.md` under
-*NEXT EXACT STEPS*.
+**Phase 7 — Block Info transition.** Full spec is in `docs/stop.md` under *NEXT EXACT STEPS*.

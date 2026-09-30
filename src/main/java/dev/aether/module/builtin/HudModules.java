@@ -8,6 +8,7 @@ import dev.aether.module.impl.hud.CpsModule;
 import dev.aether.module.impl.hud.FpsModule;
 import dev.aether.module.impl.hud.KeystrokesModule;
 import dev.aether.module.impl.hud.MemoryModule;
+import dev.aether.module.impl.hud.MouseDisplayModule;
 import dev.aether.module.impl.hud.PingModule;
 import dev.aether.module.impl.hud.PotionStatusModule;
 import dev.aether.module.impl.hud.ReachDisplayModule;
@@ -45,5 +46,6 @@ final class HudModules {
         modules.register(new FpsGraphModule());
         modules.register(new DayCounterModule());
         modules.register(new TargetInfoModule());
+        modules.register(new MouseDisplayModule());
     }
 }

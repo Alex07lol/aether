@@ -409,6 +409,7 @@ ported, with the reason.
 | module enabled + settings | the module instance | screens, bridges (`setSetting*` helpers), registry config apply | every consumer |
 | HUD geometry | `HudLayout`/`HudElement` | HUD editor screen, config apply | `ForgeHudRenderer` |
 | camera (freelook) | `FreelookView` | `ForgeClientEventBridge` (per frame, from `MixinFeatures.Mouse`) | `CameraSetup` event |
+| per-frame mouse delta (HUD) | `ForgeClientEventBridge.frameDeltaX/Y` | the same single drain as the camera, in `onCameraSetup` | Mouse Display widget via `frameMouseDelta()` |
 | zoom | `MixinFeatures.EntityRenderer` | bridge sets target; mixin animates per frame | `getFOVModifier` mixin |
 | hurt shake / hit tint / time / weather | `MixinFeatures` | bridge per tick | the owning mixin |
 | animation scalars | the renderer/bridge that draws them | `FrameClock` + `Anim.update()` | the same class |
