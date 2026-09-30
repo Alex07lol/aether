@@ -16,14 +16,15 @@ import dev.aether.hud.HudElement;
 import dev.aether.ui.GuiSection;
 
 /**
- * The HUD editor inside the shared shell - the logic of the previous
- * {@code AetherHudEditorScreen} (drag with magnetic snapping, wheel scaling,
- * shift-wheel opacity, reset) ported onto the new base screen. Element coordinates
- * stay in GUI-scale pixels, because that is the space {@link ForgeHudRenderer} draws
- * in; the base screen's design-unit mouse is converted at the boundary.
+ * The HUD editor, adapting Leaf Client's {@code ModPosSettings} interaction model
+ * (drag to move, scroll to scale, a modifier for opacity, reset, save on exit - see
+ * docs/GUI_REBUILD.md) onto Aether's HUD system, inside the shared Leaf composition.
+ * Element coordinates stay in GUI-scale pixels, because that is the space
+ * {@link ForgeHudRenderer} draws in; the base screen's design-unit mouse is converted
+ * at the boundary.
  * <p>
  * Positions are written straight to {@code HudLayout} and persisted with the next
- * client save, so an edited layout now survives a restart.
+ * client save, so an edited layout survives a restart.
  */
 public final class AetherHudEditorScreen extends AetherGuiScreen {
 
@@ -36,6 +37,7 @@ public final class AetherHudEditorScreen extends AetherGuiScreen {
 
     private final ForgeHudRenderer renderer = new ForgeHudRenderer(client);
     private final Map<String, Dimension> elementDimensions = new HashMap<String, Dimension>();
+    private boolean dimensionsCalculated;
 
     private HudElement selectedElement;
     private HudElement draggingElement;
@@ -57,26 +59,6 @@ public final class AetherHudEditorScreen extends AetherGuiScreen {
         return GuiSection.HUD;
     }
 
-    @Override
-    protected String title() {
-        return "HUD Editor";
-    }
-
-    @Override
-    protected dev.aether.gui.components.TextField searchField() {
-        return null;
-    }
-
-    @Override
-    protected String footerHint() {
-        return "[Drag] Move  |  [Scroll] Scale  |  [Shift+Scroll] Opacity  |  [R] Reset  |  [ESC] Save & Exit";
-    }
-
-    @Override
-    protected void layout(double contentX, double contentY, double contentW, double contentH) {
-        calculateDimensions();
-    }
-
     private void calculateDimensions() {
         elementDimensions.clear();
         Object font = Mc189Compat.screenFontRenderer(this);
@@ -93,6 +75,10 @@ public final class AetherHudEditorScreen extends AetherGuiScreen {
 
     @Override
     protected void renderContent(double mx, double my) {
+        if (!dimensionsCalculated) {
+            dimensionsCalculated = true;
+            calculateDimensions();
+        }
         int mouseX = GuiScale.x(mx);
         int mouseY = GuiScale.y(my);
         int w = GuiScale.guiWidth();
@@ -153,6 +139,13 @@ public final class AetherHudEditorScreen extends AetherGuiScreen {
         if (selectedElement != null) {
             drawFloatingControlBar(selectedElement, mouseX, mouseY);
         }
+
+        String help = "[Drag] Move  |  [Scroll] Scale  |  [Shift+Scroll] Opacity  |  [R] Reset  |  [ESC] Save & Exit";
+        int textW = dev.aether.gui.AetherFont.width(dev.aether.gui.AetherFont.Size.SMALL, help);
+        Mc189Compat.drawRoundedRectangle((w - textW - 16) / 2, h - 30, textW + 16, 20, 3,
+            AetherUi.withAlpha(AetherUi.PANEL, 0xDD), 0);
+        dev.aether.gui.AetherFont.draw(dev.aether.gui.AetherFont.Size.SMALL, help,
+            (w - textW - 16) / 2 + 8, h - 26, AetherUi.ACCENT);
     }
 
     private void drawHandle(int x, int y) {

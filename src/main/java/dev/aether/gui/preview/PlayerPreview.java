@@ -14,9 +14,6 @@ import dev.aether.cosmetic.CosmeticAsset;
 import dev.aether.cosmetic.CosmeticType;
 import dev.aether.forge189.AetherUi;
 import dev.aether.forge189.Mc189Compat;
-import dev.aether.gui.AetherFont;
-import dev.aether.gui.GuiScale;
-import dev.aether.gui.core.UiComponent;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.OpenGlHelper;
@@ -30,35 +27,32 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.util.ResourceLocation;
 
 /**
- * The large rotating player preview of the cosmetics screen, the equivalent of Leaf
- * Client's {@code GuiInventory.drawEntityOnScreen} preview in CosmeticSettings - with
- * two differences the brief demands: the cosmetic overlay is drawn from Aether's own
- * data model, and every piece of GL state the entity render touches is restored
- * afterwards so nothing leaks into the rest of the GUI (see docs/GUI_REBUILD.md).
+ * The large rotating player preview of the cosmetics screen, ported from Leaf
+ * Client's {@code CosmeticSettings} preview (GPLv3, see docs/GUI_REBUILD.md): the
+ * local player rendered through the render manager at Leaf's position (entity feet at
+ * design (1300, 800), 200 units tall), turning with the mouse the way
+ * {@code GuiInventory.drawEntityOnScreen} turns it - yaw from the horizontal offset
+ * from screen centre, pitch from the clamped vertical offset - with the equipped
+ * cosmetics drawn from Aether's own data model in the same entity space.
  * <p>
- * Interaction: drag rotates the model (yaw free, pitch clamped), the wheel zooms
- * within sane bounds. The preview clips itself with its own scissor and never lets the
- * entity render escape the preview rectangle.
+ * Every piece of GL state the entity render touches is restored afterwards (standard
+ * item lighting, rescale normal, lightmap texture unit, blend), and the render is
+ * clipped to the preview region, so nothing leaks into the rest of the GUI.
  */
-public final class PlayerPreview extends UiComponent {
+public final class PlayerPreview {
 
+    private static final int CENTER_X = 1300;
+    private static final int FEET_Y = 800;
+    private static final int SCALE = 200;
     private static final float PITCH_LIMIT = 30.0F;
-    private static final int ZOOM_MIN = 45;
-    private static final int ZOOM_MAX = 110;
 
     private final AetherClient client;
 
-    /** Horizontal rotation in degrees, accumulated while dragging. */
-    private float yaw = 25.0F;
+    /** Mouse offset from the screen centre in design units (Leaf's raw inputs). */
+    private double lookX;
+    private double lookY;
     /** Vertical tilt in degrees, clamped. */
     private float pitch = 8.0F;
-    /** GUI pixels per model unit. */
-    private int zoom = 70;
-
-    private boolean dragging;
-    private double lastDragX;
-    private double lastDragY;
-    private boolean hover;
 
     /** Uploaded textures for imported cape PNGs, keyed by asset id. */
     private final Map<String, ResourceLocation> textureCache = new HashMap<String, ResourceLocation>();
@@ -67,29 +61,32 @@ public final class PlayerPreview extends UiComponent {
         this.client = client;
     }
 
-    @Override
+    /** Feeds the preview the mouse offset from the screen centre (Leaf's model). */
+    public void setMouseLook(double dxFromCenter, double clampedDyFromCenter) {
+        this.lookX = dxFromCenter;
+        this.lookY = clampedDyFromCenter;
+    }
+
     public void render() {
-        int left = gx();
-        int top = gy();
-        int w = gw();
-        int h = gh();
-
-        AetherUi.drawRoundRect(left, top, left + w, top + h, GuiScale.h(10), AetherUi.withAlpha(AetherUi.PANEL, 0x88));
-        AetherUi.outline(left, top, left + w, top + h, AetherUi.withAlpha(AetherUi.PANEL_EDGE, 0x3C));
-
         EntityPlayer player = Minecraft.getMinecraft().thePlayer;
-        if (player == null) {
-            AetherFont.drawCentered(AetherFont.Size.SMALL, "Preview available in game",
-                left, top + h / 2 - AetherFont.height(AetherFont.Size.SMALL) / 2, w, AetherUi.TEXT_DISABLED);
-            return;
-        }
+        int centerX = dev.aether.gui.GuiScale.x(CENTER_X);
+        int feetY = dev.aether.gui.GuiScale.y(FEET_Y);
+        int zoomGui = dev.aether.gui.GuiScale.w(SCALE);
 
-        int centerX = left + w / 2;
-        int feetY = top + h - GuiScale.h(18);
-        int zoomGui = GuiScale.w(zoom);
-
-        Mc189Compat.pushScissor(left + 2, top + 2, Math.max(4, w - 4), Math.max(4, h - 4));
+        // Clip generously around the standing figure so a tall animation cannot paint
+        // over the list, while the rectangle itself stays invisible (Leaf has no frame).
+        int clipX = centerX - zoomGui;
+        int clipY = feetY - (int) (2.4D * zoomGui);
+        int clipW = zoomGui * 2;
+        int clipH = (int) (2.4D * zoomGui) + dev.aether.gui.GuiScale.h(20);
+        Mc189Compat.pushScissor(Math.max(0, clipX), Math.max(0, clipY), clipW, clipH);
         try {
+            if (player == null) {
+                dev.aether.gui.AetherFont.drawCentered(dev.aether.gui.AetherFont.Size.SMALL, "Preview available in game",
+                    centerX - dev.aether.gui.GuiScale.w(200), feetY - dev.aether.gui.GuiScale.h(180),
+                    dev.aether.gui.GuiScale.w(400), AetherUi.TEXT_DISABLED);
+                return;
+            }
             drawPlayer(centerX, feetY, zoomGui, player);
             drawCosmetics(centerX, feetY, zoomGui);
         } finally {
@@ -99,9 +96,9 @@ public final class PlayerPreview extends UiComponent {
 
     /**
      * The entity render, following the state sequence of the vanilla
-     * {@code GuiInventory.drawEntityOnScreen}: depth on, matrix pushed, entity rendered
-     * through the render manager, then the full teardown (standard item lighting,
-     * rescale normal, lightmap texture unit) so the surrounding GUI keeps its state.
+     * {@code GuiInventory.drawEntityOnScreen}: depth on, matrix pushed, the yaw and
+     * pitch derived from the mouse exactly as vanilla derives them from its
+     * {@code mouseDX}/{@code mouseDY} arguments, then the full teardown.
      */
     private void drawPlayer(int centerX, int feetY, int zoomGui, EntityPlayer player) {
         Mc189Compat.color(1.0F, 1.0F, 1.0F, 1.0F);
@@ -114,14 +111,17 @@ public final class PlayerPreview extends UiComponent {
         GL11.glScalef(-zoomGui, zoomGui, zoomGui);
         GL11.glRotatef(180.0F, 0.0F, 0.0F, 1.0F);
 
+        float yaw = (float) (Math.atan(lookX / 40.0D) * 40.0D);
+        float bodyPitch = -(float) (Math.atan(lookY / 40.0D) * 20.0D);
+
         float yawOffset = player.renderYawOffset;
         float bodyYaw = player.rotationYaw;
-        float bodyPitch = player.rotationPitch;
+        float oldPitch = player.rotationPitch;
         float prevHeadYaw = player.prevRotationYawHead;
         float headYaw = player.rotationYawHead;
         player.renderYawOffset = yaw;
         player.rotationYaw = yaw;
-        player.rotationPitch = pitch;
+        player.rotationPitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, bodyPitch));
         player.rotationYawHead = yaw;
         player.prevRotationYawHead = yaw;
 
@@ -133,7 +133,7 @@ public final class PlayerPreview extends UiComponent {
 
         player.renderYawOffset = yawOffset;
         player.rotationYaw = bodyYaw;
-        player.rotationPitch = bodyPitch;
+        player.rotationPitch = oldPitch;
         player.prevRotationYawHead = prevHeadYaw;
         player.rotationYawHead = headYaw;
 
@@ -163,7 +163,7 @@ public final class PlayerPreview extends UiComponent {
             GL11.glTranslatef(centerX, feetY, 120.0F);
             GL11.glScalef(-zoomGui, zoomGui, zoomGui);
             GL11.glRotatef(180.0F, 0.0F, 0.0F, 1.0F);
-            GL11.glRotatef(yaw, 0.0F, -1.0F, 0.0F);
+            GL11.glRotatef((float) (Math.atan(lookX / 40.0D) * 40.0D), 0.0F, -1.0F, 0.0F);
 
             Mc189Compat.disableLighting();
             Mc189Compat.enableBlend();
@@ -270,12 +270,10 @@ public final class PlayerPreview extends UiComponent {
         Tessellator tessellator = Tessellator.getInstance();
         WorldRenderer renderer = tessellator.getWorldRenderer();
         renderer.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_COLOR);
-        // crown: one vertical face facing the viewer
         vertex(renderer, -half, headTop, half, color);
         vertex(renderer, half, headTop, half, color);
         vertex(renderer, half, headTop + 0.14D, half, color);
         vertex(renderer, -half, headTop + 0.14D, half, color);
-        // brim toward the face
         vertex(renderer, -half, headTop + 0.02D, half, brim);
         vertex(renderer, half, headTop + 0.02D, half, brim);
         vertex(renderer, half, headTop + 0.06D, brimZ, brim);
@@ -312,48 +310,40 @@ public final class PlayerPreview extends UiComponent {
         }
     }
 
-    /* ── interaction ────────────────────────────────────────────────────── */
+    /**
+     * A GL texture uploaded from an image, owned by the texture manager under an
+     * Aether-namespaced location. Shared by the preview and the colour chart's
+     * generated palette.
+     */
+    public static final class TextureHandle {
+        private final ResourceLocation location;
+        private final int glId;
 
-    @Override
-    public void onMouseMove(double mx, double my) {
-        hover = contains(mx, my);
-        if (dragging) {
-            yaw = (float) ((yaw + (mx - lastDragX) * 0.55D) % 360.0D);
-            pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT,
-                (float) (pitch - (my - lastDragY) * 0.35D)));
-            lastDragX = mx;
-            lastDragY = my;
+        TextureHandle(ResourceLocation location, int glId) {
+            this.location = location;
+            this.glId = glId;
+        }
+
+        public int glId() {
+            return glId;
         }
     }
 
-    @Override
-    public boolean onMouseClick(double mx, double my, int button) {
-        if (button != 0 || !contains(mx, my)) {
-            return false;
+    /** Uploads an image as a texture the GUI can bind, once per caller-managed key. */
+    public static TextureHandle uploadTexture(BufferedImage image) {
+        if (image == null) {
+            return null;
         }
-        dragging = true;
-        lastDragX = mx;
-        lastDragY = my;
-        return true;
-    }
-
-    @Override
-    public void onMouseRelease(double mx, double my, int button) {
-        if (button == 0) {
-            dragging = false;
+        try {
+            DynamicTexture texture = new DynamicTexture(image);
+            ResourceLocation location = Minecraft.getMinecraft().getTextureManager()
+                .getDynamicTextureLocation("aether-gui", texture);
+            return new TextureHandle(location, texture.getGlTextureId());
+        } catch (Throwable failed) {
+            return null;
         }
     }
 
-    @Override
-    public boolean onWheel(double mx, double my, int delta) {
-        if (!contains(mx, my)) {
-            return false;
-        }
-        zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom + delta * 4));
-        return true;
-    }
-
-    @Override
     public void dispose() {
         textureCache.clear();
     }

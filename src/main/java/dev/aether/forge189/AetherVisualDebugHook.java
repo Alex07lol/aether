@@ -121,7 +121,7 @@ public final class AetherVisualDebugHook {
 
             case SCROLL_MODULES:
                 if (--settleTicks <= 0 && mc.currentScreen instanceof AetherModScreen) {
-                    ((AetherModScreen) mc.currentScreen).debugScrollTo(220.0D);
+                    ((AetherModScreen) mc.currentScreen).debugNextPage();
                     step = Step.SHOOT_SCROLLED;
                     settleTicks = 15;
                 }
@@ -137,7 +137,7 @@ public final class AetherVisualDebugHook {
                 break;
 
             case SHOOT_MODULE_SETTINGS:
-                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherModScreen) {
+                if (--settleTicks <= 0 && mc.currentScreen instanceof dev.aether.gui.screens.AetherModuleSettingsScreen) {
                     shoot(mc, "debug-aether-module-settings");
                     open(mc, AetherGui.cosmetics(client), Step.SHOOT_COSMETICS);
                 }
@@ -186,6 +186,15 @@ public final class AetherVisualDebugHook {
                     // Let the terrain finish its initial upload burst before opening the
                     // GUI over the world - chunk uploads at first join are flaky here.
                     if (--settleTicks <= 0) {
+                        // Park the cursor right of centre so the preview turns and the
+                        // equipped cape (worn on the back) comes into view, like a real
+                        // user would see by moving the mouse.
+                        try {
+                            org.lwjgl.input.Mouse.setCursorPosition(
+                                Display.getX() + Display.getWidth() / 2 + 300,
+                                Display.getY() + Display.getHeight() / 2 - 40);
+                        } catch (Throwable ignored) {
+                        }
                         open(mc, AetherGui.cosmetics(client), Step.SHOOT_PREVIEW);
                     }
                 } else if (--settleTicks <= 0) {

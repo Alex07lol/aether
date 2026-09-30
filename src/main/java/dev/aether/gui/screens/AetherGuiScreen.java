@@ -1,53 +1,45 @@
 package dev.aether.gui.screens;
 
 import dev.aether.AetherClient;
-import dev.aether.config.ClientPreferences;
-import dev.aether.forge189.AetherFontDiagScreen;
 import dev.aether.forge189.AetherUi;
 import dev.aether.forge189.Mc189Compat;
 import dev.aether.gui.AetherFont;
 import dev.aether.gui.GuiScale;
-import dev.aether.gui.components.TextField;
-import dev.aether.gui.core.ScreenShell;
-import dev.aether.ui.GuiSection;
+import dev.aether.gui.leaf.NavButton;
 import dev.aether.module.ClientModule.ModuleState;
 import dev.aether.module.setting.Setting;
+import dev.aether.ui.GuiSection;
 import net.minecraft.client.gui.GuiScreen;
 
 import java.io.IOException;
 
 /**
- * Base class of the four Aether GUI screens. It owns everything the screens share -
- * the shell chrome, the design-space mouse coordinates, the blur toggle, the save path
- * and the input routing order - so a screen only implements its content.
+ * Base class of the Aether GUI screens, carrying the shared Leaf 1.8.9 composition
+ * (see docs/GUI_REBUILD.md): a fullscreen dark backdrop with the Aether logo top-left
+ * and the four navigation tiles at Leaf's exact positions (170x106 at x = 430, 650,
+ * 1100, 1320, y = 250), with each screen drawing its content underneath.
  * <p>
- * Input routing order (the hierarchy the brief demands):
- * <ol>
- *   <li>the shell: navigation tabs and the search field;</li>
- *   <li>the screen's content, which decides among its own components;</li>
- *   <li>nothing else - a click that no component wanted is dropped, never passed
- *       through to whatever happens to be underneath.</li>
- * </ol>
- * Keyboard input goes to the focused control first (search field), then to the
- * content, then to ESC. ESC closes a panel or defocuses a field before it closes the
- * screen.
- * <p>
- * Screens are swapped (not re-laid-out in place) when the section changes, and every
- * durable value lives in the client's managers, so a fresh screen instance always
- * shows correct state without carrying any over.
+ * Kept from Aether's previous layer because they are objectively better than Leaf's
+ * equivalents: the centralized {@link GuiScale} conversion, the GL-state discipline of
+ * {@code Mc189Compat}, and screens as pure presentation over the client's managers.
  */
 public abstract class AetherGuiScreen extends GuiScreen {
 
+    /** Leaf's navigation tile geometry, in design units. */
+    protected static final int[] NAV_X = {430, 650, 1100, 1320};
+    protected static final int NAV_Y = 250;
+    protected static final int NAV_W = 170;
+    protected static final int NAV_H = 106;
+
     protected final AetherClient client;
     protected final GuiScreen parent;
-    protected final ScreenShell shell = new ScreenShell();
 
     /** Mouse position in design units, refreshed at the top of every frame. */
     protected double mouseX;
     protected double mouseY;
 
     private boolean blurLoaded;
-    private double lastLayoutWidth = -1.0D;
+    private NavButton[] nav;
 
     protected AetherGuiScreen(AetherClient client) {
         this(client, null);
@@ -56,70 +48,46 @@ public abstract class AetherGuiScreen extends GuiScreen {
     protected AetherGuiScreen(AetherClient client, GuiScreen parent) {
         this.client = client;
         this.parent = parent;
+        buildNav();
     }
 
     /* ── screen contract ────────────────────────────────────────────────── */
 
-    /** The section this screen shows; drives the highlighted navigation tab. */
+    /** The section this screen shows; drives the highlighted navigation tile. */
     protected abstract GuiSection section();
 
-    /** Title shown next to the branding; null for no title. */
-    protected abstract String title();
-
-    /**
-     * The search field shown in the header, or null. The shell renders it and consumes
-     * clicks on it; the screen wires its change callback to its own filtering.
-     */
-    protected abstract TextField searchField();
-
-    /**
-     * (Re)builds the screen's content geometry. Called on open, on window resize and
-     * whenever the design canvas width changes (aspect ratio change). Coordinates are
-     * design units of the content area.
-     */
-    protected abstract void layout(double contentX, double contentY, double contentW, double contentH);
-
-    /** Draws the content inside the panel. Mouse coordinates are design units. */
+    /** Draws the screen's content under the chrome. Mouse is in design units. */
     protected abstract void renderContent(double mx, double my);
 
     /**
-     * A click the shell did not consume.
+     * A click the navigation did not consume.
      *
      * @return true when the content consumed the click
      */
     protected abstract boolean clickContent(double mx, double my, int button);
 
-    /** A mouse button was released; delivered whether or not the press hit anything. */
+    /** A mouse button was released. */
     protected abstract void releaseContent(double mx, double my, int button);
 
-    /**
-     * A key the search field did not consume. Returning true consumes the key.
-     * ESC never reaches here; the base screen handles it.
-     */
-    protected abstract boolean keyContent(char typedChar, int keyCode);
-
-    /**
-     * The wheel turned over the content.
-     *
-     * @return true when the content consumed the wheel delta
-     */
-    protected abstract boolean wheelContent(double mx, double my, int delta);
-
-    /** Hint line for the footer's left side; null or empty for none. */
-    protected String footerHint() {
-        return "Right Shift: close";
+    /** A key the screen may consume; ESC never reaches here. */
+    protected boolean keyContent(char typedChar, int keyCode) {
+        return false;
     }
 
-    /** Releases content resources before the screen object is dropped. */
+    /** The wheel turned. */
+    protected boolean wheelContent(double mx, double my, int delta) {
+        return false;
+    }
+
+    /** Screens without the standard navigation row (the module settings screen). */
+    protected boolean showsNav() {
+        return true;
+    }
+
     protected void disposeContent() {
     }
 
     /* ── lifecycle ──────────────────────────────────────────────────────── */
-
-    @Override
-    public void initGui() {
-        relayout();
-    }
 
     @Override
     public void onGuiClosed() {
@@ -138,18 +106,18 @@ public abstract class AetherGuiScreen extends GuiScreen {
         return false;
     }
 
-    /** Rebuilds chrome geometry and asks the screen to lay its content out again. */
-    protected void relayout() {
-        relayout(true);
-    }
-
-    private void relayout(boolean force) {
-        GuiScale.update(width, height);
-        shell.layout();
-        double designW = GuiScale.designWidth();
-        if (force || designW != lastLayoutWidth) {
-            lastLayoutWidth = designW;
-            layout(shell.contentX, shell.contentY, shell.contentW, shell.contentH);
+    private void buildNav() {
+        GuiSection[] sections = GuiSection.ordered();
+        nav = new NavButton[sections.length];
+        for (int i = 0; i < sections.length; i++) {
+            final GuiSection target = sections[i];
+            nav[i] = new NavButton(target.label(), NAV_X[i], NAV_Y, NAV_W, NAV_H, new Runnable() {
+                public void run() {
+                    if (target != section()) {
+                        switchSection(target);
+                    }
+                }
+            });
         }
     }
 
@@ -162,14 +130,30 @@ public abstract class AetherGuiScreen extends GuiScreen {
         syncBlur();
         mouseX = GuiScale.mouseX(rawMouseX);
         mouseY = GuiScale.mouseY(rawMouseY);
-        if (Math.round(GuiScale.designWidth()) != Math.round(lastLayoutWidth)) {
-            relayout();
-        }
 
-        shell.render(section(), title(), searchField(), mouseX, mouseY);
+        drawBackdrop();
+        drawBranding();
+        if (showsNav()) {
+            for (int i = 0; i < nav.length; i++) {
+                nav[i].setActive(GuiSection.ordered()[i] == section());
+                nav[i].render();
+            }
+        }
         renderContent(mouseX, mouseY);
-        shell.drawHint(footerHint());
         Mc189Compat.color(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
+    private void drawBackdrop() {
+        int w = GuiScale.guiWidth();
+        int h = GuiScale.guiHeight();
+        Mc189Compat.drawGradientRectangle(0, 0, w, h / 2, AetherUi.SCRIM_TOP, AetherUi.blend(AetherUi.SCRIM_TOP, AetherUi.SCRIM_BOTTOM, 0.5F));
+        Mc189Compat.drawGradientRectangle(0, h / 2, w, h - h / 2,
+            AetherUi.blend(AetherUi.SCRIM_TOP, AetherUi.SCRIM_BOTTOM, 0.5F), AetherUi.SCRIM_BOTTOM);
+    }
+
+    private void drawBranding() {
+        Mc189Compat.drawTexture("aetherlogo.png", GuiScale.x(52), GuiScale.y(48), GuiScale.h(64), GuiScale.h(64));
+        AetherFont.drawShadowed(AetherFont.Size.TITLE, "AETHER", GuiScale.x(130), GuiScale.y(62), AetherUi.ACCENT);
     }
 
     private void syncTheme() {
@@ -189,7 +173,6 @@ public abstract class AetherGuiScreen extends GuiScreen {
                 Mc189Compat.stopShader();
             }
         } catch (Throwable ignored) {
-            // A missing or unsupported shader must never take the GUI down with it.
         }
     }
 
@@ -199,16 +182,12 @@ public abstract class AetherGuiScreen extends GuiScreen {
     protected void mouseClicked(int rawX, int rawY, int button) throws IOException {
         double mx = GuiScale.mouseX(rawX);
         double my = GuiScale.mouseY(rawY);
-        TextField search = searchField();
-        if (shell.click(mx, my, button, section(), search, new ScreenShell.Navigator() {
-            public void navigateTo(GuiSection target) {
-                switchSection(target);
+        if (showsNav()) {
+            for (NavButton tile : nav) {
+                if (tile.onMouseClick(mx, my, button)) {
+                    return;
+                }
             }
-        })) {
-            return;
-        }
-        if (search != null) {
-            search.clickOutside();
         }
         clickContent(mx, my, button);
     }
@@ -216,12 +195,6 @@ public abstract class AetherGuiScreen extends GuiScreen {
     @Override
     protected void mouseReleased(int rawX, int rawY, int button) {
         releaseContent(GuiScale.mouseX(rawX), GuiScale.mouseY(rawY), button);
-    }
-
-    @Override
-    protected void mouseClickMove(int rawX, int rawY, int button, long timeSinceLastClick) {
-        // Drags are driven by onMouseMove inside the components; nothing to do here
-        // because the base screen already forwards motion every frame in drawScreen.
     }
 
     @Override
@@ -240,20 +213,7 @@ public abstract class AetherGuiScreen extends GuiScreen {
     @Override
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
         if (keyCode == 1) { // ESC
-            if (handleEscape()) {
-                return;
-            }
-            Mc189Compat.displayGuiScreen(parent);
-            return;
-        }
-        TextField search = searchField();
-        if (search != null && search.isFocused()) {
-            if (search.onKeyTyped(typedChar, keyCode)) {
-                return;
-            }
-        }
-        if (keyCode == 67 && search != null && !search.isFocused()) { // F9: glyph diagnostic
-            Mc189Compat.displayGuiScreen(new AetherFontDiagScreen(client, this));
+            Mc189Compat.displayGuiScreen(escapeScreen());
             return;
         }
         if (keyContent(typedChar, keyCode)) {
@@ -262,27 +222,12 @@ public abstract class AetherGuiScreen extends GuiScreen {
         super.keyTyped(typedChar, keyCode);
     }
 
-    /**
-     * ESC handling before the screen closes: defocus the search field first, then let
-     * the content close an open panel.
-     *
-     * @return true when ESC was consumed
-     */
-    protected boolean handleEscape() {
-        TextField search = searchField();
-        if (search != null && search.isFocused()) {
-            search.setFocused(false);
-            return true;
-        }
-        return keyContent('\0', 1);
+    /** The screen ESC returns to; screens with a home flow override this. */
+    protected GuiScreen escapeScreen() {
+        return parent;
     }
 
-    /** Switches to another section of the GUI. */
     protected void switchSection(GuiSection target) {
-        if (target == section()) {
-            return;
-        }
-        client.preferences().setOpenSection(target.label());
         saveQuietly();
         dev.aether.gui.AetherGui.open(client, target);
     }
@@ -297,20 +242,6 @@ public abstract class AetherGuiScreen extends GuiScreen {
         }
     }
 
-    protected int settingNumber(String moduleId, String settingId, int fallback) {
-        try {
-            for (Setting<?> setting : client.modules().get(moduleId).settings()) {
-                if (settingId.equals(setting.id()) && setting.value() instanceof Number) {
-                    return ((Number) setting.value()).intValue();
-                }
-            }
-        } catch (IllegalArgumentException exception) {
-            return fallback;
-        }
-        return fallback;
-    }
-
-    /** Persists through the one save path; a locked file never breaks the GUI. */
     protected void saveQuietly() {
         try {
             client.save();
@@ -319,23 +250,8 @@ public abstract class AetherGuiScreen extends GuiScreen {
         }
     }
 
-    /** The saved preference for which section opens first. */
-    protected static GuiSection preferredSection(AetherClient client) {
-        return GuiSection.fromLabel(client.preferences().openSection(), GuiSection.MODULES);
-    }
-
-    /** Small helper for screens that draw a section heading inside their content. */
-    protected void drawSectionHeading(String text, double x, double y) {
-        AetherFont.draw(AetherFont.Size.SECTION, text, GuiScale.x(x), GuiScale.y(y), AetherUi.TEXT_PRIMARY);
-    }
-
-    /** Readable accessor for the tooltip preference, used by rows with descriptions. */
-    protected boolean tooltipsShown() {
-        return client.preferences().showTooltips();
-    }
-
-    /** Readable accessor mirroring {@link ClientPreferences#saveOnClose()}. */
-    protected boolean saveOnClose() {
-        return client.preferences().saveOnClose();
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    protected static void setValue(Setting<?> setting, Object value) {
+        ((Setting) setting).setValue(value);
     }
 }

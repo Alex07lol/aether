@@ -1058,6 +1058,36 @@ public final class Mc189Compat {
         color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
+    /**
+     * Draws the currently bound texture stretched over the given GUI-space rectangle
+     * (the custom-sized-texture pattern, for callers that bind their own GL texture -
+     * the GUI's generated palette, for instance). Restores the blend/colour state
+     * afterwards like every other draw helper here.
+     */
+    public static void drawTextureQuad(int x, int y, int width, int height) {
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        enableTexture2D();
+        enableBlend();
+        tryBlendFuncSeparate(770, 771, 1, 0);
+        color(1.0F, 1.0F, 1.0F, 1.0F);
+        try {
+            Tessellator tessellator = getTessellator();
+            WorldRenderer worldRenderer = tessellator.getWorldRenderer();
+            worldRenderer.begin(7, DefaultVertexFormats.POSITION_TEX);
+            worldRenderer.pos(x, y + height, 0.0D).tex(0.0D, 1.0D).endVertex();
+            worldRenderer.pos(x + width, y + height, 0.0D).tex(1.0D, 1.0D).endVertex();
+            worldRenderer.pos(x + width, y, 0.0D).tex(1.0D, 0.0D).endVertex();
+            worldRenderer.pos(x, y, 0.0D).tex(0.0D, 0.0D).endVertex();
+            tessellator.draw();
+        } finally {
+            enableTexture2D();
+            disableBlend();
+            color(1.0F, 1.0F, 1.0F, 1.0F);
+        }
+    }
+
     public static void drawTexture(String path, int x, int y, int width, int height) {
         if (path == null || path.length() == 0 || width <= 0 || height <= 0) {
             return;

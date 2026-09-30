@@ -7,6 +7,7 @@ import dev.aether.gui.screens.AetherClientSettingsScreen;
 import dev.aether.gui.screens.AetherCosmeticScreen;
 import dev.aether.gui.screens.AetherHudEditorScreen;
 import dev.aether.gui.screens.AetherModScreen;
+import dev.aether.gui.screens.AetherModuleSettingsScreen;
 
 /**
  * Entry points of the Aether GUI: the factory that opens a section and the one place
@@ -49,6 +50,11 @@ public final class AetherGui {
 
     public static AetherClientSettingsScreen settings(AetherClient client) {
         return new AetherClientSettingsScreen(client);
+    }
+
+    /** One module's configuration screen (Leaf's ModDetailSettings role). */
+    public static AetherModuleSettingsScreen moduleSettings(AetherClient client, String moduleId) {
+        return AetherModuleSettingsScreen.forModule(client, moduleId);
     }
 
     public static dev.aether.gui.screens.AetherGuiScreen create(AetherClient client, GuiSection section) {
