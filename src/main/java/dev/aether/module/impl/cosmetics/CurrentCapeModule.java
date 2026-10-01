@@ -3,6 +3,7 @@ package dev.aether.module.impl.cosmetics;
 import dev.aether.module.AbstractModule;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleMetadata;
+import dev.aether.module.ModuleKind;
 
 /**
  * Wears the selected cape. The Forge renderer draws it as a waving cloth behind the player,
@@ -14,6 +15,7 @@ public class CurrentCapeModule extends AbstractModule {
     public CurrentCapeModule() {
         super(ModuleMetadata.builder(ID, "Cape")
             .category(ModuleCategory.COSMETICS)
+            .kind(ModuleKind.COSMETIC_SERVICE)
             .description("Wears the selected cape in world.")
             .build());
         addNumber("opacity", "Opacity", 90, 0, 100, 5);

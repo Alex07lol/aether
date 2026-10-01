@@ -2,7 +2,6 @@ package dev.aether.module.builtin;
 
 import dev.aether.module.ModuleRegistry;
 import dev.aether.module.impl.cosmetics.CapePreviewModule;
-import dev.aether.module.impl.cosmetics.CosmeticManagerModule;
 import dev.aether.module.impl.cosmetics.CurrentCapeModule;
 import dev.aether.module.impl.cosmetics.CurrentHaloModule;
 import dev.aether.module.impl.cosmetics.CurrentHatModule;
@@ -16,7 +15,6 @@ final class CosmeticModules {
     }
 
     static void register(ModuleRegistry modules) {
-        modules.register(new CosmeticManagerModule());
         modules.register(new PlayerPreviewModule());
         modules.register(new CurrentCapeModule());
         modules.register(new CurrentWingsModule());

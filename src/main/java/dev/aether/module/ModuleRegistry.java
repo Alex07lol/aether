@@ -5,6 +5,7 @@ import dev.aether.fairplay.FairPlayPolicy;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleState;
 import dev.aether.module.setting.Setting;
+import dev.aether.theme.ThemeModule;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,6 +27,12 @@ public final class ModuleRegistry {
         if (modules.containsKey(id)) {
             throw new IllegalArgumentException("Duplicate module id: " + id);
         }
+        // A palette cannot be listed as a feature. The registry is where that rule is enforced, so a
+        // new theme module that forgets its kind fails the build's tests instead of appearing in the
+        // module browser as a switch that changes nothing a player can point at.
+        if (module instanceof ThemeModule && module.metadata().kind() != ModuleKind.THEME) {
+            throw new IllegalArgumentException("Theme module " + id + " must declare ModuleKind.THEME.");
+        }
         modules.put(id, module);
     }
 
@@ -39,6 +46,50 @@ public final class ModuleRegistry {
 
     public List<ClientModule> all() {
         return Collections.unmodifiableList(new ArrayList<ClientModule>(modules.values()));
+    }
+
+    /**
+     * The modules the browser, the module search and the click deck may show: the features a player
+     * can switch on, in registration order. The registry is the only place that decides this -
+     * screens never test a module's name, category or class to hide it.
+     */
+    public List<ClientModule> userVisible() {
+        List<ClientModule> result = new ArrayList<ClientModule>();
+        for (ClientModule module : modules.values()) {
+            if (module.metadata().userFacing()) {
+                result.add(module);
+            }
+        }
+        return Collections.unmodifiableList(result);
+    }
+
+    /** @return every registered entry of one kind, in registration order. */
+    public List<ClientModule> byKind(ModuleKind kind) {
+        List<ClientModule> result = new ArrayList<ClientModule>();
+        for (ClientModule module : modules.values()) {
+            if (module.metadata().kind() == kind) {
+                result.add(module);
+            }
+        }
+        return Collections.unmodifiableList(result);
+    }
+
+    /**
+     * @return the categories that at least one user-facing module belongs to, in
+     *         {@link ModuleCategory} declaration order. A category whose only members are themes or
+     *         cosmetic slots disappears from the filter with them.
+     */
+    public List<ModuleCategory> userVisibleCategories() {
+        List<ModuleCategory> result = new ArrayList<ModuleCategory>();
+        for (ModuleCategory category : ModuleCategory.values()) {
+            for (ClientModule module : modules.values()) {
+                if (module.metadata().userFacing() && module.metadata().category() == category) {
+                    result.add(category);
+                    break;
+                }
+            }
+        }
+        return Collections.unmodifiableList(result);
     }
 
     public List<ClientModule> byCategory(ModuleCategory category) {

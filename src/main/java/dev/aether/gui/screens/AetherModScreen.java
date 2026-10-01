@@ -5,50 +5,64 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-import dev.aether.gui.leaf.ModuleCard;
-import dev.aether.gui.leaf.PageBar;
-import dev.aether.gui.leaf.SelectButton;
 import dev.aether.forge189.Mc189Compat;
+import dev.aether.gui.AetherFont;
+import dev.aether.gui.GuiScale;
+import dev.aether.gui.components.ChipBar;
+import dev.aether.gui.components.ModuleRow;
+import dev.aether.gui.components.ScrollView;
+import dev.aether.gui.components.SearchBox;
 import dev.aether.module.ClientModule;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleState;
+import dev.aether.forge189.AetherUi;
 import dev.aether.ui.GuiSection;
 import dev.aether.ui.ModuleSearch;
 
 /**
- * The Modules screen, ported from Leaf Client's {@code ModSettings} (GPLv3, see
- * docs/GUI_REBUILD.md): the four navigation tiles up top, a 4x2 grid of 170x182
- * module cards aligned under them (top half toggles the module, bottom half opens its
- * settings), a 32-wide page scrollbar in the middle gap exactly where Leaf puts it,
- * and a category selector in Leaf's SelectButton shape. The grid pages eight cards at
- * a time, which is Leaf's scrolling behavior.
+ * The Modules screen: every feature the client ships, as a scrolling list of rounded rows.
  * <p>
- * The cards are a presentation layer: enabling/disabling goes through
- * {@code ModuleRegistry}, filtering through the tested {@link ModuleSearch}, and every
- * change persists through the client's save path.
+ * The composition is still Leaf's - its backdrop, its navigation row at the top, everything inside
+ * the measured panel - but the 4x2 grid of 170x182 cards is gone. A card that big fits eight modules
+ * and hides the rest behind pages, and it has room for a name and nothing else; the brief's Glide
+ * reference instead wants a compact row per module with an icon, a name, a one-line description and
+ * the controls on the right, which is also what makes a search field and a category filter useful
+ * rather than decorative.
+ * <p>
+ * The list is built from {@code ModuleRegistry.userVisible()}, so themes, cosmetic slots and screen
+ * launchers never reach it, and the categories come from the same source - a filter for a category
+ * with no features in it is not offered. Sorting, filtering and ranking stay in the tested
+ * {@link ModuleSearch}; this class only lays the results out and animates them.
  */
 public final class AetherModScreen extends AetherGuiScreen {
 
-    /** Leaf's grid geometry: cards sit under the nav tiles, 220 apart vertically. */
-    private static final int GRID_TOP = 400;
-    private static final int GRID_PITCH_Y = 220;
-    private static final int CARDS_PER_PAGE = 8;
+    private static final int LIST_X = 430;
+    private static final int LIST_WIDTH = 1020;
+    private static final int SEARCH_Y = 386;
+    private static final int SEARCH_WIDTH = 360;
+    private static final int FILTER_Y = 388;
+    private static final int LIST_TOP = 442;
+    private static final int LIST_HEIGHT = 424;
 
     private final List<ClientModule> visible = new ArrayList<ClientModule>();
+    private final List<ModuleRow> rows = new ArrayList<ModuleRow>();
+    private final ScrollView scroll = new ScrollView().bounds(LIST_X, LIST_TOP, LIST_WIDTH, LIST_HEIGHT);
+    private final SearchBox search = new SearchBox("Search modules", new Runnable() {
+        public void run() {
+            refresh();
+        }
+    }).place(LIST_X, SEARCH_Y, SEARCH_WIDTH, 40);
+    private final ChipBar filters = new ChipBar(new Runnable() {
+        public void run() {
+            category = categoryAt(filters.selected());
+            refresh();
+        }
+    });
     private ModuleCategory category;
-    private final PageBar pageBar = new PageBar(945, GRID_TOP, 32, 400, CARDS_PER_PAGE, 0);
-    private SelectButton categoryButton;
+    private String lastSignature = "";
 
     public AetherModScreen(dev.aether.AetherClient client) {
         super(client);
-        this.categoryButton = buildCategoryButton();
-        refresh();
-    }
-
-    /** Opens the screen pre-filtered to one category (the theme selector's entry point). */
-    public void focusCategory(ModuleCategory category) {
-        this.category = category;
-        this.categoryButton = buildCategoryButton();
         refresh();
     }
 
@@ -61,70 +75,100 @@ public final class AetherModScreen extends AetherGuiScreen {
 
     @Override
     protected void renderContent(double mx, double my) {
-        for (ModuleCard card : pageCards()) {
-            card.onMouseMove(mx, my);
-            card.render();
+        search.update();
+        filters.update();
+        scroll.update();
+        for (ModuleRow row : rows) {
+            ClientModule module = moduleAt(row.index());
+            if (module != null) {
+                row.setEnabled(module.state() == ModuleState.ENABLED);
+            }
+            row.update();
         }
-        pageBar.render();
-        categoryButton.render();
+
+        search.render();
+        layoutFilters();
+        filters.render();
+
+        double contentMouseY = my + scroll.offset();
+        // Scissor coordinates are GUI-scale pixels, so the design rectangle is converted first.
+        Mc189Compat.pushScissor(GuiScale.x(LIST_X), GuiScale.y(LIST_TOP), GuiScale.w(LIST_WIDTH + 20),
+            GuiScale.h(LIST_HEIGHT));
+        try {
+            for (ModuleRow row : rows) {
+                row.renderOffset(0.0D, -scroll.offset());
+                row.onMouseMove(mx, contentMouseY);
+                row.render();
+            }
+        } finally {
+            Mc189Compat.popScissor();
+        }
+        scroll.render();
+
+        String count = visible.size() + (visible.size() == 1 ? " module" : " modules");
+        AetherFont.draw(AetherFont.Size.CAPTION, count, GuiScale.x(LIST_X + SEARCH_WIDTH + 16),
+            GuiScale.y(SEARCH_Y + 30), AetherUi.TEXT_DISABLED);
     }
 
     @Override
     protected boolean clickContent(double mx, double my, int button) {
-        if (categoryButton.onMouseClick(mx, my, button)) {
+        if (search.onMouseClick(mx, my, button)) {
             return true;
         }
-        for (ModuleCard card : pageCards()) {
-            if (card.onMouseClick(mx, my, button)) {
+        if (filters.onMouseClick(mx, my, button)) {
+            return true;
+        }
+        double contentMouseY = my + scroll.offset();
+        if (scroll.onMouseClick(mx, my, button)) {
+            return true;
+        }
+        for (ModuleRow row : rows) {
+            if (row.onMouseClick(mx, contentMouseY, button)) {
                 return true;
             }
         }
+        search.blur();
         return true; // the backdrop swallows everything else, like Leaf's fullscreen texture
     }
 
     @Override
     protected void releaseContent(double mx, double my, int button) {
-        for (ModuleCard card : pageCards()) {
-            card.onMouseRelease(mx, my, button);
+        double contentMouseY = my + scroll.offset();
+        for (ModuleRow row : rows) {
+            row.onMouseRelease(mx, contentMouseY, button);
         }
+        scroll.onMouseRelease();
+    }
+
+    @Override
+    protected boolean keyContent(char typedChar, int keyCode) {
+        return search.onKeyTyped(typedChar, keyCode);
     }
 
     @Override
     protected boolean wheelContent(double mx, double my, int delta) {
-        // Leaf pages on any wheel movement over the screen.
-        if (delta < 0) {
-            pageBar.onScroll();
-        } else {
-            pageBar.onUnScroll();
-        }
+        // The base screen normalised the direction and applied the user's invert preference.
+        scroll.wheel(delta);
         return true;
+    }
+
+    @Override
+    protected void disposeContent() {
+        for (ModuleRow row : rows) {
+            row.dispose();
+        }
     }
 
     /* ── data ───────────────────────────────────────────────────────────── */
 
-    private SelectButton buildCategoryButton() {
-        ModuleCategory[] options = orderedCategories();
-        List<String> labels = new ArrayList<String>();
-        for (ModuleCategory item : options) {
-            labels.add(item == null ? "All" : displayLabel(item));
-        }
-        String current = category == null ? "All" : displayLabel(category);
-        // Leaf's panel ends at y = 901 and the card grid at y = 802, so the filter sits in the strip
-        // between them instead of hanging off the panel's bottom edge.
-        return new SelectButton("Category", 430, 806, 300, 90, labels, current, new Runnable() {
-            public void run() {
-                String selected = categoryButton.current();
-                category = "All".equals(selected) ? null : ModuleCategory.valueOf(categoryValue(selected));
-                refresh();
-            }
-        });
-    }
-
     private void refresh() {
-        ModuleSearch search = new ModuleSearch();
-        search.source(client.modules().all());
-        search.category(category);
-        List<ClientModule> results = new ArrayList<ClientModule>(search.results());
+        ModuleSearch query = new ModuleSearch();
+        // Only features: the registry owns that decision, so themes, cosmetic slots and the internal
+        // services stay out of the browser however they are registered.
+        query.source(client.modules().userVisible());
+        query.query(search.text());
+        query.category(category);
+        List<ClientModule> results = new ArrayList<ClientModule>(query.results());
         Collections.sort(results, new Comparator<ClientModule>() {
             public int compare(ClientModule a, ClientModule b) {
                 return a.metadata().name().compareToIgnoreCase(b.metadata().name());
@@ -132,87 +176,98 @@ public final class AetherModScreen extends AetherGuiScreen {
         });
         visible.clear();
         visible.addAll(results);
-        pageBar.setListSize(visible.size());
+
+        String signature = category + "|" + search.text() + "|" + visible.size();
+        boolean animated = !signature.equals(lastSignature);
+        lastSignature = signature;
+
+        syncFilters();
+        rebuildRows(animated);
+        scroll.content(rows.size() * ModuleRow.ROW_PITCH);
     }
 
-    private List<ModuleCard> pageCards() {
-        List<ModuleCard> page = new ArrayList<ModuleCard>();
-        int index = pageBar.getIndex();
-        for (int slot = 0; slot < CARDS_PER_PAGE && index + slot < visible.size(); slot++) {
-            ClientModule module = visible.get(index + slot);
-            int column = slot % 4;
-            int row = (slot / 4) % 2;
-            page.add(new ModuleCard(module.metadata().name(),
-                module.state() == ModuleState.ENABLED, !module.settings().isEmpty(),
-                NAV_X[column], GRID_TOP + row * GRID_PITCH_Y,
-                new ToggleAction(module), new SettingsAction(module)));
-        }
-        return page;
-    }
-
-    private final class ToggleAction implements Runnable {
-        private final ClientModule module;
-
-        ToggleAction(ClientModule module) {
-            this.module = module;
-        }
-
-        public void run() {
-            boolean enable = module.state() != ModuleState.ENABLED;
-            client.modules().setEnabled(module.metadata().id(), enable);
-            saveQuietly();
-            refresh();
+    private void rebuildRows(boolean animated) {
+        rows.clear();
+        for (int i = 0; i < visible.size(); i++) {
+            final ClientModule module = visible.get(i);
+            ModuleRow row = new ModuleRow(module.metadata().name(), module.metadata().description(),
+                module.metadata().category(), module.state() == ModuleState.ENABLED,
+                !module.settings().isEmpty(), new Runnable() {
+                    public void run() {
+                        toggle(module);
+                    }
+                }, new Runnable() {
+                    public void run() {
+                        Mc189Compat.displayGuiScreen(
+                            dev.aether.gui.AetherGui.moduleSettings(client, module.metadata().id()));
+                    }
+                });
+            row.place(LIST_X, LIST_TOP + i * ModuleRow.ROW_PITCH, LIST_WIDTH, i, animated);
+            rows.add(row);
         }
     }
 
-    private final class SettingsAction implements Runnable {
-        private final ClientModule module;
-
-        SettingsAction(ClientModule module) {
-            this.module = module;
-        }
-
-        public void run() {
-            Mc189Compat.displayGuiScreen(
-                dev.aether.gui.AetherGui.moduleSettings(client, module.metadata().id()));
-        }
+    private void toggle(ClientModule module) {
+        boolean enable = module.state() != ModuleState.ENABLED;
+        client.modules().setEnabled(module.metadata().id(), enable);
+        saveQuietly();
     }
 
-    /* ── headless test / visual-debug hooks ─────────────────────────────── */
-
-    public void debugNextPage() {
-        pageBar.onScroll();
+    private ClientModule moduleAt(int index) {
+        return index >= 0 && index < visible.size() ? visible.get(index) : null;
     }
 
-    public void debugOpenFirstModuleSettings() {
-        if (!visible.isEmpty()) {
-            Mc189Compat.displayGuiScreen(
-                dev.aether.gui.AetherGui.moduleSettings(client, visible.get(0).metadata().id()));
-        }
-    }
+    /* ── filters ────────────────────────────────────────────────────────── */
 
-    /* ── category naming ────────────────────────────────────────────────── */
-
-    private static ModuleCategory[] orderedCategories() {
-        return new ModuleCategory[] {
-            null,
-            ModuleCategory.HUD, ModuleCategory.PVP, ModuleCategory.GRAPHICS, ModuleCategory.RENDER,
-            ModuleCategory.INTERFACE, ModuleCategory.PERFORMANCE, ModuleCategory.COSMETICS,
-            ModuleCategory.THEMES, ModuleCategory.MOVEMENT, ModuleCategory.AUDIO,
-            ModuleCategory.ACCESSIBILITY, ModuleCategory.GENERAL
-        };
-    }
-
-    private static String categoryValue(String label) {
+    private void syncFilters() {
+        List<String> labels = new ArrayList<String>();
         for (ModuleCategory item : orderedCategories()) {
-            if (item != null && displayLabel(item).equals(label)) {
-                return item.name();
+            labels.add(displayLabel(item));
+        }
+        filters.labels(labels);
+        filters.select(categoryIndex());
+    }
+
+    /**
+     * Right-aligns the chip bar next to the search field. Done per frame rather than on a filter
+     * change because the chip widths are measured through {@code GuiScale}, which is only valid once
+     * the screen has been laid out - and because a window resize re-scales every label.
+     */
+    private void layoutFilters() {
+        int width = filters.requiredWidth();
+        filters.place(Math.max(LIST_X + SEARCH_WIDTH + 24, LIST_X + LIST_WIDTH - width), FILTER_Y, Math.max(width, 1));
+    }
+
+    private int categoryIndex() {
+        List<ModuleCategory> options = orderedCategories();
+        for (int i = 0; i < options.size(); i++) {
+            if (options.get(i) == category) {
+                return i;
             }
         }
-        return "GENERAL";
+        return 0;
+    }
+
+    private ModuleCategory categoryAt(int index) {
+        List<ModuleCategory> options = orderedCategories();
+        return index >= 0 && index < options.size() ? options.get(index) : null;
+    }
+
+    /**
+     * "All" plus every category that has at least one user-facing module. Derived from the registry,
+     * so a category whose only members are themes or cosmetic slots is not offered at all.
+     */
+    private List<ModuleCategory> orderedCategories() {
+        List<ModuleCategory> categories = new ArrayList<ModuleCategory>();
+        categories.add(null);
+        categories.addAll(client.modules().userVisibleCategories());
+        return categories;
     }
 
     static String displayLabel(ModuleCategory category) {
+        if (category == null) {
+            return "All";
+        }
         switch (category) {
             case GENERAL: return "General";
             case PERFORMANCE: return "Performance";
@@ -227,6 +282,20 @@ public final class AetherModScreen extends AetherGuiScreen {
             case ACCESSIBILITY: return "Accessibility";
             case THEMES: return "Themes";
             default: return category.name();
+        }
+    }
+
+    /* ── headless test / visual-debug hooks ─────────────────────────────── */
+
+    /** Scrolls one viewport down, for the screenshot walker's paged shot. */
+    public void debugNextPage() {
+        scroll.scrollBy(LIST_HEIGHT);
+    }
+
+    public void debugOpenFirstModuleSettings() {
+        if (!visible.isEmpty()) {
+            Mc189Compat.displayGuiScreen(
+                dev.aether.gui.AetherGui.moduleSettings(client, visible.get(0).metadata().id()));
         }
     }
 }

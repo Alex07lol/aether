@@ -412,7 +412,9 @@ public final class AetherHudEditorScreen extends AetherGuiScreen {
         if (target == null) {
             return false;
         }
-        float amount = delta > 0 ? 0.05F : -0.05F;
+        // Wheel up = bigger / more opaque (the natural-scroll direction the rest of the GUI
+        // normalised to); the user's invert preference flips it with the screens'.
+        float amount = scrollDelta(delta) > 0 ? 0.05F : -0.05F;
         if (isShiftKeyDown()) {
             target.setOpacity(Math.max(0.10F, Math.min(1.0F, target.opacity() + amount)));
         } else {

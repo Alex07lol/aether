@@ -3,6 +3,7 @@ package dev.aether.module.impl.cosmetics;
 import dev.aether.module.AbstractModule;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleMetadata;
+import dev.aether.module.ModuleKind;
 
 /** Rings the selected halo above the player's head. */
 public class CurrentHaloModule extends AbstractModule {
@@ -11,6 +12,7 @@ public class CurrentHaloModule extends AbstractModule {
     public CurrentHaloModule() {
         super(ModuleMetadata.builder(ID, "Halo")
             .category(ModuleCategory.COSMETICS)
+            .kind(ModuleKind.COSMETIC_SERVICE)
             .description("Wears the selected halo in world.")
             .build());
         addNumber("radius", "Radius", 30, 10, 80, 5);

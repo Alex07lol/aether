@@ -3,6 +3,7 @@ package dev.aether.module.impl.cosmetics;
 import dev.aether.module.AbstractModule;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleMetadata;
+import dev.aether.module.ModuleKind;
 
 /** Sits the selected hat on the player's head. */
 public class CurrentHatModule extends AbstractModule {
@@ -11,6 +12,7 @@ public class CurrentHatModule extends AbstractModule {
     public CurrentHatModule() {
         super(ModuleMetadata.builder(ID, "Hat")
             .category(ModuleCategory.COSMETICS)
+            .kind(ModuleKind.COSMETIC_SERVICE)
             .description("Wears the selected hat in world.")
             .build());
         addNumber("radius", "Radius", 100, 50, 150, 5);

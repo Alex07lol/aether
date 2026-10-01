@@ -14,6 +14,7 @@ public final class ClientPreferences {
     public static final String KEY_SAVE_ON_CLOSE = "preference.save_on_close";
     public static final String KEY_SHOW_TOOLTIPS = "preference.show_tooltips";
     public static final String KEY_OPEN_SECTION = "preference.open_section";
+    public static final String KEY_INVERT_SCROLL = "preference.invert_scroll";
 
     /**
      * The GUI sections, in the order they are shown in the navigation bar. The list itself
@@ -23,6 +24,7 @@ public final class ClientPreferences {
 
     private boolean saveOnClose = true;
     private boolean showTooltips = true;
+    private boolean invertScroll = false;
     private String openSection = "Modules";
 
     public boolean saveOnClose() {
@@ -41,6 +43,19 @@ public final class ClientPreferences {
         this.showTooltips = value;
     }
 
+    /**
+     * Whether the mouse wheel runs inverted in every Aether screen. {@code false} scrolls like
+     * vanilla Minecraft (wheel up = towards the top of the list); {@code true} flips it, for
+     * natural-scroll mice and trackpads.
+     */
+    public boolean invertScroll() {
+        return this.invertScroll;
+    }
+
+    public void setInvertScroll(boolean value) {
+        this.invertScroll = value;
+    }
+
     /** The section the Control Center opens on; always one of {@link #SECTIONS}. */
     public String openSection() {
         return this.openSection;
@@ -54,12 +69,14 @@ public final class ClientPreferences {
         this.saveOnClose = document.getBoolean(KEY_SAVE_ON_CLOSE, this.saveOnClose);
         this.showTooltips = document.getBoolean(KEY_SHOW_TOOLTIPS, this.showTooltips);
         this.openSection = normalizeSection(document.get(KEY_OPEN_SECTION, this.openSection));
+        this.invertScroll = document.getBoolean(KEY_INVERT_SCROLL, this.invertScroll);
     }
 
     public void writeConfig(ConfigDocument.Builder builder) {
         builder.putBoolean(KEY_SAVE_ON_CLOSE, this.saveOnClose);
         builder.putBoolean(KEY_SHOW_TOOLTIPS, this.showTooltips);
         builder.put(KEY_OPEN_SECTION, this.openSection);
+        builder.putBoolean(KEY_INVERT_SCROLL, this.invertScroll);
     }
 
     /** @return the closest known section name; an unknown value falls back to Modules. */

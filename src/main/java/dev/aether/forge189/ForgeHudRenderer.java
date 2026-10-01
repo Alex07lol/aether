@@ -56,6 +56,12 @@ public final class ForgeHudRenderer {
     private static final int KEY_SPACE = 6;
     private static final int KEY_SLOTS = 7;
 
+    /** Arrow-mode glyph directions; 0 means the key shows its letter. */
+    private static final int ARROW_UP = 1;
+    private static final int ARROW_DOWN = 2;
+    private static final int ARROW_LEFT = 3;
+    private static final int ARROW_RIGHT = 4;
+
     /** Press travel time; short enough to read as immediate, long enough to be an animation. */
     private static final float KEY_PRESS_MILLIS = 90.0F;
 
@@ -388,28 +394,32 @@ public final class ForgeHudRenderer {
         boolean background = settingBool("hud.keystrokes", "show_background", true);
         boolean arrows = settingBool("hud.keystrokes", "arrows", false);
         int fadeTime = clamp(settingInt("hud.keystrokes", "fade_time", 75), 0, 500);
+        int radius = clamp(settingInt("hud.keystrokes", "corner_radius", 6), 0, 12);
         int x = element.x();
         int y = element.y();
 
         if (settingBool("hud.keystrokes", "show_movement_keys", true)) {
-            drawKeyBox(fontRenderer, KEY_W, arrows ? "^" : "W", Mc189Compat.keyForward(gameSettings), x + size + gap, y, size, size, background, backgroundColor, pressedColor, textColor, fadeTime);
+            // In arrow mode the keys keep their footprint and show a drawn arrow instead of a letter,
+            // so the pad does not resize when the mode is switched and the glyph is centred exactly
+            // where the letter was.
+            drawKeyBox(fontRenderer, KEY_W, arrows ? null : "W", arrows ? ARROW_UP : 0, Mc189Compat.keyForward(gameSettings), x + size + gap, y, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, radius);
             int rowY = y + size + gap;
-            drawKeyBox(fontRenderer, KEY_A, arrows ? "<" : "A", Mc189Compat.keyLeft(gameSettings), x, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime);
-            drawKeyBox(fontRenderer, KEY_S, arrows ? "v" : "S", Mc189Compat.keyBack(gameSettings), x + size + gap, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime);
-            drawKeyBox(fontRenderer, KEY_D, arrows ? ">" : "D", Mc189Compat.keyRight(gameSettings), x + (size + gap) * 2, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime);
+            drawKeyBox(fontRenderer, KEY_A, arrows ? null : "A", arrows ? ARROW_LEFT : 0, Mc189Compat.keyLeft(gameSettings), x, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, radius);
+            drawKeyBox(fontRenderer, KEY_S, arrows ? null : "S", arrows ? ARROW_DOWN : 0, Mc189Compat.keyBack(gameSettings), x + size + gap, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, radius);
+            drawKeyBox(fontRenderer, KEY_D, arrows ? null : "D", arrows ? ARROW_RIGHT : 0, Mc189Compat.keyRight(gameSettings), x + (size + gap) * 2, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, radius);
             y = rowY + size + gap;
         }
 
         if (settingBool("hud.keystrokes", "show_clicks", true)) {
             int totalMovementWidth = size * 3 + gap * 2;
             int clickWidth = (totalMovementWidth - gap) / 2;
-            drawKeyBox(fontRenderer, KEY_LMB, "LMB", Mc189Compat.keyAttack(gameSettings), x, y, clickWidth, clickHeight, background, backgroundColor, pressedColor, textColor, fadeTime);
-            drawKeyBox(fontRenderer, KEY_RMB, "RMB", Mc189Compat.keyUseItem(gameSettings), x + clickWidth + gap, y, clickWidth, clickHeight, background, backgroundColor, pressedColor, textColor, fadeTime);
+            drawKeyBox(fontRenderer, KEY_LMB, "LMB", 0, Mc189Compat.keyAttack(gameSettings), x, y, clickWidth, clickHeight, background, backgroundColor, pressedColor, textColor, fadeTime, radius);
+            drawKeyBox(fontRenderer, KEY_RMB, "RMB", 0, Mc189Compat.keyUseItem(gameSettings), x + clickWidth + gap, y, clickWidth, clickHeight, background, backgroundColor, pressedColor, textColor, fadeTime, radius);
             y += clickHeight + gap;
         }
 
         if (settingBool("hud.keystrokes", "show_spacebar", false)) {
-            drawKeyBox(fontRenderer, KEY_SPACE, "SPACE", Mc189Compat.keyJump(gameSettings), x, y, size * 3 + gap * 2, spacebarHeight, background, backgroundColor, pressedColor, textColor, fadeTime);
+            drawKeyBox(fontRenderer, KEY_SPACE, "SPACE", 0, Mc189Compat.keyJump(gameSettings), x, y, size * 3 + gap * 2, spacebarHeight, background, backgroundColor, pressedColor, textColor, fadeTime, radius);
         }
     }
 
@@ -434,25 +444,26 @@ public final class ForgeHudRenderer {
         boolean background = settingBool("hud.keystrokes", "show_background", true);
         boolean arrows = settingBool("hud.keystrokes", "arrows", false);
         float fadeTime = clamp(settingInt("hud.keystrokes", "fade_time", 75), 0, 500);
+        int radius = clamp(settingInt("hud.keystrokes", "corner_radius", 6), 0, 12);
         int x = element.x();
         int y = element.y();
 
         if (settingBool("hud.keystrokes", "show_movement_keys", true)) {
-            drawKeyBoxState(fontRenderer, KEY_W, arrows ? "^" : "W", x + size + gap, y, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, true);
+            drawKeyBoxState(fontRenderer, KEY_W, arrows ? null : "W", arrows ? ARROW_UP : 0, x + size + gap, y, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, true, radius);
             int rowY = y + size + gap;
-            drawKeyBoxState(fontRenderer, KEY_A, arrows ? "<" : "A", x, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, false);
-            drawKeyBoxState(fontRenderer, KEY_S, arrows ? "v" : "S", x + size + gap, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, false);
-            drawKeyBoxState(fontRenderer, KEY_D, arrows ? ">" : "D", x + (size + gap) * 2, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, false);
+            drawKeyBoxState(fontRenderer, KEY_A, arrows ? null : "A", arrows ? ARROW_LEFT : 0, x, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, false, radius);
+            drawKeyBoxState(fontRenderer, KEY_S, arrows ? null : "S", arrows ? ARROW_DOWN : 0, x + size + gap, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, false, radius);
+            drawKeyBoxState(fontRenderer, KEY_D, arrows ? null : "D", arrows ? ARROW_RIGHT : 0, x + (size + gap) * 2, rowY, size, size, background, backgroundColor, pressedColor, textColor, fadeTime, false, radius);
             y = rowY + size + gap;
         }
         if (settingBool("hud.keystrokes", "show_clicks", true)) {
             int clickWidth = (size * 3 + gap * 2 - gap) / 2;
-            drawKeyBoxState(fontRenderer, KEY_LMB, "LMB", x, y, clickWidth, clickHeight, background, backgroundColor, pressedColor, textColor, fadeTime, true);
-            drawKeyBoxState(fontRenderer, KEY_RMB, "RMB", x + clickWidth + gap, y, clickWidth, clickHeight, background, backgroundColor, pressedColor, textColor, fadeTime, false);
+            drawKeyBoxState(fontRenderer, KEY_LMB, "LMB", 0, x, y, clickWidth, clickHeight, background, backgroundColor, pressedColor, textColor, fadeTime, true, radius);
+            drawKeyBoxState(fontRenderer, KEY_RMB, "RMB", 0, x + clickWidth + gap, y, clickWidth, clickHeight, background, backgroundColor, pressedColor, textColor, fadeTime, false, radius);
             y += clickHeight + gap;
         }
         if (settingBool("hud.keystrokes", "show_spacebar", false)) {
-            drawKeyBoxState(fontRenderer, KEY_SPACE, "SPACE", x, y, size * 3 + gap * 2, spacebarHeight, background, backgroundColor, pressedColor, textColor, fadeTime, false);
+            drawKeyBoxState(fontRenderer, KEY_SPACE, "SPACE", 0, x, y, size * 3 + gap * 2, spacebarHeight, background, backgroundColor, pressedColor, textColor, fadeTime, false, radius);
         }
     }
 
@@ -1493,16 +1504,16 @@ public final class ForgeHudRenderer {
      * shared between keys, nothing is allocated per frame, and the value drives both the colour
      * blend and the press scale, so the exposed settings all have a visible effect.
      */
-    private void drawKeyBox(Object fontRenderer, int keySlot, String label, Object keyBinding, int x, int y,
+    private void drawKeyBox(Object fontRenderer, int keySlot, String label, int arrow, Object keyBinding, int x, int y,
                             int width, int height, boolean background, int backgroundColor, int pressedColor,
-                            int textColor, int fadeTime) {
-        drawKeyBoxState(fontRenderer, keySlot, label, x, y, width, height, background, backgroundColor,
-            pressedColor, textColor, fadeTime, Mc189Compat.keyDown(keyBinding));
+                            int textColor, int fadeTime, int radius) {
+        drawKeyBoxState(fontRenderer, keySlot, label, arrow, x, y, width, height, background, backgroundColor,
+            pressedColor, textColor, fadeTime, Mc189Compat.keyDown(keyBinding), radius);
     }
 
-    private void drawKeyBoxState(Object fontRenderer, int keySlot, String label, int x, int y, int width, int height,
-                                 boolean background, int backgroundColor, int pressedColor, int textColor,
-                                 float fadeTime, boolean down) {
+    private void drawKeyBoxState(Object fontRenderer, int keySlot, String label, int arrow, int x, int y, int width,
+                                 int height, boolean background, int backgroundColor, int pressedColor,
+                                 int textColor, float fadeTime, boolean down, int radius) {
         Anim anim = this.keyPress[keySlot];
         if (down) {
             anim.duration(KEY_PRESS_MILLIS).easing(Easing.EASE_OUT_CUBIC).target(1.0F);
@@ -1523,11 +1534,71 @@ public final class ForgeHudRenderer {
 
         if (background || intensity > 0.001F) {
             int boxColor = AnimationMath.lerpColor(backgroundColor, pressedColor, intensity);
-            Mc189Compat.drawRoundedRectangle(boxX, boxY, boxWidth, boxHeight, 2, boxColor, 0);
+            int corner = Math.max(0, Math.min(radius, Math.min(boxWidth, boxHeight) / 2));
+            Mc189Compat.drawRoundedRectangle(boxX, boxY, boxWidth, boxHeight, corner, boxColor, 0);
+        }
+        if (arrow != 0) {
+            drawArrowGlyph(arrow, boxX, boxY, boxWidth, boxHeight, textColor);
+            return;
         }
         int textX = boxX + (boxWidth - Mc189Compat.stringWidth(fontRenderer, label)) / 2;
         int textY = boxY + boxHeight / 2 - 4;
         Mc189Compat.drawStringWithShadow(fontRenderer, label, textX, textY, textColor);
+    }
+
+    /**
+     * The arrow mode's glyph: a real arrow, centred in the key exactly where the letter would be,
+     * at about half the key's size.
+     * <p>
+     * It is drawn from line segments rather than rendered from a font: ASCII stand-ins like {@code ^}
+     * and {@code v} are visibly off-centre and read as punctuation, and a glyph page would have to
+     * be shipped for four symbols. Lines are crisp at every distance, take the configured text
+     * colour, and keep the key's footprint - only the ink inside it changes.
+     */
+    private static void drawArrowGlyph(int direction, int left, int top, int width, int height, int color) {
+        int cx = left + width / 2;
+        int cy = top + height / 2;
+        int arm = Math.max(4, Math.round(Math.min(width, height) * 0.30F));
+        int thickness = Math.max(1, Math.round(Math.min(width, height) * 0.12F));
+        int head = Math.max(3, Math.round(arm * 0.55F));
+        switch (direction) {
+            case ARROW_UP:
+                drawLine(cx, cy - arm, cx, cy + arm, thickness, color);
+                drawLine(cx, cy - arm, cx - head, cy - arm + head, thickness, color);
+                drawLine(cx, cy - arm, cx + head, cy - arm + head, thickness, color);
+                break;
+            case ARROW_DOWN:
+                drawLine(cx, cy - arm, cx, cy + arm, thickness, color);
+                drawLine(cx, cy + arm, cx - head, cy + arm - head, thickness, color);
+                drawLine(cx, cy + arm, cx + head, cy + arm - head, thickness, color);
+                break;
+            case ARROW_LEFT:
+                drawLine(cx - arm, cy, cx + arm, cy, thickness, color);
+                drawLine(cx - arm, cy, cx - arm + head, cy - head, thickness, color);
+                drawLine(cx - arm, cy, cx - arm + head, cy + head, thickness, color);
+                break;
+            case ARROW_RIGHT:
+            default:
+                drawLine(cx - arm, cy, cx + arm, cy, thickness, color);
+                drawLine(cx + arm, cy, cx + arm - head, cy - head, thickness, color);
+                drawLine(cx + arm, cy, cx + arm - head, cy + head, thickness, color);
+                break;
+        }
+    }
+
+    /** A line of square stamps between two points; the UI's own primitives have no line call. */
+    private static void drawLine(int x0, int y0, int x1, int y1, int thickness, int color) {
+        int steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+        if (steps == 0) {
+            Mc189Compat.drawRect(x0, y0, x0 + thickness, y0 + thickness, color);
+            return;
+        }
+        int half = thickness / 2;
+        for (int i = 0; i <= steps; i++) {
+            int x = x0 + Math.round((x1 - x0) * (i / (float) steps));
+            int y = y0 + Math.round((y1 - y0) * (i / (float) steps));
+            Mc189Compat.drawRect(x - half, y - half, x - half + thickness, y - half + thickness, color);
+        }
     }
 
     /** Modern HUDs use "Label value", the legacy layouts use "Label: value". */

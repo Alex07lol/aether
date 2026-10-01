@@ -199,17 +199,28 @@ Aether's registry (see `docs/GUI_REBUILD.md` for the decision record, the art pi
 short list of things that stay Aether's).
 
 - Shell: `dev.aether.gui.screens.AetherGuiScreen` (design-space canvas via `GuiScale`, Leaf's
-  backdrop art per screen, Leaf's four nav tiles, render/mouse lifecycle).
+  backdrop art per screen, the navigation row, render/mouse lifecycle). The row is Leaf's four
+  rectangles plus Aether's own fifth tile: `GuiSection`'s **declaration order is the navigation
+  order** and pairs with `NAV_X = {430, 650, 860, 1100, 1320}` - Leaf's modules / cosmetics / HUD
+  (`location`) / settings keep its x positions and the Themes tile takes the free middle slot.
+  Reordering the enum moves the tabs, so the enum and that list move together.
+- Wheel handling once, in the shell: `scrollDelta(-wheel / 24)` normalises vanilla's sign (positive =
+  forward/down) and applies `preference.invert_scroll`, so screens read one sign and never negate it
+  again. That replaced a double negation that ran every paged list backwards.
 - Sections: `AetherModScreen` (modules), `AetherModuleSettingsScreen` (one module, Leaf's
-  `ModDetailSettings` role), `AetherCosmeticScreen`, `AetherHudEditorScreen`,
-  `AetherClientSettingsScreen`, `AetherMainMenuScreen`.
+  `ModDetailSettings` role), `AetherCosmeticScreen`, `AetherThemesScreen` (the palette picker -
+  Aether's own destination, built in the Cosmetics idiom from the registry's `ThemeModule`s),
+  `AetherHudEditorScreen`, `AetherClientSettingsScreen`, `AetherMainMenuScreen`.
 - Components: `dev.aether.gui.leaf.*` (`ModuleCard`, `NavButton`, `PageBar`, `LeafToggle`,
   `LeafBar`, `SelectButton`, `LeafTextBox`, `ColorChart`, `CosmeticEntry`) on
   `dev.aether.gui.core.UiComponent`; every one of them draws Leaf art through `LeafArt`, so a state
   (enabled, hovered, dimmed, selected) is a brightness of one texture.
 - Art: `assets/aether/leaf/**` = Leaf's textures recoloured to translucent black + white by
   `scripts/leaf_assets.py` (build-time, Pillow; the client never processes images);
-  `Mc189Compat.drawTextureTinted` is the primitive, `NOTICE.txt` the attribution.
+  `Mc189Compat.drawTextureTinted` is the primitive, `NOTICE.txt` the attribution. Thirty textures
+  today, all rebuildable from the Leaf checkout: `SOURCE_NAMES` maps the outputs Leaf has no art for
+  (the Themes tab) onto the source it is cut from, and the `detail` rule's optional alpha gain makes
+  a translucent original's white detail solid where a row of tiles has to read evenly.
 - `dev.aether.gui.preview.PlayerPreview` renders the real player model for cosmetics.
 - `dev.aether.gui.AetherFont` — semantic text roles (TITLE/SECTION/BODY/SMALL/CAPTION) over
   `AetherFontManager`.
@@ -413,7 +424,9 @@ ported, with the reason.
 | zoom | `MixinFeatures.EntityRenderer` | bridge sets target; mixin animates per frame | `getFOVModifier` mixin |
 | hurt shake / hit tint / time / weather | `MixinFeatures` | bridge per tick | the owning mixin |
 | animation scalars | the renderer/bridge that draws them | `FrameClock` + `Anim.update()` | the same class |
-| theme | `AetherClient.theme()` (cached) | theme modules | `AetherUi` tokens, renderers |
+| theme | `AetherClient.theme()` (cached) | theme modules (the Themes screen just enables one; registry group exclusivity does the rest) | `AetherUi` tokens, renderers |
+| open section + client preferences | `ClientPreferences` | the settings screen and `GuiSection` steering, config apply | `AetherGui` chooses the screen, `AetherGuiScreen` lights the matching tile |
+| wheel direction | `ClientPreferences.invertScroll()` | the settings screen's `Invert Scroll` toggle | `AetherGuiScreen.scrollDelta`, read by every pager and the HUD editor |
 
 ## 16. The Leaf-sourced GUI art (how to change it safely)
 

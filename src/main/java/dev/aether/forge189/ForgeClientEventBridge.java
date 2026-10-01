@@ -104,6 +104,7 @@ final class ForgeClientEventBridge {
         if (event.phase != TickEvent.Phase.END) {
             return;
         }
+        updateInputRouter();
         client.eventBus().publish(new ClientTickEvent(Mc189Compat.tickTimeMillis()));
         applyToggleSprint();
         applyToggleSneak();
@@ -111,22 +112,30 @@ final class ForgeClientEventBridge {
         applyClientEffects();
         flushZoomPersist();
         checkModMenuKey();
-        applyHudEditorRequest();
-        applyThemeSelectorRequest();
-        applyCosmeticManagerRequest();
         this.cosmetics.onClientTick();
+    }
+
+    /**
+     * Tells the input router who owns the keyboard this tick: the current screen (and whether it is
+     * one of Aether's own), plus whether a world is live at all. Every module keybind is gated on
+     * that one call - see {@link dev.aether.input.ModuleInputRouter}.
+     */
+    private void updateInputRouter() {
+        Object minecraft = Mc189Compat.minecraft();
+        Object screen = Mc189Compat.currentScreen(minecraft);
+        boolean aetherScreen = screen instanceof dev.aether.gui.core.AetherUiScreen;
+        boolean inWorld = Mc189Compat.world(minecraft) != null && Mc189Compat.player(minecraft) != null;
+        client.input().describe(screen != null, aetherScreen, inWorld);
     }
 
     @SubscribeEvent
     public void onMouseInput(InputEvent.MouseInputEvent event) {
-        Object minecraft = Mc189Compat.minecraft();
-        if (Mc189Compat.currentScreen(minecraft) != null) {
-            return;
-        }
         if (!enabled("pvp.zoom") || !configuredBool("pvp.zoom", "scroll_to_zoom")) {
             return;
         }
-        if (!Mc189Compat.keyboardKeyDown(configuredInt("pvp.zoom", "keybind"))) {
+        // Scroll-to-zoom is a module keybind too: it goes through the same gate as the key itself,
+        // so the wheel does nothing while a screen (or a keybind capture) owns the input.
+        if (!client.input().moduleKeyDown(Mc189Compat.keyboardKeyDown(configuredInt("pvp.zoom", "keybind")))) {
             return;
         }
         int delta = Mc189Compat.mouseWheelDelta();
@@ -461,8 +470,8 @@ final class ForgeClientEventBridge {
         }
         this.sprintKey.setMode(ForceKeyMachine.Mode.from(
             configuredString("pvp.toggle_sprint", "behaviour"), ForceKeyMachine.Mode.TOGGLED));
-        boolean keyDown = Mc189Compat.currentScreen(minecraft) == null
-            && Mc189Compat.keyboardKeyDown(configuredInt("pvp.toggle_sprint", "keybind"));
+        boolean keyDown = client.input().moduleKeyDown(
+            Mc189Compat.keyboardKeyDown(configuredInt("pvp.toggle_sprint", "keybind")));
         Boolean publish = this.sprintKey.update(keyDown);
         if (this.sprintKey.justToggled()) {
             this.notifications.push("Toggle Sprint " + (this.sprintKey.toggled() ? "ON" : "OFF"));
@@ -504,9 +513,10 @@ final class ForgeClientEventBridge {
         this.sneakKey.setMode(ForceKeyMachine.Mode.from(
             configuredString("pvp.toggle_sneak", "behaviour"), ForceKeyMachine.Mode.TOGGLED));
 
-        // Never toggle while a screen is open, or typing in chat would flip sneak.
-        boolean keyDown = Mc189Compat.currentScreen(minecraft) == null
-            && Mc189Compat.keyboardKeyDown(configuredInt("pvp.toggle_sneak", "keybind"));
+        // Never toggle while a screen or a keybind capture owns the keyboard: that rule lives in
+        // the input router, so no module has to remember it.
+        boolean keyDown = client.input().moduleKeyDown(
+            Mc189Compat.keyboardKeyDown(configuredInt("pvp.toggle_sneak", "keybind")));
         Boolean publish = this.sneakKey.update(keyDown);
         if (this.sneakKey.justToggled()) {
             this.notifications.push("Toggle Sneak " + (this.sneakKey.toggled() ? "ON" : "OFF"));
@@ -531,45 +541,6 @@ final class ForgeClientEventBridge {
         if (this.comboCount % 5 == 0) {
             this.notifications.push("Combo x" + this.comboCount);
         }
-    }
-
-    /**
-     * The HUD editor module doubles as a button: enabling it opens the editor and
-     * immediately switches itself back off, so the deck's toggle never stays pinned.
-     */
-    private void applyHudEditorRequest() {
-        if (!enabled("interface.hud_editor")) {
-            return;
-        }
-        dev.aether.gui.AetherGui.open(client, dev.aether.ui.GuiSection.HUD);
-        client.modules().setEnabled("interface.hud_editor", false);
-        saveQuietly();
-    }
-
-    /**
-     * Same one-shot pattern for the theme selector: it opens the deck on the Interface
-     * category, which is where the five theme modules live.
-     */
-    private void applyThemeSelectorRequest() {
-        if (!enabled("interface.theme_selector")) {
-            return;
-        }
-        Mc189Compat.displayGuiScreen(dev.aether.gui.AetherGui.modulesForCategory(client, ModuleCategory.INTERFACE));
-        client.modules().setEnabled("interface.theme_selector", false);
-        saveQuietly();
-    }
-
-    /**
-     * The cosmetic manager is a one-shot launcher too: switching it on opens the cosmetics
-     * screen (where capes are imported and slots are chosen) and the switch falls back off.
-     */
-    private void applyCosmeticManagerRequest() {
-        if (!enabled("cosmetics.manager")) {
-            return;
-        }
-        dev.aether.gui.AetherGui.open(client, dev.aether.ui.GuiSection.COSMETICS);
-        client.modules().setEnabled("cosmetics.manager", false);
-        saveQuietly();
     }
 
     boolean toggleSprintActive() {
@@ -670,8 +641,8 @@ final class ForgeClientEventBridge {
         }
         this.snaplookLatch.setMode(ActivationMode.from(
             configuredString("pvp.snaplook", "activation"), ActivationMode.HOLD));
-        boolean keyDown = Mc189Compat.currentScreen(minecraft) == null
-            && Mc189Compat.keyboardKeyDown(configuredInt("pvp.snaplook", "keybind"));
+        boolean keyDown = client.input().moduleKeyDown(
+            Mc189Compat.keyboardKeyDown(configuredInt("pvp.snaplook", "keybind")));
         if (!this.snaplookLatch.update(keyDown)) {
             restoreSnaplook(gameSettings);
             return;
@@ -993,8 +964,8 @@ final class ForgeClientEventBridge {
         }
         this.freelookLatch.setMode(ActivationMode.from(
             configuredString(moduleId, "activation"), ActivationMode.HOLD));
-        boolean keyDown = Mc189Compat.currentScreen(minecraft) == null
-            && Mc189Compat.keyboardKeyDown(configuredInt(moduleId, "keybind"));
+        boolean keyDown = client.input().moduleKeyDown(
+            Mc189Compat.keyboardKeyDown(configuredInt(moduleId, "keybind")));
         if (!this.freelookLatch.update(keyDown)) {
             stopFreelook(gameSettings);
             return;
@@ -1054,7 +1025,9 @@ final class ForgeClientEventBridge {
         }
         int percent = settingRangeValue("pvp.zoom", "zoom_percent");
         int floor = settingMin("pvp.zoom", "zoom_percent", 5);
-        MixinFeatures.EntityRenderer.zoomTargetScale = Mc189Compat.keyboardKeyDown(configuredInt("pvp.zoom", "keybind"))
+        boolean holding = client.input().moduleKeyDown(
+            Mc189Compat.keyboardKeyDown(configuredInt("pvp.zoom", "keybind")));
+        MixinFeatures.EntityRenderer.zoomTargetScale = holding
             ? ZoomMath.scaleFromPercent(percent, floor)
             : ZoomMath.NO_ZOOM;
     }

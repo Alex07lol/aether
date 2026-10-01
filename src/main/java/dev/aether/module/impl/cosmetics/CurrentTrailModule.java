@@ -3,6 +3,7 @@ package dev.aether.module.impl.cosmetics;
 import dev.aether.module.AbstractModule;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleMetadata;
+import dev.aether.module.ModuleKind;
 
 /**
  * Particle trail behind the player: vanilla particles are spawned through the world, so the
@@ -14,6 +15,7 @@ public class CurrentTrailModule extends AbstractModule {
     public CurrentTrailModule() {
         super(ModuleMetadata.builder(ID, "Particle Trail")
             .category(ModuleCategory.COSMETICS)
+            .kind(ModuleKind.COSMETIC_SERVICE)
             .description("Spawns a vanilla particle trail behind the player.")
             .build());
         addChoice("particle", "Particle", "Cloud",

@@ -56,6 +56,7 @@ public final class AetherModuleSettingsScreen extends AetherGuiScreen {
         new java.util.HashMap<String, SelectButton>();
     private PageBar pageBar;
     private String capturingKeybind;
+
     private String status;
     private long statusAtMillis;
 
@@ -98,6 +99,14 @@ public final class AetherModuleSettingsScreen extends AetherGuiScreen {
         return dev.aether.gui.AetherGui.modules(client);
     }
 
+    @Override
+    protected void disposeContent() {
+        // Leaving the screen ends a pending capture, so the router hands the keyboard back to the
+        // modules instead of keeping them suppressed for the rest of the session.
+        capturingKeybind = null;
+        client.input().capturingKey(false);
+    }
+
     /* ── rows ───────────────────────────────────────────────────────────── */
 
     private void buildRows() {
@@ -105,6 +114,7 @@ public final class AetherModuleSettingsScreen extends AetherGuiScreen {
         choiceRows.clear();
         pageBar = null;
         capturingKeybind = null;
+        client.input().capturingKey(false);
         ClientModule module = module();
         if (module == null) {
             return;
@@ -319,6 +329,7 @@ public final class AetherModuleSettingsScreen extends AetherGuiScreen {
                 }
             }
             capturingKeybind = null;
+            client.input().capturingKey(false);
             buildRows(); // rebuild so the pill shows the new key
             return true;
         }
@@ -336,7 +347,7 @@ public final class AetherModuleSettingsScreen extends AetherGuiScreen {
         if (pageBar == null || isColorPanelOpen()) {
             return true;
         }
-        if (delta < 0) {
+        if (delta > 0) {
             pageBar.onScroll();
         } else {
             pageBar.onUnScroll();
@@ -396,6 +407,9 @@ public final class AetherModuleSettingsScreen extends AetherGuiScreen {
                 return false;
             }
             capturingKeybind = setting.id();
+            // The router blocks every module key while a capture is live, so the press that is about
+            // to be bound cannot also fire the module that already owns that key.
+            client.input().capturingKey(true);
             return true;
         }
 

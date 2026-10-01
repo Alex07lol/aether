@@ -8,6 +8,7 @@ import dev.aether.gui.screens.AetherCosmeticScreen;
 import dev.aether.gui.screens.AetherHudEditorScreen;
 import dev.aether.gui.screens.AetherModScreen;
 import dev.aether.gui.screens.AetherModuleSettingsScreen;
+import dev.aether.gui.screens.AetherThemesScreen;
 
 /**
  * Entry points of the Aether GUI: the factory that opens a section and the one place
@@ -33,13 +34,6 @@ public final class AetherGui {
         return new AetherModScreen(client);
     }
 
-    public static AetherModScreen modulesForCategory(AetherClient client,
-                                                     dev.aether.module.ClientModule.ModuleCategory category) {
-        AetherModScreen screen = new AetherModScreen(client);
-        screen.focusCategory(category);
-        return screen;
-    }
-
     public static AetherCosmeticScreen cosmetics(AetherClient client) {
         return new AetherCosmeticScreen(client);
     }
@@ -50,6 +44,11 @@ public final class AetherGui {
 
     public static AetherClientSettingsScreen settings(AetherClient client) {
         return new AetherClientSettingsScreen(client);
+    }
+
+    /** The theme picker (Aether's own section; Leaf has no theme picker). */
+    public static AetherThemesScreen themes(AetherClient client) {
+        return new AetherThemesScreen(client);
     }
 
     /** One module's configuration screen (Leaf's ModDetailSettings role). */
@@ -63,6 +62,8 @@ public final class AetherGui {
                 return cosmetics(client);
             case HUD:
                 return hudEditor(client);
+            case THEMES:
+                return themes(client);
             case SETTINGS:
                 return settings(client);
             case MODULES:

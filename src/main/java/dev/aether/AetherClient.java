@@ -8,6 +8,7 @@ import dev.aether.cosmetic.CosmeticLibrary;
 import dev.aether.event.EventBus;
 import dev.aether.fairplay.FairPlayPolicy;
 import dev.aether.hud.HudLayout;
+import dev.aether.input.ModuleInputRouter;
 import dev.aether.module.ClientModule;
 import dev.aether.module.builtin.BuiltInModules;
 import dev.aether.module.ModuleRegistry;
@@ -38,6 +39,7 @@ public final class AetherClient {
     private final ProfileStore profiles = new ProfileStore();
     private final WaypointManager waypoints = new WaypointManager();
     private final ScreenshotManager screenshots;
+    private final ModuleInputRouter input = new ModuleInputRouter();
 
     public AetherClient(Path configFile) {
         this.version = ClientVersion.current();
@@ -85,6 +87,15 @@ public final class AetherClient {
 
     public ModuleRegistry modules() {
         return modules;
+    }
+
+    /**
+     * The gate every module keybind goes through. The bridge feeds it the current screen, the GUI
+     * feeds it keybind captures, and the modules read their keys through it - see
+     * {@link ModuleInputRouter} for why that is one object instead of a check per module.
+     */
+    public ModuleInputRouter input() {
+        return input;
     }
 
     public HudLayout hudLayout() {

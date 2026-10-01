@@ -3,6 +3,7 @@ package dev.aether.module.impl.cosmetics;
 import dev.aether.module.AbstractModule;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleMetadata;
+import dev.aether.module.ModuleKind;
 
 /**
  * Flat cape preview: renders the worn cape without the wave and walk swing so an imported
@@ -14,6 +15,7 @@ public class CapePreviewModule extends AbstractModule {
     public CapePreviewModule() {
         super(ModuleMetadata.builder(ID, "Cape Preview")
             .category(ModuleCategory.COSMETICS)
+            .kind(ModuleKind.COSMETIC_SERVICE)
             .description("Draws the cape flat so imported textures are easy to check.")
             .build());
         addNumber("scale", "Preview Scale", 100, 50, 200, 5);

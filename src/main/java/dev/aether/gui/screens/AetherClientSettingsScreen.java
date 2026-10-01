@@ -85,6 +85,21 @@ public final class AetherClientSettingsScreen extends AetherGuiScreen {
             }));
         y += ROW_PITCH;
 
+        // The wheel direction every paged screen follows; flipping it here flips it everywhere,
+        // because the screens read one normalised delta.
+        rows.add(new LeafToggle("Invert Scroll", ROW_X, y, 100, 60,
+            new LeafToggle.StateReader() {
+                public boolean isOn() {
+                    return client.preferences().invertScroll();
+                }
+            }, new Runnable() {
+                public void run() {
+                    client.preferences().setInvertScroll(!client.preferences().invertScroll());
+                    saveQuietly();
+                }
+            }));
+        y += ROW_PITCH;
+
         // The field carries its own caption as a placeholder, so it can sit next to the button
         // instead of pushing a label outside Leaf's panel.
         final LeafTextBox[] nameHolder = new LeafTextBox[1];
@@ -250,7 +265,7 @@ public final class AetherClientSettingsScreen extends AetherGuiScreen {
         if (pageBar == null) {
             return true;
         }
-        if (delta < 0) {
+        if (delta > 0) {
             pageBar.onScroll();
         } else {
             pageBar.onUnScroll();

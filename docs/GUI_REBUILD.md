@@ -54,17 +54,22 @@ keys on:
   panel's own tone, measured per file instead of hand-tuned. This handles both polarities: Leaf's
   tabs and cards are light bodies with dark glyphs, its arrow buttons are the reverse.
 
-Rules: `glass(strength)`, `white(strength)`, `shade(strength, lo, hi)`, `detail(strength, lo, hi)`.
-`detail` composes a black-glass body with the texture's own detail (a luminance difference *inside*
-the surface) keyed to white.
+Rules: `glass(strength)`, `white(strength)`, `shade(strength, lo, hi)`, `detail(strength, lo, hi)`
+and `detail(strength, lo, hi, alpha_gain)`. `detail` composes a black-glass body with the texture's
+own detail (a luminance difference *inside* the surface) keyed to white; the optional gain lifts the
+detail's alpha, which exists for the one tab Leaf painted at half alpha (`system.png`, the source of
+Aether's Themes tile) so its glyphs sit as solid as the other tabs' in the navigation row.
 
     python scripts/leaf_assets.py --analyze      # classification table over the source art
     python scripts/leaf_assets.py --convert      # write assets/aether/leaf/**
     python scripts/leaf_assets.py --sheet        # contact sheet, source next to result
     LEAF_SOURCE=<leaf asset dir>                  # override the source checkout
 
-Twenty-nine textures are converted; the files Aether does not use (login fields, the panorama, the
-social buttons) are deliberately not. `assets/aether/leaf/NOTICE.txt` carries the attribution.
+Thirty textures are converted; the files Aether does not use (login fields, the panorama, the social
+buttons) are deliberately not. `SOURCE_NAMES` maps the outputs Leaf has no original for: Aether's
+Themes tab (`button/themes.png`) is Leaf's `system.png` run through the same `detail` rule, so
+`--convert` still rebuilds every shipped file from the Leaf checkout and nothing is hand-edited.
+`assets/aether/leaf/NOTICE.txt` carries the attribution.
 
 **An earlier version of the script gated its interior test on `alpha >= 200`, which is above every
 plateau in this art, and therefore silently dropped *every* icon** — the generated
@@ -87,10 +92,11 @@ the result has to be looked at as an image, not as a text dump.
 
 | Screen | Leaf | Aether |
 | --- | --- | --- |
-| Nav tiles | `SystemButton(mod/cosmetic/location/setting, 430/650/1100/1320, 250, 170x106)` | same rectangles, `button/<name>.png`, the wording is baked into the art |
-| Module grid | `ModButton(mod, NAV_X[col], 400 + 220*row, 170x182)`, 8 per page | same, `mod.png` + the name centered at `h/4`; top half toggles, bottom half opens settings |
+| Nav tiles | `SystemButton(mod/cosmetic/location/setting, 430/650/1100/1320, 250, 170x106)` | Leaf's four keep its rectangles - modules 430, cosmetics 650, HUD (its `location`) 1100, settings 1320 - and Aether's Themes tile takes the free middle slot at 860; `button/<name>.png`, the wording is baked into the art |
+| Themes picker | (Leaf has no theme screen) | Aether's own section in the Cosmetics shape: pills `300x90` at x=480 from y=400 pitch 100, 3 per page, scrollbar `(945, 400, 32, 400)`; the equipped palette is the bright pill |
+| Module grid | `ModButton(mod, NAV_X[col], 400 + 220*row, 170x182)`, 8 per page | same, but its columns are Leaf's four (`430/650/1100/1320`) and not the nav row's x list - a column at the Themes tile's 860 would run under the scrollbar; `mod.png` + the name centered at `h/4`; top half toggles, bottom half opens settings |
 | Card gear | `gear_small.png` at card-local (60, 110), 50x50, shifted 2 and grown 4 while hovered | identical, `ModuleCard` |
-| Grid scrollbar | `ScrollBar(mods, 945, 400, 32, 400, 8)` | same; thumb = track / page count, whole-page wheel steps |
+| Grid scrollbar | `ScrollBar(mods, 945, 400, 32, 400, 8)` | same; thumb = track / page count, whole-page wheel steps, wheel down = forward through the list |
 | Backdrops | `ModSettings`/`CosmeticSettings` → `main.png`, `ModDetailSettings`/`ClientSettings` → `main_mod.png`, fullscreen stretched | same files |
 | Detail screen | home tile `(640, 220, 80x80)`; toggles `100x60` at x=1120, selects `300x90` at x=920, sliders `255x90` at x=960, captions 410 / 210 / 250 to the left, rows from y=310 pitch 100 | same, generic over Aether's `Setting` rows |
 | Cosmetics | entries `300x90` at x=480 from y=400 pitch 100, 3 per page; category pill at `(480, 700, 300x90)`; scrollbar `(945, 400, 32, 400)`; player model at `(1300, 800)`, 200 tall, mouse-clamped +-30 | same, plus the real `CosmeticLibrary` and Aether's `PlayerPreview` |
@@ -122,6 +128,15 @@ free strip under the cards) and why the settings rows' captions all start at x 7
    measured rectangles) rather than bolted onto the outside.
 6. **The HUD editor.** Leaf's `ModPosSettings` is a background plus one toggle; Aether's editor
    keeps its drag/snap/scale/opacity machinery and its nav row, and uses the glass backdrop.
+7. **Wheel direction, decided once.** `AetherGuiScreen` turns vanilla's wheel into one conventional
+   delta (`scrollDelta(-wheel / 24)`: positive = forward/down, the sign flipped by the user's
+   `Invert Scroll` preference) and the screens only ever read that sign. Leaf inverted per screen;
+   copying that here, on top of the shell's own normalisation, made every paged list scroll
+   backwards. The HUD editor takes the same preference for its scroll-to-scale/opacity.
+8. **A fifth destination.** Leaf has four tabs, but Aether ships six palettes and a row of theme
+   toggles buried in the modules grid is not discoverable, so Themes is a section of its own: the
+   row keeps Leaf's four rectangles, the new tile takes the free slot between cosmetics and the HUD
+   editor, and `GuiSection`'s declaration order is the tile order (the two lists move together).
 
 ## 4. Palette
 

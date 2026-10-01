@@ -73,10 +73,19 @@ SRC = os.environ.get(
 OUT = os.path.join("src", "main", "resources", "assets", "aether", "leaf")
 SHEET = os.path.join("build", "leaf-sheet.html")
 
+# Output name -> the Leaf source it is cloned from, for the assets Leaf does not have. Aether's own
+# themes tile is Leaf's system.png tab run through the same rule, so the pipeline stays the single
+# source of truth for every file the mod ships and --convert can rebuild it from scratch.
+SOURCE_NAMES = {
+    "button/themes.png": "system.png",
+}
+
 # name -> (rule, a, b, c). Read the rules in convert_image() before changing a row.
 #
 #   glass(strength)              black at strength x the source alpha - plain surfaces
 #   detail(strength, lo, hi)     black glass body + the texture's own detail keyed white
+#   detail(strength, lo, hi, g)  as above, with the white detail's alpha gained by g (clamped to
+#                                opaque), for art Leaf painted translucent that has to read as solid
 #   white(strength)              the alpha shape painted flat white - glyphs and knobs
 #   shade(strength, lo, hi)      luminance remapped to greyscale - the "bright means on" art
 ASSETS = {
@@ -99,6 +108,12 @@ ASSETS = {
     "button/cosmetic.png":     ("detail", 1.00, 34.0, 78.0),
     "button/location.png":     ("detail", 1.00, 34.0, 78.0),
     "button/setting.png":      ("detail", 1.00, 34.0, 78.0),
+    # Aether's own Themes tab: Leaf's system.png art under our name, so the five navigation tiles
+    # are all cut from Leaf's set and nothing in the bar is drawn by hand. system.png is the one tab
+    # Leaf painted at half alpha (a 128 plateau against the others' 255), which in Leaf sat on a
+    # bright panel but here would make the tile read dimmer than its neighbours even when it is the
+    # current screen - so the alpha is gained to opaque, which is what the other four tabs are.
+    "button/themes.png":       ("detail", 1.00, 34.0, 78.0, 2.00),
     "button/home.png":         ("detail", 1.00, 34.0, 78.0),
     "button/close.png":        ("detail", 1.00, 34.0, 78.0),
     "button/arrow_left.png":   ("detail", 1.00, 34.0, 78.0),
@@ -153,6 +168,10 @@ def smoothstep(edge0, edge1, value):
 
 
 def load(name, root=None):
+    """Loads an asset by its Aether (output) name. Source reads follow SOURCE_NAMES, so an asset
+    with no Leaf original of its own - button/themes.png - resolves to the art it was cloned from."""
+    if root is None:
+        name = SOURCE_NAMES.get(name, name)
     path = os.path.join(root or SRC, name.replace("/", os.sep))
     if not os.path.exists(path):
         return None
@@ -214,8 +233,11 @@ def body_luminance(image, mask):
     return (best + 0.5) * 4.0
 
 
-def convert_image(image, rule, a1, a2, a3):
-    """Returns the recoloured copy: translucent black surfaces plus white detail."""
+def convert_image(image, rule, a1, a2, a3, a4=1.0):
+    """Returns the recoloured copy: translucent black surfaces plus white detail.
+
+    a1-a3 are the rule's own parameters; a4 is the optional alpha gain of the detail rule.
+    """
     width, height = image.size
     source = image.load()
     out = Image.new("RGBA", (width, height))
@@ -230,6 +252,9 @@ def convert_image(image, rule, a1, a2, a3):
             if alpha_source == 0:
                 continue
             coverage = alpha_source / 255.0
+            # The gain lifts the *detail* only: the glyphs of a translucent original have to be as
+            # solid as their neighbours' in a row of tiles, while the surface keeps Leaf's glass.
+            detail_coverage = min(1.0, coverage * a4)
             lum = luminance(r, g, b)
 
             if rule == "white":
@@ -255,7 +280,7 @@ def convert_image(image, rule, a1, a2, a3):
             else:
                 continue
 
-            detail_alpha = detail * coverage
+            detail_alpha = detail * detail_coverage
             glass_alpha = coverage * a1 * (1.0 - detail)
             if detail_alpha <= 0.0 and glass_alpha <= 0.0:
                 continue
@@ -351,8 +376,13 @@ def convert():
             print("missing: " + name, file=sys.stderr)
             continue
         rule = ASSETS[name][0]
-        rest = list(ASSETS[name][1:]) + [0.0, 0.0, 0.0]
-        result = convert_image(image, rule, rest[0], rest[1], rest[2])
+        params = list(ASSETS[name][1:])
+        # A row may carry three or four parameters; the missing alpha gain is 1.0 (no gain).
+        strength = params[0] if len(params) > 0 else 0.0
+        low = params[1] if len(params) > 1 else 0.0
+        high = params[2] if len(params) > 2 else 0.0
+        gain = params[3] if len(params) > 3 else 1.0
+        result = convert_image(image, rule, strength, low, high, gain)
         destination = os.path.join(OUT, name.replace("/", os.sep))
         os.makedirs(os.path.dirname(destination), exist_ok=True)
         result.save(destination)

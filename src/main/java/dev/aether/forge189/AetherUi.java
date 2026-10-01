@@ -334,6 +334,119 @@ public final class AetherUi {
         }
     }
 
+    /**
+     * The icon for a module category, as a 16-unit vector glyph inside the module row's tile.
+     * <p>
+     * Modules carry no artwork of their own, and shipping one texture per module would mean an art
+     * pipeline for fifty little pictures. A glyph per category is enough to tell rows apart at a
+     * glance, is drawn from the same primitives as the rest of the UI, and costs nothing to recolour
+     * with the palette. The size parameter scales the 16-unit design.
+     */
+    public static void drawModuleGlyph(dev.aether.module.ClientModule.ModuleCategory category, int x, int y,
+                                       int size, int color) {
+        if (category == null) {
+            bar(x + 4, y + 4, 8, 8, color);
+            return;
+        }
+        switch (category) {
+            case HUD:
+                // A panel with two readout lines.
+                bar(x + 1, y + 3, 14, 2, color);
+                bar(x + 1, y + 7, 9, 2, color);
+                bar(x + 1, y + 11, 12, 2, color);
+                break;
+            case PVP:
+                // A target: a ring with a centre dot and four ticks.
+                drawCircle(x + 8, y + 8, 5, color);
+                bar(x + 7, y + 7, 3, 3, color);
+                bar(x + 7, y, 2, 3, color);
+                bar(x + 7, y + 13, 2, 3, color);
+                bar(x, y + 7, 3, 2, color);
+                bar(x + 13, y + 7, 3, 2, color);
+                break;
+            case GRAPHICS:
+                // A picture: frame, horizon, sun.
+                outline(x, y + 2, x + 16, y + 14, color);
+                bar(x + 3, y + 9, 10, 2, color);
+                drawCircle(x + 6, y + 6, 2, color);
+                break;
+            case RENDER:
+                // Two stacked layers.
+                outline(x + 1, y + 3, x + 15, y + 9, color);
+                bar(x + 3, y + 11, 10, 2, color);
+                break;
+            case INTERFACE:
+                // A window with a title bar and one row.
+                outline(x, y + 2, x + 16, y + 14, color);
+                bar(x + 1, y + 4, 14, 2, color);
+                bar(x + 3, y + 9, 7, 2, color);
+                break;
+            case MOVEMENT:
+                // A double chevron.
+                for (int i = 0; i < 5; i++) {
+                    bar(x + 3 + i, y + 6 - i, 2, 2, color);
+                    bar(x + 3 + i, y + 10 + i, 2, 2, color);
+                    bar(x + 9 + i, y + 6 - i, 2, 2, color);
+                    bar(x + 9 + i, y + 10 + i, 2, 2, color);
+                }
+                break;
+            case AUDIO:
+                // A speaker: cone plus one wave.
+                bar(x + 2, y + 6, 4, 5, color);
+                bar(x + 5, y + 4, 3, 9, color);
+                bar(x + 8, y + 6, 2, 5, color);
+                bar(x + 12, y + 5, 2, 7, color);
+                break;
+            case PERFORMANCE:
+                // A rising bar chart.
+                bar(x + 2, y + 10, 3, 4, color);
+                bar(x + 6, y + 7, 3, 7, color);
+                bar(x + 10, y + 4, 3, 10, color);
+                break;
+            case ACCESSIBILITY:
+                // A figure: head and shoulders.
+                drawCircle(x + 8, y + 4, 3, color);
+                bar(x + 4, y + 8, 9, 6, color);
+                bar(x + 6, y + 8, 5, 8, color);
+                break;
+            case COSMETICS:
+                drawStar(x + 3, y + 3, color);
+                break;
+            case THEMES:
+                // A split swatch: half filled, half outlined.
+                bar(x + 2, y + 3, 6, 10, color);
+                outline(x + 8, y + 3, x + 15, y + 13, color);
+                break;
+            case GENERAL:
+            default:
+                // Four dots: a plain, honest "misc".
+                bar(x + 2, y + 2, 5, 5, color);
+                bar(x + 9, y + 2, 5, 5, color);
+                bar(x + 2, y + 9, 5, 5, color);
+                bar(x + 9, y + 9, 5, 5, color);
+                break;
+        }
+    }
+
+    /**
+     * The settings control a module row shows when a module has settings: two rails with knobs -
+     * a fade-in of the sliders a player is about to see, and legible at twelve units where a real
+     * gear turns into a blob.
+     */
+    public static void drawGearGlyph(int x, int y, int size, int color) {
+        int top = y + size / 4;
+        int bottom = y + (size * 3) / 4;
+        bar(x, top, size, 1, color);
+        bar(x, bottom, size, 1, color);
+        bar(x + size / 3, top - 2, 2, 5, color);
+        bar(x + (size * 2) / 3 - 2, bottom - 2, 2, 5, color);
+    }
+
+    /** One solid rectangle in design units; the glyphs above are written in terms of it. */
+    private static void bar(int x, int y, int width, int height, int color) {
+        Mc189Compat.drawRect(x, y, x + width, y + height, color);
+    }
+
     public static void drawMark(int x, int y, int color) {
         Mc189Compat.drawRect(x, y + 3, x + 10, y + 7, color);
         Mc189Compat.drawRect(x + 2, y + 1, x + 8, y + 9, color);

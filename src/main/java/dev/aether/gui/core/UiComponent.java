@@ -141,6 +141,17 @@ public abstract class UiComponent {
         return this;
     }
 
+    /**
+     * Sets the translation a container applies while rendering this component (a scrolled list
+     * shifts its rows by the scroll offset). Hit tests stay in the component's own coordinates, so
+     * the container feeds the cursor through the same translation.
+     */
+    public UiComponent renderOffset(double x, double y) {
+        this.renderOffsetX = x;
+        this.renderOffsetY = y;
+        return this;
+    }
+
     /** True when the point (design units) is inside this component's rectangle. */
     public boolean contains(double px, double py) {
         return visible && px >= x && px < x + width && py >= y && py < y + height;

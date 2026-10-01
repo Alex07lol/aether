@@ -15,22 +15,26 @@ import java.io.IOException;
 
 /**
  * Base class of the Aether GUI screens, carrying the shared Leaf 1.8.9 composition
- * (see docs/GUI_REBUILD.md): Leaf's fullscreen backdrop art with the four navigation tiles
- * at Leaf's exact positions (170x106 at x = 430, 650, 1100, 1320, y = 250), each drawn from
- * its own {@code button/<name>.png} art, with the screen's content underneath.
+ * (see docs/GUI_REBUILD.md): Leaf's fullscreen backdrop art with five navigation tiles at
+ * Leaf's exact rectangles (170x106 at y = 250; Leaf's own x = 430, 650, 1100, 1320 pitched 220,
+ * plus Aether's Themes tile at the free x = 860), each drawn from its own
+ * {@code button/<name>.png} art, with the screen's content underneath.
  * <p>
  * The art itself carries the wording, the panel outline and the shadows, so this class no
  * longer draws a logo or a gradient: the backdrop texture is Leaf's own screen art, recoloured
- * to translucent black and white (see {@link dev.aether.gui.leaf.LeafArt}).
+ * to translucent black and white (see {@link dev.aether.gui.leaf.LeafArt}). The one piece of
+ * Aether branding the port kept is the wordmark on the entry screen, drawn by
+ * {@code AetherModScreen} into the panel corner Leaf leaves empty.
  * <p>
  * Kept from Aether's previous layer because they are objectively better than Leaf's
  * equivalents: the centralized {@link GuiScale} conversion, the GL-state discipline of
  * {@code Mc189Compat}, and screens as pure presentation over the client's managers.
  */
-public abstract class AetherGuiScreen extends GuiScreen {
+public abstract class AetherGuiScreen extends GuiScreen implements dev.aether.gui.core.AetherUiScreen {
 
-    /** Leaf's navigation tile geometry, in design units. */
-    protected static final int[] NAV_X = {430, 650, 1100, 1320};
+    /** Leaf's navigation tile geometry, in design units. Five tiles share the row between
+     * Leaf's outer pairs (430/1490 outer, 650/1100 inner), pitched 220 - Leaf's own pitch. */
+    protected static final int[] NAV_X = {430, 650, 860, 1100, 1320};
     protected static final int NAV_Y = 250;
     protected static final int NAV_W = 170;
     protected static final int NAV_H = 106;
@@ -44,6 +48,16 @@ public abstract class AetherGuiScreen extends GuiScreen {
 
     private boolean blurLoaded;
     private NavButton[] nav;
+
+    /**
+     * The screen's own entrance: the whole composition eases up a few units when a section is
+     * opened. One animation here rather than one per screen is what makes switching sections feel
+     * like the same client, and it is driven from the frame clock, so it is the same 160 ms at 30
+     * and at 240 FPS.
+     */
+    private final dev.aether.animation.Anim openTransition =
+        new dev.aether.animation.Anim(0.0F, 160.0F, dev.aether.animation.Easing.EASE_OUT_CUBIC);
+    private static final int OPEN_SLIDE = 8;
 
     protected AetherGuiScreen(AetherClient client) {
         this(client, null);
@@ -129,7 +143,8 @@ public abstract class AetherGuiScreen extends GuiScreen {
     /**
      * Leaf's navigation tile for a section. Leaf names its tiles mod / cosmetic / location /
      * setting, and "location" is the same screen Aether calls the HUD editor - the place a
-     * player moves their on-screen elements - so the mapping is one to one.
+     * player moves their on-screen elements - so the mapping is one to one. The Themes tile is
+     * Aether's own (Leaf's system tab recoloured), because Leaf has no theme picker.
      */
     private static String navArt(GuiSection section) {
         switch (section) {
@@ -137,6 +152,8 @@ public abstract class AetherGuiScreen extends GuiScreen {
                 return LeafArt.NAV_COSMETICS;
             case HUD:
                 return LeafArt.NAV_HUD;
+            case THEMES:
+                return LeafArt.NAV_THEMES;
             case SETTINGS:
                 return LeafArt.NAV_SETTINGS;
             case MODULES:
@@ -156,6 +173,14 @@ public abstract class AetherGuiScreen extends GuiScreen {
         mouseY = GuiScale.mouseY(rawMouseY);
 
         drawBackdrop();
+
+        this.openTransition.target(1.0F);
+        this.openTransition.update();
+        float entrance = this.openTransition.value();
+        boolean sliding = entrance < 1.0F;
+        if (sliding) {
+            Mc189Compat.translate(0.0F, GuiScale.h((1.0F - entrance) * OPEN_SLIDE), 0.0F);
+        }
         if (showsNav()) {
             for (int i = 0; i < nav.length; i++) {
                 nav[i].setActive(GuiSection.ordered()[i] == section());
@@ -163,6 +188,9 @@ public abstract class AetherGuiScreen extends GuiScreen {
             }
         }
         renderContent(mouseX, mouseY);
+        if (sliding) {
+            Mc189Compat.translate(0.0F, -GuiScale.h((1.0F - entrance) * OPEN_SLIDE), 0.0F);
+        }
         Mc189Compat.color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
@@ -224,17 +252,32 @@ public abstract class AetherGuiScreen extends GuiScreen {
         super.handleMouseInput();
         int wheel = Mc189Compat.mouseWheelDelta();
         if (wheel != 0) {
-            int delta = -wheel / 24;
-            if (delta == 0) {
-                delta = wheel > 0 ? 1 : -1;
-            }
-            wheelContent(mouseX, mouseY, delta);
+            wheelContent(mouseX, mouseY, scrollDelta(-wheel / 24));
         }
+    }
+
+    /**
+     * Applies the user's scroll direction to one wheel step.
+     * <p>
+     * Convention: positive = scroll down / forward. Vanilla's raw wheel is inverted on the way in
+     * ({@code -wheel / 24}), and the ported Leaf screens then inverted it again on the way to the
+     * {@code PageBar}, which made the wheel run backwards on every paged screen. The sign is now
+     * normalised once, here, and the "Invert Scroll" preference flips it for everyone - screens
+     * must not negate it again. The raw value (before this flip) also decides the PageBar direction
+     * through {@link #scrollDelta(int)}.
+     */
+    protected int scrollDelta(int raw) {
+        return client.preferences().invertScroll() ? -raw : raw;
     }
 
     @Override
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
         if (keyCode == 1) { // ESC
+            // ESC belongs to the screen first: a keybind capture cancels with it, everything else
+            // leaves for the screen this one was opened from.
+            if (keyContent(typedChar, keyCode)) {
+                return;
+            }
             Mc189Compat.displayGuiScreen(escapeScreen());
             return;
         }

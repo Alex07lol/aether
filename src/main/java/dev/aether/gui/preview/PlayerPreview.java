@@ -106,11 +106,6 @@ public final class PlayerPreview {
         GL11.glDepthFunc(GL11.GL_LEQUAL);
         GlStateManager.disableBlend();
 
-        GL11.glPushMatrix();
-        GL11.glTranslatef(centerX, feetY, 120.0F);
-        GL11.glScalef(-zoomGui, zoomGui, zoomGui);
-        GL11.glRotatef(180.0F, 0.0F, 0.0F, 1.0F);
-
         float yaw = (float) (Math.atan(lookX / 40.0D) * 40.0D);
         float bodyPitch = -(float) (Math.atan(lookY / 40.0D) * 20.0D);
 
@@ -119,25 +114,36 @@ public final class PlayerPreview {
         float oldPitch = player.rotationPitch;
         float prevHeadYaw = player.prevRotationYawHead;
         float headYaw = player.rotationYawHead;
-        player.renderYawOffset = yaw;
-        player.rotationYaw = yaw;
-        player.rotationPitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, bodyPitch));
-        player.rotationYawHead = yaw;
-        player.prevRotationYawHead = yaw;
+        try {
+            GL11.glPushMatrix();
+            try {
+                GL11.glTranslatef(centerX, feetY, 120.0F);
+                GL11.glScalef(-zoomGui, zoomGui, zoomGui);
+                GL11.glRotatef(180.0F, 0.0F, 0.0F, 1.0F);
 
-        RenderManager renderManager = Minecraft.getMinecraft().getRenderManager();
-        renderManager.setPlayerViewY(180.0F);
-        renderManager.setRenderShadow(false);
-        renderManager.doRenderEntity(player, 0.0D, 0.0D, 0.0D, 0.0F, 1.0F, false);
-        renderManager.setRenderShadow(true);
+                player.renderYawOffset = yaw;
+                player.rotationYaw = yaw;
+                player.rotationPitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, bodyPitch));
+                player.rotationYawHead = yaw;
+                player.prevRotationYawHead = yaw;
 
-        player.renderYawOffset = yawOffset;
-        player.rotationYaw = bodyYaw;
-        player.rotationPitch = oldPitch;
-        player.prevRotationYawHead = prevHeadYaw;
-        player.rotationYawHead = headYaw;
-
-        GL11.glPopMatrix();
+                RenderManager renderManager = Minecraft.getMinecraft().getRenderManager();
+                renderManager.setPlayerViewY(180.0F);
+                renderManager.setRenderShadow(false);
+                renderManager.doRenderEntity(player, 0.0D, 0.0D, 0.0D, 0.0F, 1.0F, false);
+                renderManager.setRenderShadow(true);
+            } finally {
+                // A renderer that throws must not leave the GUI with a borrowed matrix or
+                // the player's rotations hijacked - both would corrupt every later frame.
+                GL11.glPopMatrix();
+            }
+        } finally {
+            player.renderYawOffset = yawOffset;
+            player.rotationYaw = bodyYaw;
+            player.rotationPitch = oldPitch;
+            player.prevRotationYawHead = prevHeadYaw;
+            player.rotationYawHead = headYaw;
+        }
         RenderHelper.disableStandardItemLighting();
         GlStateManager.disableRescaleNormal();
         GlStateManager.setActiveTexture(OpenGlHelper.lightmapTexUnit);

@@ -3,6 +3,7 @@ package dev.aether.module.impl.cosmetics;
 import dev.aether.module.AbstractModule;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleMetadata;
+import dev.aether.module.ModuleKind;
 
 /** Draws the selected wing pair behind the player's shoulders. */
 public class CurrentWingsModule extends AbstractModule {
@@ -11,6 +12,7 @@ public class CurrentWingsModule extends AbstractModule {
     public CurrentWingsModule() {
         super(ModuleMetadata.builder(ID, "Wings")
             .category(ModuleCategory.COSMETICS)
+            .kind(ModuleKind.COSMETIC_SERVICE)
             .description("Wears the selected wings in world.")
             .build());
         addNumber("opacity", "Opacity", 85, 0, 100, 5);

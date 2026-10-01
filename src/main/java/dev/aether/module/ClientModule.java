@@ -42,6 +42,7 @@ public interface ClientModule {
         private final String description;
         private final boolean favoriteByDefault;
         private final String group;
+        private final ModuleKind kind;
 
         private ModuleMetadata(Builder builder) {
             this.id = builder.id;
@@ -50,6 +51,7 @@ public interface ClientModule {
             this.description = builder.description;
             this.favoriteByDefault = builder.favoriteByDefault;
             this.group = builder.group;
+            this.kind = builder.kind;
         }
 
         public static Builder builder(String id, String name) {
@@ -85,6 +87,20 @@ public interface ClientModule {
             return group;
         }
 
+        /**
+         * What this entry is: a user feature, a theme, a cosmetic slot or an internal service.
+         * {@link ModuleKind#USER_MODULE} unless the module says otherwise, which keeps every
+         * existing feature listed without a single GUI change.
+         */
+        public ModuleKind kind() {
+            return kind;
+        }
+
+        /** @return true when the module browser should list this entry. */
+        public boolean userFacing() {
+            return kind.isUserFacing();
+        }
+
         public static final class Builder {
             private final String id;
             private final String name;
@@ -92,6 +108,7 @@ public interface ClientModule {
             private String description = "";
             private boolean favoriteByDefault;
             private String group;
+            private ModuleKind kind = ModuleKind.USER_MODULE;
 
             private Builder(String id, String name) {
                 if (id == null || id.trim().isEmpty()) {
@@ -121,6 +138,15 @@ public interface ClientModule {
 
             public Builder group(String group) {
                 this.group = group == null || group.trim().isEmpty() ? null : group.trim();
+                return this;
+            }
+
+            /**
+             * Declares what the entry is. Feature modules leave it at the default; themes, cosmetic
+             * slots and screen launchers name their kind so the browser can leave them out.
+             */
+            public Builder kind(ModuleKind kind) {
+                this.kind = kind == null ? ModuleKind.USER_MODULE : kind;
                 return this;
             }
 

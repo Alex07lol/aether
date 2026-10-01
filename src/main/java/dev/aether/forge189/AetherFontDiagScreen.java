@@ -28,7 +28,7 @@ import org.lwjgl.opengl.GL11;
  * third. It is reachable with F9 from the Control Center and is intentionally tiny: it is a
  * diagnostic, not a feature.
  */
-public final class AetherFontDiagScreen extends GuiScreen {
+public final class AetherFontDiagScreen extends GuiScreen implements dev.aether.gui.core.AetherUiScreen {
     private static final int KEY_ESCAPE = 1;
     private static final int PREVIEW_SIZE = 96;
     private static final float GLYPH_SCALE = 6.0F;

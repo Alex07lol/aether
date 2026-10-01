@@ -14,6 +14,7 @@ public final class ClientPreferencesTest {
         defaults();
         roundTrip();
         sectionNormalisation();
+        invertScroll();
         System.out.println("ClientPreferencesTest passed");
     }
 
@@ -28,6 +29,7 @@ public final class ClientPreferencesTest {
         ClientPreferences preferences = new ClientPreferences();
         preferences.setSaveOnClose(false);
         preferences.setShowTooltips(false);
+        preferences.setInvertScroll(true);
         preferences.setOpenSection("Cosmetics");
 
         ConfigDocument.Builder builder = ConfigDocument.builder();
@@ -38,6 +40,7 @@ public final class ClientPreferencesTest {
         restored.applyConfig(document);
         TestSupport.assertTrue(!restored.saveOnClose(), "the save-on-close choice round trips");
         TestSupport.assertTrue(!restored.showTooltips(), "the tooltip choice round trips");
+        TestSupport.assertTrue(restored.invertScroll(), "the scroll direction round trips");
         TestSupport.assertEquals("Cosmetics", restored.openSection(), "the section round trips");
 
         ClientPreferences untouched = new ClientPreferences();
@@ -52,8 +55,21 @@ public final class ClientPreferencesTest {
         preferences.setOpenSection("nonsense");
         TestSupport.assertEquals("Modules", preferences.openSection(), "an unknown section falls back");
         TestSupport.assertEquals(0, ClientPreferences.sectionIndex("nonsense"), "and indexes to the first");
-        TestSupport.assertEquals(3, ClientPreferences.sectionIndex("Settings"), "known sections keep their order");
-        TestSupport.assertEquals(4, ClientPreferences.SECTIONS.length, "the GUI ships four sections");
+        TestSupport.assertEquals(4, ClientPreferences.sectionIndex("Settings"), "known sections keep their order");
+        TestSupport.assertEquals(5, ClientPreferences.SECTIONS.length, "the GUI ships five sections");
         TestSupport.assertEquals("Cosmetics", ClientPreferences.SECTIONS[1], "Cosmetics follows Modules");
+        // The order is also the navigation bar's x order, and the x positions are Leaf's own tile
+        // rectangles (430/650/1100/1320) with Aether's Themes tile in the free slot at 860 - so the
+        // HUD editor has to stay third of the four Leaf tiles, at index 3.
+        TestSupport.assertEquals("Themes", ClientPreferences.SECTIONS[2], "Themes takes the middle tile");
+        TestSupport.assertEquals("HUD Editor", ClientPreferences.SECTIONS[3], "the HUD editor keeps Leaf's inner tile");
+        TestSupport.assertEquals("Themes", ClientPreferences.normalizeSection("themes"), "the Themes section normalises");
+    }
+
+    private static void invertScroll() {
+        ClientPreferences preferences = new ClientPreferences();
+        TestSupport.assertTrue(!preferences.invertScroll(), "the wheel scrolls like vanilla by default");
+        preferences.setInvertScroll(true);
+        TestSupport.assertTrue(preferences.invertScroll(), "the flip takes immediately");
     }
 }

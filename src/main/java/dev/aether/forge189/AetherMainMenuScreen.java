@@ -14,7 +14,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public final class AetherMainMenuScreen extends GuiScreen {
+public final class AetherMainMenuScreen extends GuiScreen implements dev.aether.gui.core.AetherUiScreen {
     private static final int KEY_ESCAPE = 1;
     private static final AetherFontManager fontManager = AetherFontManager.instance();
 

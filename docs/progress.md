@@ -15,8 +15,8 @@ Rules this tracker enforces (from the task brief):
 
 ## CURRENT PHASE
 
-**Phase 7 — Block Info transition** (Phases 1-6 complete; see below). Next exact task is recorded
-in `docs/stop.md`.
+**Phase 7 — Block Info transition** (Phases 1-6, the Leaf UI copy and the Themes/scroll/wordmark
+follow-up are complete; see below). Next exact task is recorded in `docs/stop.md`.
 
 ---
 
@@ -179,7 +179,9 @@ coordinates, in a two-colour palette.
 - [x] Palette: `ThemePalettes.mono()` is the default **and** a Monochrome theme module, so the
       default and the module share one palette; `ACCENT_ON` follows the accent instead of a fixed
       green; the HUD editor's red/green bar states became the accent and the secondary text tone
-- [x] Dead code: unused `Mc189Compat.hasResource` and unused `ThemePalettes.names()` removed
+- [x] Dead code: unused `Mc189Compat.hasResource` removed, and `ThemePalettes.names()` removed here
+      too - it came back briefly for the Themes picker's category filter and went again when that
+      filter was cut for showing nothing (see the follow-up section below); nothing reads it now
 - [x] `compileJava`, `coreSelfTests` (29/29; registry now 61 modules) and `scripts/verify.sh`
       (build + jar proof) green
 - [ ] Live confirmation in `runClient` (the screens have not been looked at on a running client)
@@ -206,6 +208,54 @@ coordinates, in a two-colour palette.
 - [x] `MouseIndicatorTest` under `coreSelfTests` (convergence on the rim, diagonal vector clamp,
       spring-back, 100 ms ≈ 20×5 ms, no NaN on zero delta, eight-way direction words)
 - [ ] Live confirmation (needs `runClient`: wiggle the mouse, watch the dot lean and recentre)
+
+## Leaf UI follow-up — Themes section, wheel direction, entry-screen wordmark
+
+Asked for directly (not one of the numbered phases). Every item below was checked on a live client
+with the screenshot walker, at 1920x1080, and the numbers are in `docs/stop.md` TEST STATUS.
+
+- [x] **Themes is a section of its own** (`GuiSection.THEMES`; five sections). `AetherThemesScreen` is
+      the Cosmetics list without the player preview: 300x90 pills at x=480 from y=400, pitch 100,
+      three per page, scrollbar (945, 400, 32, 400), the whole screen paging on the wheel. The list is
+      built by scanning the registry for `ThemeModule`s, so a seventh palette pages rather than
+      overflows and the screen needs no change; the equipped theme is the bright pill, and clicking
+      one enables that module (the registry's group rule makes the palettes exclusive) and saves
+      through the client's own path
+- [x] No category/family filter on that screen: with one palette per family it could not change what
+      the list shows, and an invented grouping over six pills is a control that does nothing. The
+      filter and its only data (`ThemePalettes.names()`) were cut rather than shipped
+- [x] **Navigation order is the tile order.** `GuiSection`'s declaration order pairs with
+      `NAV_X = {430, 650, 860, 1100, 1320}`, so Leaf's own tabs keep Leaf's rectangles (modules 430,
+      cosmetics 650, HUD/`location` 1100, settings 1320) and Aether's Themes tile takes the free slot
+      at 860. The first cut declared THEMES ahead of HUD, which silently moved Leaf's HUD tab to 860
+      and swapped the two tabs' art - caught by measuring the live screenshots (exactly one bright
+      tile per screen, at 430/650/860/1100/1320 for modules/cosmetics/themes/HUD/settings)
+- [x] **The module grid keeps Leaf's columns** (`GRID_X = {430, 650, 1100, 1320}`, deliberately not
+      `NAV_X`): reusing the nav row's x list put a card column under the page scrollbar at x=945
+- [x] **Aether's Themes tile art** is Leaf's `system.png` through the same rule under our own name
+      (`SOURCE_NAMES` in `scripts/leaf_assets.py`, so `--convert` rebuilds all 30 textures); it is the
+      one tab Leaf painted at half alpha, so the `detail` rule gained an optional alpha gain and its
+      white glyphs now sit as solid as its neighbours' - before that the current screen was the
+      *dimmest* tile in the row
+- [x] **Wheel direction fixed once, in the shell.** `AetherGuiScreen.handleMouseInput` normalises the
+      sign (`scrollDelta(-wheel / 24)`, positive = forward/down) and screens read `delta > 0 ->
+      onScroll`. Before, the shell negated vanilla's wheel and every screen negated it again, so all
+      paged screens ran backwards
+- [x] **`Invert Scroll` preference** (`preference.invert_scroll` + `ClientPreferences.invertScroll()`)
+      with a Leaf toggle on the client settings screen; `scrollDelta` is the only place the choice is
+      applied, so the module grid, cosmetics, themes, module settings, client settings and the HUD
+      editor all follow it. (Round-tripped in `run/config/aether/client.json` on the dev run)
+- [x] **The Aether wordmark is back on the entry screen**: `AetherModScreen.drawBranding()` draws
+      `aetherlogo.png` at design (430, 292) with the `AETHER` title in the accent beside it, in the
+      panel corner Leaf leaves empty above the card grid
+- [x] `ClientPreferencesTest` extended (defaults, round trip, `SECTIONS[2] == "Themes"`,
+      `SECTIONS[3] == "HUD Editor"` - the tile order is pinned in a test); `coreSelfTests` **30/30**,
+      **62 modules / 214 settings**, `scripts/verify.sh` green end to end (jar carries all 30 leaf
+      textures incl. `button/themes.png`)
+- [x] Screenshot-verified live: 11 shots including `debug-aether-themes`, `-themes-equipped`,
+      `-themes-scrolled`; the picker was reset to the default palette first, a real click on the first
+      pill lit it, and the choice landed in the config - so selection works end to end, not just on
+      screen
 
 ## Phases 7-19 (planned)
 
@@ -243,6 +293,8 @@ coordinates, in a two-colour palette.
 | 2026-09-30 | 18 (pull-forward) | Leaf UI copy + art pass: `leaf_assets.py --convert` wrote 29 textures (verified numerically), `compileJava` green, `coreSelfTests` **29/29** (**61 modules** - the Monochrome theme), `scripts/verify.sh` green end to end, jar contains `assets/aether/leaf/**` |
 | 2026-09-30 | GUI verified live | `runClient -PaetherDebugShots=1920x1080` walked every screen; panel fit, white glyphs, state brightness and the enabled/disabled card split all confirmed from the screenshots (see `docs/stop.md` TEST STATUS 0) |
 | 2026-09-30 | 6 | Mouse Display: `compileJava` green, `coreSelfTests` **30/30** (`MouseIndicatorTest` added), **62 modules / 214 settings**, `scripts/verify.sh` green end to end |
+| 2026-10-01 | Leaf UI follow-up | Themes section, wheel direction + `invert_scroll`, wordmark: `coreSelfTests` **30/30**, **62 modules / 214 settings / 56 ranges / 26 choice lists**, `scripts/verify.sh` green end to end, jar carries all 30 `assets/aether/leaf/**` textures |
+| 2026-10-01 | Leaf UI follow-up (live) | `runClient -PaetherDebugShots=1920x1080` walked 11 screens (three new themes shots); the nav row's order/brightness, the pill selection, paging and the scrollbar thumb were measured out of the PNGs. The walker now forces the framebuffer to the requested size, so shots are 1:1 design units (see `docs/stop.md` TEST STATUS 0) |
 
 Proof that the new mixin binds in production as well as dev: `build/tmp/compileJava/compileJava-refmap.json`
 contains `dev/aether/forge189/mixin/MouseHelperMixin → mouseXYChange -> Lnet/minecraft/util/MouseHelper;func_74374_c()V`.
@@ -259,8 +311,8 @@ are preserved in §13b.
 ## Remaining work (this pass)
 
 - Live verification in `runClient`: freelook smoothness, keystrokes animation, Target Info
-  enter/flash/exit, Mouse Display drift/recentre, and the ported Leaf screens (the screens were
-  screenshot-verified once; freelook feel still needs hands on it).
+  enter/flash/exit and Mouse Display drift/recentre still need hands-on feel (the screens - including
+  the Themes picker and the nav row - are screenshot-verified with measurements).
 - Phases 7-19 above.
 
 ## Exact next task

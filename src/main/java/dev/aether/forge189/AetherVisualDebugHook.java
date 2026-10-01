@@ -5,6 +5,7 @@ import dev.aether.gui.AetherGui;
 import dev.aether.gui.screens.AetherCosmeticScreen;
 import dev.aether.gui.screens.AetherHudEditorScreen;
 import dev.aether.gui.screens.AetherModScreen;
+import dev.aether.gui.screens.AetherThemesScreen;
 import dev.aether.gui.screens.AetherClientSettingsScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.ScreenShotHelper;
@@ -29,7 +30,13 @@ import java.io.File;
  *   <li>{@code debug-aether-modules} - the Modules screen;</li>
  *   <li>{@code debug-aether-modules-scrolled} - after scrolling the card list;</li>
  *   <li>{@code debug-aether-module-settings} - one module's configuration panel;</li>
- *   <li>{@code debug-aether-cosmetics} - category list + player preview;</li>
+ *   <li>{@code debug-aether-cosmetics} - the cosmetics gallery: filters, search, cards, preview;</li>
+ *   <li>{@code debug-aether-cosmetics-scrolled} - the gallery after one scroll;</li>
+ *   <li>{@code debug-aether-cosmetics-import} - the import popover open;</li>
+ *   <li>{@code debug-aether-themes} - the theme picker as it opens, no palette equipped;</li>
+ *   <li>{@code debug-aether-themes-equipped} - after selecting a theme, so the equipped pill and
+ *       the palette it applies are in the shot;</li>
+ *   <li>{@code debug-aether-themes-scrolled} - the same screen on its second page;</li>
  *   <li>{@code debug-aether-hud} - the HUD editor;</li>
  *   <li>{@code debug-aether-settings} - the client settings screen.</li>
  * </ol>
@@ -42,7 +49,9 @@ public final class AetherVisualDebugHook {
     private enum Step {
         RESIZE, WAIT_MENU, SHOOT_MENU, OPEN_MODULES, SHOOT_MODULES, SCROLL_MODULES,
         SHOOT_SCROLLED, OPEN_SETTINGS_PANEL, SHOOT_MODULE_SETTINGS, OPEN_COSMETICS,
-        SHOOT_COSMETICS, OPEN_HUD, SHOOT_HUD, OPEN_CLIENT_SETTINGS, SHOOT_CLIENT_SETTINGS,
+        SHOOT_COSMETICS, SCROLL_COSMETICS, SHOOT_COSMETICS_SCROLLED, SHOOT_COSMETICS_IMPORT,
+        SHOOT_THEMES_PAGE, SELECT_THEME, SHOOT_THEMES_EQUIPPED, SCROLL_THEMES,
+        SHOOT_THEMES_SCROLLED, OPEN_HUD, SHOOT_HUD, OPEN_CLIENT_SETTINGS, SHOOT_CLIENT_SETTINGS,
         LOAD_WORLD, WAIT_WORLD, SHOOT_PREVIEW, DONE
     }
 
@@ -85,12 +94,24 @@ public final class AetherVisualDebugHook {
             case RESIZE:
                 if (targetWidth > 0) {
                     try {
+                        Display.setResizable(true);
                         if (Display.getWidth() != targetWidth || Display.getHeight() != targetHeight) {
                             Display.setDisplayMode(new org.lwjgl.opengl.DisplayMode(targetWidth, targetHeight));
-                            Display.setResizable(true);
                         }
                     } catch (org.lwjgl.LWJGLException failed) {
-                        System.out.println("[AetherVisualDebug] resize failed: " + failed);
+                        System.out.println("[AetherVisualDebug] window resize failed: " + failed);
+                    }
+                    // A windowed LWJGL window can ignore setDisplayMode, and Minecraft only adopts
+                    // Display's size when Display.wasResized() is set - so tell it outright. The
+                    // screenshots come from the framebuffer, which is what this resizes, and a
+                    // framebuffer that is not the window size is exactly what makes the saved
+                    // images comparable between machines.
+                    try {
+                        mc.resize(targetWidth, targetHeight);
+                        System.out.println("[AetherVisualDebug] framebuffer " + mc.displayWidth
+                            + "x" + mc.displayHeight);
+                    } catch (Throwable failed) {
+                        System.out.println("[AetherVisualDebug] framebuffer resize failed: " + failed);
                     }
                 }
                 step = Step.WAIT_MENU;
@@ -146,6 +167,75 @@ public final class AetherVisualDebugHook {
             case SHOOT_COSMETICS:
                 if (--settleTicks <= 0 && mc.currentScreen instanceof AetherCosmeticScreen) {
                     shoot(mc, "debug-aether-cosmetics");
+                    step = Step.SCROLL_COSMETICS;
+                    settleTicks = 10;
+                }
+                break;
+
+            case SCROLL_COSMETICS:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherCosmeticScreen) {
+                    ((AetherCosmeticScreen) mc.currentScreen).debugNextPage();
+                    step = Step.SHOOT_COSMETICS_SCROLLED;
+                    settleTicks = 15;
+                }
+                break;
+
+            case SHOOT_COSMETICS_SCROLLED:
+                // One viewport down: proves the gallery scrolls and the thumb moves.
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherCosmeticScreen) {
+                    shoot(mc, "debug-aether-cosmetics-scrolled");
+                    ((AetherCosmeticScreen) mc.currentScreen).debugToggleImportMenu();
+                    step = Step.SHOOT_COSMETICS_IMPORT;
+                    settleTicks = 15;
+                }
+                break;
+
+            case SHOOT_COSMETICS_IMPORT:
+                // The import popover: open folder / type folder / drop import / choose file.
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherCosmeticScreen) {
+                    shoot(mc, "debug-aether-cosmetics-import");
+                    ((AetherCosmeticScreen) mc.currentScreen).debugToggleImportMenu();
+                    resetThemes();
+                    open(mc, AetherGui.themes(client), Step.SHOOT_THEMES_PAGE);
+                }
+                break;
+
+            case SHOOT_THEMES_PAGE:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherThemesScreen) {
+                    shoot(mc, "debug-aether-themes");
+                    step = Step.SELECT_THEME;
+                    settleTicks = 10;
+                }
+                break;
+
+            case SELECT_THEME:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherThemesScreen) {
+                    ((AetherThemesScreen) mc.currentScreen).debugSelect(0);
+                    step = Step.SHOOT_THEMES_EQUIPPED;
+                    settleTicks = 15;
+                }
+                break;
+
+            case SHOOT_THEMES_EQUIPPED:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherThemesScreen) {
+                    shoot(mc, "debug-aether-themes-equipped");
+                    step = Step.SCROLL_THEMES;
+                    settleTicks = 10;
+                }
+                break;
+
+            case SCROLL_THEMES:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherThemesScreen) {
+                    ((AetherThemesScreen) mc.currentScreen).debugNextPage();
+                    step = Step.SHOOT_THEMES_SCROLLED;
+                    settleTicks = 15;
+                }
+                break;
+
+            case SHOOT_THEMES_SCROLLED:
+                // Page two: proves the pager works and moves the scrollbar thumb down its track.
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherThemesScreen) {
+                    shoot(mc, "debug-aether-themes-scrolled");
                     open(mc, AetherGui.hudEditor(client), Step.SHOOT_HUD);
                 }
                 break;
@@ -248,6 +338,23 @@ public final class AetherVisualDebugHook {
         }
     }
 
+    /**
+     * Puts the theme picker back on the default palette before its shots. The client saves its
+     * configuration, so without this the picker's "before" and "after" images would depend on what
+     * the previous run happened to select.
+     */
+    private void resetThemes() {
+        int reset = 0;
+        for (dev.aether.module.ClientModule module : client.modules().all()) {
+            if (module instanceof dev.aether.theme.ThemeModule
+                && module.state() == dev.aether.module.ClientModule.ModuleState.ENABLED) {
+                client.modules().setEnabled(module.metadata().id(), false);
+                reset++;
+            }
+        }
+        System.out.println("[AetherVisualDebug] reset " + reset + " theme(s) to the default palette");
+    }
+
     private void open(Minecraft mc, net.minecraft.client.gui.GuiScreen screen, Step next) {
         System.out.println("[AetherVisualDebug] open " + screen.getClass().getSimpleName()
             + " -> step " + next + ", world=" + (mc.theWorld != null));
@@ -258,9 +365,12 @@ public final class AetherVisualDebugHook {
 
     private static void shoot(Minecraft mc, String name) {
         try {
-            ScreenShotHelper.saveScreenshot(mc.mcDataDir, name,
+            // ScreenShotHelper writes the name verbatim, so the extension is added here: these
+            // files are meant to be opened and looked at.
+            String file = name.endsWith(".png") ? name : name + ".png";
+            ScreenShotHelper.saveScreenshot(mc.mcDataDir, file,
                 mc.displayWidth, mc.displayHeight, mc.getFramebuffer());
-            System.out.println("[AetherVisualDebug] saved " + name);
+            System.out.println("[AetherVisualDebug] saved " + file);
         } catch (Exception exception) {
             System.out.println("[AetherVisualDebug] screenshot failed: " + exception);
         }
