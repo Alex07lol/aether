@@ -54,17 +54,18 @@ public final class ClientPreferencesTest {
         TestSupport.assertEquals("HUD Editor", preferences.openSection(), "section names are case-insensitive");
         preferences.setOpenSection("nonsense");
         TestSupport.assertEquals("Modules", preferences.openSection(), "an unknown section falls back");
-        TestSupport.assertEquals(0, ClientPreferences.sectionIndex("nonsense"), "and indexes to the first");
-        TestSupport.assertEquals(5, ClientPreferences.sectionIndex("Settings"), "known sections keep their order");
-        TestSupport.assertEquals(6, ClientPreferences.SECTIONS.length, "the GUI ships six sections");
-        TestSupport.assertEquals("Cosmetics", ClientPreferences.SECTIONS[1], "Cosmetics follows Modules");
-        // The order is the navigation order: Modules, Cosmetics, HUD Editor, Appearance,
-        // Profiles, Settings - Aether's own information architecture, not Leaf's four tiles.
-        TestSupport.assertEquals("HUD Editor", ClientPreferences.SECTIONS[2], "the HUD editor follows Cosmetics");
-        TestSupport.assertEquals("Appearance", ClientPreferences.SECTIONS[3],
+        TestSupport.assertEquals(1, ClientPreferences.sectionIndex("nonsense"), "Modules is the fallback destination");
+        // The order is the navigation order: Home, Modules, Cosmetics, HUD Editor,
+        // Appearance, Profiles, Settings - the compact navigation's rail order, with the
+        // HUD editor last because it is a fullscreen destination, not a routed category.
+        TestSupport.assertEquals("Home", ClientPreferences.SECTIONS[0], "Home opens the menu");
+        TestSupport.assertEquals("Modules", ClientPreferences.SECTIONS[1], "Modules follows Home");
+        TestSupport.assertEquals("Cosmetics", ClientPreferences.SECTIONS[2], "Cosmetics follows Modules");
+        TestSupport.assertEquals("Appearance", ClientPreferences.SECTIONS[4],
             "Appearance is where a theme is worn");
-        TestSupport.assertEquals("Profiles", ClientPreferences.SECTIONS[4], "Profiles is its own destination");
-        TestSupport.assertEquals("Settings", ClientPreferences.SECTIONS[5], "Settings closes the row");
+        TestSupport.assertEquals("Profiles", ClientPreferences.SECTIONS[5], "Profiles is its own destination");
+        TestSupport.assertEquals("Settings", ClientPreferences.SECTIONS[6], "Settings closes the row");
+        TestSupport.assertEquals(7, ClientPreferences.SECTIONS.length, "the GUI ships seven destinations");
         // The retired Themes destination must load as Appearance rather than fall back to Modules.
         TestSupport.assertEquals("Appearance", ClientPreferences.normalizeSection("themes"),
             "the Themes section maps onto Appearance");

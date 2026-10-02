@@ -334,12 +334,12 @@ public final class AetherUi {
      * window scale instead of being a fixed pixel count that overflows small layouts.
      */
     public static void drawBadge(String label, int x, int y, int color) {
-        int textHeight = AetherFont.height(AetherFont.Size.CAPTION);
-        int height = textHeight + GuiScale.h(6);
-        int padding = GuiScale.w(5);
-        int width = AetherFont.width(AetherFont.Size.CAPTION, label) + padding * 2;
+        int textHeight = AetherFont.height(7.5F);
+        int height = textHeight + 6;
+        int padding = 5;
+        int width = AetherFont.width(7.5F, label) + padding * 2;
         roundRect(x, y, x + width, y + height, Math.max(1, height / 2), withAlpha(color, 0x44));
-        AetherFont.draw(AetherFont.Size.CAPTION, label, x + padding, y + (height - textHeight) / 2, color);
+        AetherFont.draw(7.5F, label, x + padding, y + (height - textHeight) / 2, color);
     }
 
     public static void drawStar(int x, int y, int color) {

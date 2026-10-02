@@ -2,134 +2,134 @@ package dev.aether.gui;
 
 import dev.aether.forge189.Mc189Compat;
 import dev.aether.forge189.font.AetherFontManager;
+import dev.aether.forge189.font.AetherFontManager.Face;
+import dev.aether.ui.UiIcon;
 import dev.aether.forge189.font.GlyphPageFontRenderer;
 
 /**
- * The semantic type scale of the Aether GUI - the equivalent of Leaf Client's
- * {@code CustomFont} hub (one renderer, sizes set centrally instead of per screen).
- * Adapted in structure only; all rendering is Aether's own glyph atlas pipeline.
+ * The UI's text layer: pixel sizes over the bundled Inter faces (SIL OFL), rasterised
+ * through the existing glyph-atlas pipeline. Sizes are GUI-scale pixels and follow the
+ * compact scale the Glide reference measures out - 7 for slider values, 7.5-8 for
+ * descriptions, 9 for chips and fields, 10 for card titles, 11 for section headers,
+ * 12.5-13 for row titles, 15 for the screen header - so the whole interface can be
+ * specified in the same numbers the visual grammar uses.
  * <p>
- * Five sizes carry the whole interface: {@link Size#TITLE}, {@link Size#SECTION},
- * {@link Size#BODY}, {@link Size#SMALL} and {@link Size#CAPTION}. Each is defined in
- * {@link GuiScale} design units; the concrete point size is derived from the current
- * window scale, so text is laid out and measured in design units exactly like every
- * other component, and the rasterised size follows the resolution instead of being
- * hardcoded per screen.
- * <p>
- * All coordinates passed to the draw methods are GUI pixels (convert design units with
- * {@link GuiScale}); widths returned by {@link #width} are GUI pixels too. When the
- * custom font cannot be built, every call transparently falls back to Minecraft's font
- * renderer, so the GUI stays readable even with a broken font pipeline.
+ * The glyph atlas is rasterised at twice the wanted pixel size and drawn through the
+ * renderer's half-scale matrix, which keeps small Inter sizes crisp. Every call falls
+ * back to the vanilla font renderer when the bundled faces are unavailable, so a font
+ * problem degrades readability, never the UI.
  */
 public final class AetherFont {
-
-    /** The five semantic sizes. Values are heights in design units. */
-    public enum Size {
-        TITLE(30),
-        SECTION(24),
-        BODY(20),
-        SMALL(17),
-        CAPTION(15);
-
-        final int designUnits;
-
-        Size(int designUnits) {
-            this.designUnits = designUnits;
-        }
-    }
 
     private AetherFont() {
     }
 
     /* ── renderer selection ─────────────────────────────────────────────── */
 
-    private static GlyphPageFontRenderer renderer(Size size) {
-        // The atlas is drawn through a 0.5 matrix, so a glyph of N points lands at N/2
-        // pixels - the point size asked for is twice the wanted effective height.
-        int fontPt = (int) Math.round(size.designUnits * 2.0D * GuiScale.unit());
+    private static GlyphPageFontRenderer renderer(float sizePx, Face face) {
+        int fontPt = Math.max(10, Math.round(sizePx * 2.0F));
+        GlyphPageFontRenderer bundled = face == Face.ICON
+            ? AetherFontManager.instance().sized(face, fontPt, UiIcon.CHARSET)
+            : AetherFontManager.instance().sized(face, fontPt);
+        if (bundled != null) {
+            return bundled;
+        }
         return AetherFontManager.instance().sized(fontPt);
     }
 
+    private static GlyphPageFontRenderer renderer(float sizePx) {
+        return renderer(sizePx, Face.REGULAR);
+    }
+
     private static Object fallback() {
-        Object minecraft = Mc189Compat.minecraft();
-        return Mc189Compat.fontRenderer(minecraft);
+        return Mc189Compat.fontRenderer(Mc189Compat.minecraft());
     }
 
     /* ── measurement (GUI pixels) ───────────────────────────────────────── */
 
-    public static int width(Size size, String text) {
+    public static int width(float sizePx, Face face, String text) {
         if (text == null || text.isEmpty()) {
             return 0;
         }
-        GlyphPageFontRenderer glyphRenderer = renderer(size);
-        if (glyphRenderer != null) {
-            return glyphRenderer.getStringWidth(text);
+        GlyphPageFontRenderer r = renderer(sizePx, face);
+        if (r != null) {
+            return r.getStringWidth(text);
         }
         return Mc189Compat.stringWidth(fallback(), text);
     }
 
-    public static int widthOf(Size size, String text, double maxDesignUnits) {
-        int maxWidth = GuiScale.w(maxDesignUnits);
-        String fit = text;
-        while (fit.length() > 1 && width(size, fit) > maxWidth) {
-            fit = fit.substring(0, fit.length() - 1);
-        }
-        return width(size, fit);
+    public static int width(float sizePx, String text) {
+        return width(sizePx, Face.REGULAR, text);
     }
 
-    /** Effective line height in GUI pixels, matching the rasterised glyph size. */
-    public static int height(Size size) {
-        int effective = (int) Math.round(size.designUnits * GuiScale.unit());
-        return Math.max(8, effective + 2);
+    /** Line height that comfortably fits the rasterised glyphs of this size. */
+    public static int height(float sizePx) {
+        return Math.max(8, Math.round(sizePx + 2.0F));
+    }
+
+    /** Trims {@code text} with an ellipsis until it fits {@code maxWidth} GUI pixels. */
+    public static String trim(float sizePx, String text, int maxWidth) {
+        return trim(sizePx, Face.REGULAR, text, maxWidth);
+    }
+
+    public static String trim(float sizePx, String text, float maxWidth) {
+        return trim(sizePx, Face.REGULAR, text, (int) maxWidth);
+    }
+
+    public static String trim(float sizePx, Face face, String text, float maxWidth) {
+        return trim(sizePx, face, text, (int) maxWidth);
+    }
+
+    public static String trim(float sizePx, Face face, String text, int maxWidth) {
+        if (text == null) {
+            return "";
+        }
+        if (width(sizePx, face, text) <= maxWidth) {
+            return text;
+        }
+        String ellipsis = "..";
+        while (text.length() > 1 && width(sizePx, face, text.substring(0, text.length() - 1) + ellipsis) > maxWidth) {
+            text = text.substring(0, text.length() - 1);
+        }
+        return text + ellipsis;
     }
 
     /* ── drawing (GUI pixel coordinates) ────────────────────────────────── */
 
-    public static void draw(Size size, String text, int x, int y, int color) {
+    public static void draw(float sizePx, Face face, String text, float x, float y, int argb) {
         if (text == null || text.isEmpty()) {
             return;
         }
-        GlyphPageFontRenderer glyphRenderer = renderer(size);
-        if (glyphRenderer != null) {
-            glyphRenderer.drawString(text, x, y, color);
+        GlyphPageFontRenderer r = renderer(sizePx, face);
+        if (r != null) {
+            r.drawString(text, x, y, argb);
         } else {
-            Mc189Compat.drawString(fallback(), text, x, y, color, false);
+            Mc189Compat.drawString(fallback(), text, x, y, argb, false);
         }
     }
 
-    public static void drawShadowed(Size size, String text, int x, int y, int color) {
-        if (text == null || text.isEmpty()) {
-            return;
-        }
-        GlyphPageFontRenderer glyphRenderer = renderer(size);
-        if (glyphRenderer != null) {
-            glyphRenderer.drawStringWithShadow(text, x, y, color);
-        } else {
-            Mc189Compat.drawString(fallback(), text, x, y, color, true);
-        }
+    public static void draw(float sizePx, String text, float x, float y, int argb) {
+        draw(sizePx, Face.REGULAR, text, x, y, argb);
     }
 
-    public static void drawCentered(Size size, String text, int x, int y, int width, int color) {
-        draw(size, text, x + (width - width(size, text)) / 2, y, color);
+    public static void drawCentered(float sizePx, Face face, String text, float x, float y, float width, int argb) {
+        draw(sizePx, face, text, x + (width - width(sizePx, face, text)) / 2.0F, y, argb);
     }
 
-    public static void drawCenteredShadowed(Size size, String text, int x, int y, int width, int color) {
-        drawShadowed(size, text, x + (width - width(size, text)) / 2, y, color);
+    public static void drawCentered(float sizePx, String text, float x, float y, float width, int argb) {
+        drawCentered(sizePx, Face.REGULAR, text, x, y, width, argb);
     }
 
-    public static void drawRight(Size size, String text, int rightX, int y, int color) {
-        draw(size, text, rightX - width(size, text), y, color);
+    public static void drawRight(float sizePx, Face face, String text, float rightX, float y, int argb) {
+        draw(sizePx, face, text, rightX - width(sizePx, face, text), y, argb);
     }
 
-    /** Trims {@code text} with an ellipsis until it fits {@code maxWidth} GUI pixels. */
-    public static String trimTo(Size size, String text, int maxWidth) {
-        if (text == null || width(size, text) <= maxWidth) {
-            return text == null ? "" : text;
-        }
-        String ellipsis = "..";
-        while (text.length() > 1 && width(size, text.substring(0, text.length() - 1) + ellipsis) > maxWidth) {
-            text = text.substring(0, text.length() - 1);
-        }
-        return text + ellipsis;
+    /** Draws the icon glyph for a codepoint from {@link dev.aether.ui.UiIcon}. */
+    public static void drawIcon(char glyph, float sizePx, float x, float y, int argb) {
+        draw(sizePx, Face.ICON, String.valueOf(glyph), x, y, argb);
+    }
+
+    public static int iconWidth(char glyph, float sizePx) {
+        return width(sizePx, Face.ICON, String.valueOf(glyph));
     }
 }

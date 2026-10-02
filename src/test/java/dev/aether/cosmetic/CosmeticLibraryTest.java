@@ -45,7 +45,15 @@ public final class CosmeticLibraryTest {
         ImageIO.write(new BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB), "png", wing.toFile());
         CosmeticValidationResult wingResult = library.importPng(wing, CosmeticType.WINGS);
         TestSupport.assertTrue(wingResult.valid(), "Valid PNG wings should import.");
-        CosmeticAsset wingAsset = library.forType(CosmeticType.WINGS).get(0);
+        // Built-ins share the WINGS slot (and carry no file), so find the imported
+        // file-backed asset rather than assuming the import is the first entry.
+        CosmeticAsset wingAsset = null;
+        for (CosmeticAsset asset : library.forType(CosmeticType.WINGS)) {
+            if (asset.localFile() != null) {
+                wingAsset = asset;
+            }
+        }
+        TestSupport.assertTrue(wingAsset != null, "The imported wing should be in the WINGS slot.");
         TestSupport.assertEquals(CosmeticType.WINGS, wingAsset.type(), "Imported wing should be typed WINGS.");
         TestSupport.assertEquals(library.typeDirectory(CosmeticType.WINGS),
                 wingAsset.localFile().getParent(), "Wings should be stored in the wings folder.");

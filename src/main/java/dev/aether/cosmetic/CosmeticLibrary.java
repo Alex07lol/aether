@@ -484,7 +484,15 @@ public final class CosmeticLibrary {
         put(new CosmeticAsset("builtin.frost_cape", "Aether Frost Cape",
                 CosmeticType.STATIC_CAPE, null, true,
                 0xFF9FD8FF, 0xFF2C5C93));
-        // ... other built‑ins omitted for brevity
+        put(new CosmeticAsset("builtin.aurora_wings", "Aurora Wings",
+                CosmeticType.WINGS, null, true,
+                0xFF8CE8C8, 0xFF5C7BE0));
+        put(new CosmeticAsset("builtin.solar_halo", "Solar Halo",
+                CosmeticType.HALO, null, true,
+                0xFFFFD166, 0xFFFFB347));
+        put(new CosmeticAsset("builtin.arcane_hat", "Arcane Hat",
+                CosmeticType.HAT, null, true,
+                0xFF9B8CFF, 0xFF4A3E80));
     }
 
     private void put(CosmeticAsset asset) { assets.put(asset.id(), asset); }

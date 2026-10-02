@@ -78,28 +78,42 @@ public final class GlyphPageFontRenderer {
     }
 
     public static GlyphPageFontRenderer create(String fontName, int size, boolean bold, boolean italic, boolean boldItalic) {
-        char[] chars = new char[256];
+        return create(new java.awt.Font(fontName, java.awt.Font.PLAIN, size), size, bold, italic, boldItalic);
+    }
+
+    /** Builds the page set from an exact bundled typeface (Inter, Fluent icons, ...). */
+    public static GlyphPageFontRenderer create(java.awt.Font baseFont, int size, boolean bold, boolean italic, boolean boldItalic) {
+        char[] chars = new char[512];
         for (int i = 0; i < chars.length; i++) {
             chars[i] = (char) i;
         }
+        return create(baseFont, size, bold, italic, boldItalic, chars);
+    }
 
-        GlyphPage regularPage = new GlyphPage(new Font(fontName, Font.PLAIN, size), true, true);
+    /**
+     * Builds the page set over an explicit character set. Icon faces need this: their
+     * glyphs live in the Unicode private-use area, far above the ASCII block a text
+     * atlas covers, and rasterising 64k codepoints would be absurd.
+     */
+    public static GlyphPageFontRenderer create(java.awt.Font baseFont, int size, boolean bold, boolean italic, boolean boldItalic, char[] chars) {
+
+        GlyphPage regularPage = new GlyphPage(baseFont.deriveFont(java.awt.Font.PLAIN, (float) size), true, true);
         regularPage.generateGlyphPage(chars);
         regularPage.setupTexture();
 
-        GlyphPage boldPage = bold ? new GlyphPage(new Font(fontName, Font.BOLD, size), true, true) : regularPage;
+        GlyphPage boldPage = bold ? new GlyphPage(baseFont.deriveFont(java.awt.Font.BOLD, (float) size), true, true) : regularPage;
         if (bold) {
             boldPage.generateGlyphPage(chars);
             boldPage.setupTexture();
         }
 
-        GlyphPage italicPage = italic ? new GlyphPage(new Font(fontName, Font.ITALIC, size), true, true) : regularPage;
+        GlyphPage italicPage = italic ? new GlyphPage(baseFont.deriveFont(java.awt.Font.ITALIC, (float) size), true, true) : regularPage;
         if (italic) {
             italicPage.generateGlyphPage(chars);
             italicPage.setupTexture();
         }
 
-        GlyphPage boldItalicPage = boldItalic ? new GlyphPage(new Font(fontName, Font.BOLD | Font.ITALIC, size), true, true) : regularPage;
+        GlyphPage boldItalicPage = boldItalic ? new GlyphPage(baseFont.deriveFont(java.awt.Font.BOLD | java.awt.Font.ITALIC, (float) size), true, true) : regularPage;
         if (boldItalic) {
             boldItalicPage.generateGlyphPage(chars);
             boldItalicPage.setupTexture();

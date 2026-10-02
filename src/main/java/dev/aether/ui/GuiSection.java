@@ -3,16 +3,17 @@ package dev.aether.ui;
 /**
  * The top-level destinations of the Aether GUI.
  * <p>
- * The information architecture is Aether's own, not Leaf's four-tile layout: Modules, Cosmetics,
- * HUD Editor, Appearance, Profiles, Settings. The declaration order is the navigation order; the
- * navigation bar's x positions are computed responsively from the design width (see
- * {@code AetherGuiScreen}), so reordering this enum moves the tiles with it and the two lists
- * stay in step by construction.
+ * The information architecture follows the compact navigation model: Home, Modules,
+ * Cosmetics, Appearance, Profiles, Settings - all routed inside one menu window. HUD
+ * is not a routed category: the editor is fullscreen and opens from the rail's
+ * dedicated Edit HUD button, so {@link #HUD} exists for call sites but never renders
+ * a rail tile. The declaration order is the navigation order.
  * <p>
  * Themes are not a section. A theme is configuration worn on the Appearance screen; the
  * {@code dev.aether.theme.ThemeManager} owns it and the module registry never sees it.
  */
 public enum GuiSection {
+    HOME("Home"),
     MODULES("Modules"),
     COSMETICS("Cosmetics"),
     HUD("HUD Editor"),

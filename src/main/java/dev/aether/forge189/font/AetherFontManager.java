@@ -26,8 +26,31 @@ public final class AetherFontManager {
     private final GlyphPageFontRenderer[] bySize = new GlyphPageFontRenderer[4];
     private final java.util.Map<Integer, GlyphPageFontRenderer> exactSizes =
         new java.util.LinkedHashMap<Integer, GlyphPageFontRenderer>();
+    /** Bundled-face renderers keyed by {@code face.ordinal() * 1000 + fontPt}. */
+    private final java.util.Map<Integer, GlyphPageFontRenderer> byFace =
+        new java.util.LinkedHashMap<Integer, GlyphPageFontRenderer>();
+    private final java.awt.Font[] faceFonts = new java.awt.Font[Face.values().length];
+    private boolean facesLoaded;
     private boolean failed;
     private String failure = "";
+
+    /** The typefaces the UI draws with, all bundled under {@code assets/aether/fonts}. */
+    public enum Face {
+        /** Inter Regular - body text, descriptions, buttons. */
+        REGULAR("fonts/Inter-Regular.ttf"),
+        /** Inter Medium - row titles, chips, labels. */
+        MEDIUM("fonts/Inter-Medium.ttf"),
+        /** Inter SemiBold - screen titles, section headers. */
+        SEMIBOLD("fonts/Inter-SemiBold.ttf"),
+        /** Microsoft Fluent System Icons (Regular) - chrome glyphs. */
+        ICON("fonts/FluentSystemIcons-Regular.ttf");
+
+        final String resourcePath;
+
+        Face(String resourcePath) {
+            this.resourcePath = resourcePath;
+        }
+    }
 
     private AetherFontManager() {
     }
@@ -145,6 +168,86 @@ public final class AetherFontManager {
                 + "; the UI continues on the Minecraft font.");
             return null;
         }
+    }
+
+    /**
+     * A renderer for one bundled face at an exact point size. The point size follows
+     * the glyph-atlas convention: the atlas rasterises at {@code fontPt} and the draw
+     * path halves it, so a glyph lands at {@code fontPt / 2} GUI pixels.
+     *
+     * @return the renderer, or null when the face or size is unavailable
+     */
+    public GlyphPageFontRenderer sized(Face face, int fontPt) {
+        return sized(face, fontPt, null);
+    }
+
+    /**
+     * A renderer for one bundled face over an explicit character set - icon faces need
+     * this because their glyphs live in the private-use area, far above the ASCII
+     * block a text atlas covers.
+     */
+    public GlyphPageFontRenderer sized(Face face, int fontPt, char[] charset) {
+        if (failed || face == null) {
+            return null;
+        }
+        int clamped = Math.max(10, Math.min(160, fontPt));
+        Integer key = Integer.valueOf(face.ordinal() * 1000 + clamped
+            + (charset == null ? 0 : 500000));
+        GlyphPageFontRenderer cached = byFace.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        java.awt.Font base = faceFont(face);
+        if (base == null) {
+            return null;
+        }
+        try {
+            GlyphPageFontRenderer renderer = charset == null
+                ? GlyphPageFontRenderer.create(base, clamped, true, true, true)
+                : GlyphPageFontRenderer.create(base, clamped, false, false, false, charset);
+            if (!renderer.isUsable()) {
+                failed = true;
+                failure = "the " + face + " glyph atlas has no OpenGL texture";
+                System.out.println("[Aether] Custom font unavailable: " + failure);
+                return null;
+            }
+            byFace.put(key, renderer);
+            return renderer;
+        } catch (Error broken) {
+            failed = true;
+            failure = broken.getClass().getSimpleName() + ": " + broken.getMessage();
+            System.out.println("[Aether] The bundled font fails to link: " + failure);
+            return null;
+        } catch (RuntimeException unavailable) {
+            failed = true;
+            failure = unavailable.getClass().getSimpleName() + ": " + unavailable.getMessage();
+            System.out.println("[Aether] Bundled font unavailable after " + failure);
+            return null;
+        }
+    }
+
+    /** Loads one bundled TTF once; failures latch per face. */
+    private synchronized java.awt.Font faceFont(Face face) {
+        if (!facesLoaded) {
+            facesLoaded = true;
+            for (Face candidate : Face.values()) {
+                try {
+                    java.io.InputStream stream = AetherFontManager.class.getResourceAsStream(
+                        "/assets/aether/" + candidate.resourcePath);
+                    if (stream == null) {
+                        System.out.println("[Aether] Bundled font missing: " + candidate.resourcePath);
+                        continue;
+                    }
+                    faceFonts[candidate.ordinal()] = java.awt.Font.createFont(
+                        java.awt.Font.TRUETYPE_FONT, stream);
+                    stream.close();
+                } catch (Exception failedFace) {
+                    System.out.println("[Aether] Bundled font could not load ("
+                        + candidate + "): " + failedFace);
+                }
+            }
+        }
+        return faceFonts[face.ordinal()];
     }
 
     private GlyphPageFontRenderer rendererFor(int slot, int size) {
