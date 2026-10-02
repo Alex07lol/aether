@@ -98,6 +98,8 @@ public final class ChipBar extends UiComponent {
     public void render() {
         int cursor = gx();
         int top = gy();
+        int height = GuiScale.h(CHIP_HEIGHT);
+        int radius = GuiScale.w(CHIP_RADIUS);
         for (int i = 0; i < this.labels.size(); i++) {
             int[] rect = chipRect(i, cursor, top);
             if (rect[2] <= 0) {
@@ -106,17 +108,18 @@ public final class ChipBar extends UiComponent {
             boolean active = i == this.selected;
             if (active) {
                 AetherUi.drawRoundRect((int) Math.round(this.markerX.value()), top,
-                    (int) Math.round(this.markerX.value() + this.markerWidth.value()), top + CHIP_HEIGHT,
-                    CHIP_RADIUS, AnimationMath.scaleAlpha(AetherUi.TEXT_PRIMARY, 0.14F));
+                    (int) Math.round(this.markerX.value() + this.markerWidth.value()), top + height,
+                    radius, AnimationMath.scaleAlpha(AetherUi.TEXT_PRIMARY, 0.14F));
             } else if (i == this.hoveredIndex) {
-                AetherUi.drawRoundRect(rect[0], top, rect[0] + rect[2], top + CHIP_HEIGHT, CHIP_RADIUS,
+                AetherUi.drawRoundRect(rect[0], top, rect[0] + rect[2], top + height, radius,
                     AnimationMath.scaleAlpha(AetherUi.TEXT_PRIMARY, this.hover.value() * 0.06F));
             }
             int color = active ? AetherUi.TEXT_PRIMARY
                 : (i == this.hoveredIndex ? AetherUi.blend(AetherUi.TEXT_DISABLED, AetherUi.TEXT_SECONDARY, this.hover.value())
                     : AetherUi.TEXT_SECONDARY);
-            int textY = top + (CHIP_HEIGHT - AetherFont.height(AetherFont.Size.CAPTION)) / 2;
-            AetherFont.draw(AetherFont.Size.CAPTION, this.labels.get(i), rect[0] + CHIP_PADDING, textY, color);
+            int textY = top + (height - AetherFont.height(AetherFont.Size.CAPTION)) / 2;
+            AetherFont.draw(AetherFont.Size.CAPTION, this.labels.get(i), rect[0] + GuiScale.w(CHIP_PADDING),
+                textY, color);
         }
     }
 
@@ -150,7 +153,7 @@ public final class ChipBar extends UiComponent {
             return -1;
         }
         int top = gy();
-        if (mouseY < top || mouseY > top + CHIP_HEIGHT) {
+        if (mouseY < top || mouseY > top + GuiScale.h(CHIP_HEIGHT)) {
             return -1;
         }
         int cursor = gx();

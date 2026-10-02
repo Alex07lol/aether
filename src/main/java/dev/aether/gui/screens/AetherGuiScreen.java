@@ -37,8 +37,12 @@ import java.io.IOException;
  */
 public abstract class AetherGuiScreen extends GuiScreen implements dev.aether.gui.core.AetherUiScreen {
 
-    /** Navigation tile geometry, in design units, pitched responsively across the row. */
-    protected static final int NAV_Y = 250;
+    /**
+     * Navigation tile geometry, in design units, pitched responsively across the row. Leaf's tiles
+     * sat at y=250; the six-section row moved up 28 units so the captions under the tiles have their
+     * own band between the tiles and the content, which starts at ~386 on every screen.
+     */
+    protected static final int NAV_Y = 222;
     protected static final int NAV_W = 170;
     protected static final int NAV_H = 106;
     /** Leaf's own outer tiles: the row is anchored here and pitched evenly between them. */
@@ -169,9 +173,10 @@ public abstract class AetherGuiScreen extends GuiScreen implements dev.aether.gu
      * Leaf's navigation tile for a section. Leaf names its tiles mod / cosmetic / location /
      * setting, and "location" is the same screen Aether calls the HUD editor - the place a
      * player moves their on-screen elements - so the mapping is one to one. Appearance and
-     * Profiles are Aether's own destinations (Leaf has neither): Appearance reuses Leaf's
-     * system-tab art recoloured like the rest of the set, and Profiles reuses the same set's
-     * home art, which reads as "your things". Both are disambiguated by their caption below.
+     * Profiles are Aether's own destinations (Leaf has neither): both are cut from the same
+     * `system.png` glass base, and `scripts/leaf_assets.py` stamps each with its own glyph
+     * (`_paint_appearance`'s half-filled contrast ring, `_paint_profiles`' two stacked cards),
+     * so neither tile can render as blank glass. The caption below every tile carries the name.
      */
     private static String navArt(GuiSection section) {
         switch (section) {

@@ -99,7 +99,7 @@ public final class ModuleRow extends UiComponent {
         // Entrance: the row slides up a few units and fades in, so a filter change reads as a
         // rearrangement rather than a repaint.
         float appearValue = this.appear.value();
-        int slide = Math.round((1.0F - appearValue) * 8.0F);
+        int slide = GuiScale.h((1.0F - appearValue) * 8.0F);
         int left = gx();
         int top = gy() + slide;
         int right = left + gw();
@@ -111,17 +111,18 @@ public final class ModuleRow extends UiComponent {
 
         int surface = AetherUi.blend(AetherUi.CARD, AetherUi.CARD_HOVER, hot);
         surface = AetherUi.blend(surface, AetherUi.PANEL, pressedAmount * 0.5F);
-        AetherUi.drawRoundRect(left, top, right, bottom, ROW_RADIUS,
+        AetherUi.drawRoundRect(left, top, right, bottom, GuiScale.w(ROW_RADIUS),
             AnimationMath.scaleAlpha(surface, appearValue * (0.92F + hot * 0.08F)));
 
         // The on state is a wash plus a bar on the leading edge: colour enough to read at a glance,
         // never bright enough to fight the black glass.
         if (on > 0.01F || hot > 0.01F) {
-            AetherUi.drawRoundRect(left, top, right, bottom, ROW_RADIUS,
+            AetherUi.drawRoundRect(left, top, right, bottom, GuiScale.w(ROW_RADIUS),
                 AnimationMath.scaleAlpha(AetherUi.TEXT_PRIMARY, appearValue * (on * 0.06F + hot * 0.04F)));
         }
         if (on > 0.01F) {
-            AetherUi.drawRoundRect(left + 4, top + 8, left + 7, bottom - 8, 2,
+            AetherUi.drawRoundRect(left + GuiScale.w(4), top + GuiScale.h(8), left + GuiScale.w(7),
+                bottom - GuiScale.h(8), GuiScale.w(2),
                 AnimationMath.scaleAlpha(AetherUi.ACCENT, appearValue * on));
         }
 
@@ -134,52 +135,56 @@ public final class ModuleRow extends UiComponent {
     }
 
     private void drawIcon(int left, int top, float appearValue, float on, float hot) {
-        int iconLeft = left + 6;
-        int iconTop = top + (ROW_HEIGHT - ICON_SIZE) / 2;
+        int tile = GuiScale.w(ICON_SIZE);
+        int iconLeft = left + GuiScale.w(6);
+        int iconTop = top + GuiScale.h((ROW_HEIGHT - ICON_SIZE) / 2);
         int fill = AetherUi.blend(AetherUi.CARD_HOVER, AetherUi.PANEL, 1.0F - Math.max(on, hot * 0.6F));
-        AetherUi.drawRoundRect(iconLeft, iconTop, iconLeft + ICON_SIZE, iconTop + ICON_SIZE, ICON_RADIUS,
+        AetherUi.drawRoundRect(iconLeft, iconTop, iconLeft + tile, iconTop + tile, GuiScale.w(ICON_RADIUS),
             AnimationMath.scaleAlpha(fill, appearValue * 0.9F));
         int glyphColor = AetherUi.blend(AetherUi.TEXT_SECONDARY, AetherUi.TEXT_PRIMARY, Math.max(on, hot));
-        AetherUi.drawModuleGlyph(this.category, iconLeft + 6, iconTop + 6, 16,
-            AnimationMath.scaleAlpha(glyphColor, appearValue));
+        AetherUi.drawModuleGlyph(this.category, iconLeft + GuiScale.w(6), iconTop + GuiScale.w(6),
+            GuiScale.w(16), AnimationMath.scaleAlpha(glyphColor, appearValue));
     }
 
     private void drawText(int left, int top, float appearValue, float on, float hot) {
-        int textX = left + 42;
-        int titleY = top + 5;
-        String shownName = AetherFont.trimTo(AetherFont.Size.BODY, this.name,
-            gw() - 42 - SWITCH_WIDTH - GEAR_SIZE - GuiScale.w(30));
+        int textX = left + GuiScale.w(42);
+        int titleY = top + GuiScale.h(5);
+        int textWidth = gw() - GuiScale.w(42 + SWITCH_WIDTH + GEAR_SIZE + 30);
+        String shownName = AetherFont.trimTo(AetherFont.Size.BODY, this.name, textWidth);
         int titleColor = AetherUi.blend(AetherUi.TEXT_SECONDARY, AetherUi.TEXT_PRIMARY, Math.max(on, hot));
         AetherFont.draw(AetherFont.Size.BODY, shownName, textX, titleY,
             AnimationMath.scaleAlpha(titleColor, appearValue));
         AetherFont.draw(AetherFont.Size.CAPTION, AetherFont.trimTo(AetherFont.Size.CAPTION, this.description,
-            gw() - 42 - SWITCH_WIDTH - GEAR_SIZE - GuiScale.w(30)), textX, top + 23,
+            textWidth), textX, top + GuiScale.h(23),
             AnimationMath.scaleAlpha(AetherUi.TEXT_DISABLED, appearValue * 0.9F));
     }
 
     private void drawSwitch(int right, int top, float appearValue, float on) {
-        int switchRight = right - (this.hasSettings ? GEAR_SIZE + 22 : 12);
-        int switchLeft = switchRight - SWITCH_WIDTH;
-        int switchTop = top + (ROW_HEIGHT - SWITCH_HEIGHT) / 2;
+        int switchWidth = GuiScale.w(SWITCH_WIDTH);
+        int switchHeight = GuiScale.h(SWITCH_HEIGHT);
+        int switchRight = right - GuiScale.w(this.hasSettings ? GEAR_SIZE + 22 : 12);
+        int switchLeft = switchRight - switchWidth;
+        int switchTop = top + GuiScale.h((ROW_HEIGHT - SWITCH_HEIGHT) / 2);
         int track = AetherUi.blend(AetherUi.TRACK, AetherUi.ACCENT, on);
-        AetherUi.drawRoundRect(switchLeft, switchTop, switchRight, switchTop + SWITCH_HEIGHT, SWITCH_HEIGHT / 2,
-            AnimationMath.scaleAlpha(track, appearValue));
-        int knobRadius = 7;
-        float travel = (SWITCH_WIDTH - knobRadius * 2 - 4) * on;
-        int knobX = (int) Math.round(switchLeft + 2 + knobRadius + travel);
-        int knobY = switchTop + SWITCH_HEIGHT / 2;
+        AetherUi.drawRoundRect(switchLeft, switchTop, switchRight, switchTop + switchHeight,
+            Math.max(1, switchHeight / 2), AnimationMath.scaleAlpha(track, appearValue));
+        int knobRadius = Math.max(2, GuiScale.w(7));
+        float travel = GuiScale.w((SWITCH_WIDTH - 7 * 2 - 4) * on);
+        int knobX = (int) Math.round(switchLeft + GuiScale.w(2 + 7) + travel);
+        int knobY = switchTop + switchHeight / 2;
         int knob = AetherUi.blend(AetherUi.TEXT_DISABLED, AetherUi.SURFACE, on);
         AetherUi.drawCircle(knobX, knobY, knobRadius, AnimationMath.scaleAlpha(knob, appearValue));
     }
 
     private void drawGear(int right, int top, float appearValue, float hot) {
-        int gearRight = right - 8;
-        int gearLeft = gearRight - GEAR_SIZE;
-        int gearTop = top + (ROW_HEIGHT - GEAR_SIZE) / 2;
+        int gearSize = GuiScale.w(GEAR_SIZE);
+        int gearRight = right - GuiScale.w(8);
+        int gearLeft = gearRight - gearSize;
+        int gearTop = top + GuiScale.h((ROW_HEIGHT - GEAR_SIZE) / 2);
         float emphasis = Math.max(this.gearHover.value(), hot * 0.4F);
-        AetherUi.drawRoundRect(gearLeft, gearTop, gearRight, gearTop + GEAR_SIZE, 6,
+        AetherUi.drawRoundRect(gearLeft, gearTop, gearRight, gearTop + gearSize, GuiScale.w(6),
             AnimationMath.scaleAlpha(AetherUi.TEXT_PRIMARY, appearValue * emphasis * 0.12F));
-        AetherUi.drawGearGlyph(gearLeft + 6, gearTop + 6, 12,
+        AetherUi.drawGearGlyph(gearLeft + GuiScale.w(6), gearTop + GuiScale.w(6), GuiScale.w(12),
             AnimationMath.scaleAlpha(AetherUi.blend(AetherUi.TEXT_DISABLED, AetherUi.TEXT_PRIMARY, emphasis),
                 appearValue));
     }

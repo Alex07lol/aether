@@ -1,6 +1,7 @@
 package dev.aether.forge189;
 
 import dev.aether.AetherClient;
+import dev.aether.module.ClientModule;
 import dev.aether.gui.AetherGui;
 import dev.aether.gui.screens.AetherAppearanceScreen;
 import dev.aether.gui.screens.AetherCosmeticScreen;
@@ -36,6 +37,7 @@ import java.io.File;
  *   <li>{@code debug-aether-module-settings} - one module's configuration panel;</li>
  *   <li>{@code debug-aether-cosmetics} - the gallery: filters, search, cards, preview;</li>
  *   <li>{@code debug-aether-cosmetics-category} - after switching the chip filter;</li>
+ *   <li>{@code debug-aether-cosmetics-search} - after typing a query;</li>
  *   <li>{@code debug-aether-cosmetics-scrolled} - the gallery after one scroll;</li>
  *   <li>{@code debug-aether-cosmetics-selected} - after selecting a cosmetic;</li>
  *   <li>{@code debug-aether-cosmetics-import} - the import popover open;</li>
@@ -63,6 +65,7 @@ public final class AetherVisualDebugHook {
         OPEN_SETTINGS_PANEL, SHOOT_MODULE_SETTINGS,
         OPEN_COSMETICS, SHOOT_COSMETICS,
         COSMETICS_CATEGORY, SHOOT_COSMETICS_CATEGORY,
+        COSMETICS_SEARCH, SHOOT_COSMETICS_SEARCH,
         SCROLL_COSMETICS, SHOOT_COSMETICS_SCROLLED,
         SELECT_COSMETIC, SHOOT_COSMETICS_SELECTED,
         IMPORT_MENU, SHOOT_COSMETICS_IMPORT,
@@ -78,6 +81,8 @@ public final class AetherVisualDebugHook {
     private final AetherClient client;
     private final int targetWidth;
     private final int targetHeight;
+    private final java.util.LinkedHashMap<String, Boolean> modulesAtStart =
+        new java.util.LinkedHashMap<String, Boolean>();
     private Step step = Step.RESIZE;
     private int settleTicks;
     private int idleTicks;
@@ -99,6 +104,14 @@ public final class AetherVisualDebugHook {
         }
         this.targetWidth = width >= 320 ? width : 0;
         this.targetHeight = height >= 240 ? height : 0;
+        // The switches the client booted with. The walk toggles a module, and the client saves its
+        // configuration on exit, so without this snapshot one run's toggle would leak into the next
+        // run's images (and into the player's own configuration). Restored at the start of the walk
+        // and again when it ends.
+        for (ClientModule module : client.modules().all()) {
+            modulesAtStart.put(module.metadata().id(),
+                Boolean.valueOf(module.state() == ClientModule.ModuleState.ENABLED));
+        }
         System.out.println("[AetherVisualDebug] enabled, resolution target: "
             + (targetWidth > 0 ? targetWidth + "x" + targetHeight : "current window"));
     }
@@ -112,6 +125,12 @@ public final class AetherVisualDebugHook {
 
         switch (step) {
             case RESIZE:
+                // First thing in the walk: the default palette and an empty cosmetic selection, so
+                // the images show the states the walk itself creates and not what a previous run
+                // happened to leave behind.
+                resetThemes();
+                resetCosmetics();
+                restoreModules("walk start");
                 if (targetWidth > 0) {
                     try {
                         Display.setResizable(true);
@@ -214,7 +233,7 @@ public final class AetherVisualDebugHook {
 
             case TOGGLE_MODULE:
                 if (--settleTicks <= 0 && mc.currentScreen instanceof AetherModScreen) {
-                    ((AetherModScreen) mc.currentScreen).debugToggleFirst();
+                    ((AetherModScreen) mc.currentScreen).debugToggleVisible();
                     step = Step.SHOOT_MODULES_TOGGLED;
                     settleTicks = 15;
                 }
@@ -255,6 +274,17 @@ public final class AetherVisualDebugHook {
             case SHOOT_COSMETICS_CATEGORY:
                 if (--settleTicks <= 0 && mc.currentScreen instanceof AetherCosmeticScreen) {
                     shoot(mc, "debug-aether-cosmetics-category");
+                    ((AetherCosmeticScreen) mc.currentScreen).debugSearch("test");
+                    step = Step.SHOOT_COSMETICS_SEARCH;
+                    settleTicks = 15;
+                }
+                break;
+
+            case SHOOT_COSMETICS_SEARCH:
+                // A live query: proves searching filters the grid without breaking its paging.
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherCosmeticScreen) {
+                    shoot(mc, "debug-aether-cosmetics-search");
+                    ((AetherCosmeticScreen) mc.currentScreen).debugSearch("");
                     ((AetherCosmeticScreen) mc.currentScreen).debugSelectFilter(0); // All
                     step = Step.SCROLL_COSMETICS;
                     settleTicks = 10;
@@ -294,7 +324,6 @@ public final class AetherVisualDebugHook {
                 if (--settleTicks <= 0 && mc.currentScreen instanceof AetherCosmeticScreen) {
                     shoot(mc, "debug-aether-cosmetics-import");
                     ((AetherCosmeticScreen) mc.currentScreen).debugToggleImportMenu();
-                    resetThemes();
                     open(mc, AetherGui.appearance(client), Step.SHOOT_APPEARANCE_PAGE);
                 }
                 break;
@@ -445,13 +474,45 @@ public final class AetherVisualDebugHook {
     }
 
     /**
-     * Puts the client back on the default palette before the Appearance shots. The client saves
-     * its configuration, so without this the screen's "before" and "after" images would depend
-     * on what the previous run happened to wear.
+     * Puts the client back on the default palette at the start of the walk. The client saves its
+     * configuration, so without this the whole sequence would depend on what the previous run
+     * happened to wear (the Appearance "before" image most visibly, but every screen shows the
+     * palette).
      */
     private void resetThemes() {
         client.themes().resetToDefault();
         System.out.println("[AetherVisualDebug] reset the theme to the default palette");
+    }
+
+    /**
+     * Empties every cosmetic slot at the start of the walk, for the same reason the palette is
+     * reset: the gallery's equipped ring and badge must show the selection the walk makes, not
+     * leftover state from a previous run.
+     */
+    private void resetCosmetics() {
+        for (dev.aether.cosmetic.CosmeticType type : dev.aether.cosmetic.CosmeticType.values()) {
+            client.cosmetics().clear(type);
+        }
+        System.out.println("[AetherVisualDebug] cleared the cosmetic selection");
+    }
+
+    /**
+     * Puts every module's switch back to the state the client booted with. Used at the start of the
+     * walk (so a previous run's toggle cannot change the images) and again when the walk ends (so
+     * the debug run leaves the player's configuration exactly as it found it).
+     */
+    private void restoreModules(String when) {
+        int changed = 0;
+        for (java.util.Map.Entry<String, Boolean> entry : modulesAtStart.entrySet()) {
+            ClientModule module = client.modules().get(entry.getKey());
+            boolean enabled = entry.getValue().booleanValue();
+            if ((module.state() == ClientModule.ModuleState.ENABLED) != enabled) {
+                client.modules().setEnabled(entry.getKey(), enabled);
+                changed++;
+            }
+        }
+        System.out.println("[AetherVisualDebug] " + when + ": restored " + changed
+            + " module switch(es)");
     }
 
     private void open(Minecraft mc, net.minecraft.client.gui.GuiScreen screen, Step next) {
@@ -475,7 +536,8 @@ public final class AetherVisualDebugHook {
         }
     }
 
-    private static void finish(Minecraft mc) {
+    private void finish(Minecraft mc) {
+        restoreModules("walk end");
         try {
             File done = new File(mc.mcDataDir, "aether-debug-shots-done.txt");
             if (!done.exists()) {

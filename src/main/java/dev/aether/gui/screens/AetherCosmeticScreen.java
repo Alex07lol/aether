@@ -757,6 +757,11 @@ public final class AetherCosmeticScreen extends AetherGuiScreen {
         scroll.scrollBy(LIST_H);
     }
 
+    /** Types a query into the gallery's search field, as a user would, then re-filters. */
+    public void debugSearch(String query) {
+        search.setText(query);
+    }
+
     /** Switches the chip filter to index {@code index}, as a click on the chip would. */
     public void debugSelectFilter(int index) {
         filter = filterAt(index);

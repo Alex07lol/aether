@@ -112,13 +112,13 @@ public final class CosmeticCard extends UiComponent {
 
         int surface = AetherUi.blend(AetherUi.CARD, AetherUi.CARD_HOVER, hot);
         surface = AetherUi.blend(surface, AetherUi.PANEL, pressedAmount * 0.5F);
-        AetherUi.drawRoundRect(left, top, right, bottom, RADIUS,
+        AetherUi.drawRoundRect(left, top, right, bottom, GuiScale.w(RADIUS),
             AnimationMath.scaleAlpha(surface, appearValue * (0.92F + hot * 0.08F)));
 
         if (on > 0.01F) {
             // The equipped state reads as an accent ring plus the faintest wash: enough to
             // find "what am I wearing" at a glance, never bright enough to glare.
-            AetherUi.drawRoundRect(left, top, right, bottom, RADIUS,
+            AetherUi.drawRoundRect(left, top, right, bottom, GuiScale.w(RADIUS),
                 AnimationMath.scaleAlpha(AetherUi.TEXT_PRIMARY, appearValue * on * 0.05F));
             AetherUi.outline(left + 1, top + 1, right - 1, bottom - 1,
                 AnimationMath.scaleAlpha(AetherUi.ACCENT, appearValue * on * 0.55F));
@@ -141,7 +141,7 @@ public final class CosmeticCard extends UiComponent {
         int wellLeft = left + (gw() - thumbPx) / 2;
         int wellTop = top + GuiScale.h(10);
         int fill = AetherUi.blend(AetherUi.TRACK, AetherUi.CARD_HOVER, hot * 0.5F);
-        AetherUi.drawRoundRect(wellLeft, wellTop, wellLeft + thumbPx, wellTop + thumbPx, 8,
+        AetherUi.drawRoundRect(wellLeft, wellTop, wellLeft + thumbPx, wellTop + thumbPx, GuiScale.w(8),
             AnimationMath.scaleAlpha(fill, appearValue * 0.95F));
     }
 
@@ -198,9 +198,10 @@ public final class CosmeticCard extends UiComponent {
         int thumbPx = GuiScale.w(THUMB);
         int wellLeft = left + (gw() - thumbPx) / 2;
         int wellTop = top + GuiScale.h(10);
-        int width = Mc189Compat.stringWidth(null, label) + 10;
+        int badgeHeight = AetherFont.height(AetherFont.Size.CAPTION) + GuiScale.h(6);
+        int width = AetherFont.width(AetherFont.Size.CAPTION, label) + GuiScale.w(10);
         int badgeX = wellLeft + (thumbPx - width) / 2;
-        int badgeY = wellTop + thumbPx - 17;
+        int badgeY = wellTop + thumbPx - badgeHeight - GuiScale.h(4);
         AetherUi.drawBadge(label, badgeX, badgeY,
             AnimationMath.scaleAlpha(AetherUi.ACCENT, appearValue * on));
     }

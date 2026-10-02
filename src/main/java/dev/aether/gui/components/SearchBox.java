@@ -22,6 +22,8 @@ public final class SearchBox extends UiComponent {
 
     private static final int RADIUS = 8;
     private static final int PADDING = 12;
+    /** Edge length of the magnifier glyph, in design units. */
+    private static final int GLYPH_SIZE = 11;
     private static final float CARET_PERIOD = 1060.0F;
 
     private final String placeholder;
@@ -59,21 +61,23 @@ public final class SearchBox extends UiComponent {
         int right = left + gw();
         int bottom = top + gh();
         int surface = AetherUi.blend(AetherUi.SEARCH, AetherUi.SEARCH_FOCUS, this.focus.value());
-        AetherUi.drawRoundRect(left, top, right, bottom, RADIUS, surface);
+        AetherUi.drawRoundRect(left, top, right, bottom, GuiScale.w(RADIUS), surface);
         if (this.focus.value() > 0.02F || this.hovered) {
             AetherUi.outline(left, top, right, bottom,
                 AnimationMath.scaleAlpha(AetherUi.ACCENT, Math.max(this.focus.value(), this.hovered ? 0.25F : 0.0F) * 0.35F));
         }
 
-        int glyphY = top + (gh() - 11) / 2;
-        AetherUi.drawSearchGlyph(left + PADDING, glyphY,
+        int glyphSize = GuiScale.w(GLYPH_SIZE);
+        int glyphY = top + (gh() - glyphSize) / 2;
+        AetherUi.drawSearchGlyph(left + GuiScale.w(PADDING), glyphY, glyphSize,
             AetherUi.blend(AetherUi.TEXT_DISABLED, AetherUi.TEXT_SECONDARY, this.focus.value()));
 
         String shown = this.text.length() == 0 ? this.placeholder : this.text.toString();
         int color = this.text.length() == 0 ? AetherUi.TEXT_DISABLED : AetherUi.TEXT_PRIMARY;
-        int textX = left + PADDING + GuiScale.w(20);
+        int textInset = GuiScale.w(PADDING + 20);
+        int textX = left + textInset;
         int textY = top + (gh() - AetherFont.height(AetherFont.Size.SMALL)) / 2;
-        int available = gw() - (PADDING + GuiScale.w(20)) - PADDING;
+        int available = gw() - textInset - GuiScale.w(PADDING);
         AetherFont.draw(AetherFont.Size.SMALL, AetherFont.trimTo(AetherFont.Size.SMALL, shown, available),
             textX, textY, color);
 

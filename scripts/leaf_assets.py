@@ -59,7 +59,7 @@ import os
 import sys
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageDraw
 except ImportError:
     print("Pillow is required: pip install pillow", file=sys.stderr)
     raise
@@ -144,6 +144,42 @@ ASSETS = {
     "recent.png":              ("white", 1.0),
     "leaf.png":                ("white", 1.0),
 }
+
+def _paint_appearance(draw, ox, oy, size):
+    """Half-filled ring: the contrast between the worn palette and every other one."""
+    inset = int(size * 0.10)
+    ring = max(2, int(size * 0.075))
+    box = (ox + inset, oy + inset, ox + size - inset, oy + size - inset)
+    draw.ellipse(box, outline=255, width=ring)
+    draw.chord(box, 90, 270, fill=255)
+
+
+def _paint_profiles(draw, ox, oy, size):
+    """Two stacked cards: the profile manager's own object."""
+    stroke = max(2, int(size * 0.07))
+    radius = max(2, int(size * 0.10))
+    back = (ox + int(size * 0.08), oy + int(size * 0.04),
+            ox + int(size * 0.58), oy + int(size * 0.44))
+    front = (ox + int(size * 0.32), oy + int(size * 0.40),
+             ox + int(size * 0.92), oy + int(size * 0.90))
+    draw.rounded_rectangle(back, radius=radius, outline=255, width=stroke)
+    # Knock the back card out under the front one so the stack reads as two separate cards.
+    draw.rounded_rectangle(front, radius=radius, fill=0)
+    draw.rounded_rectangle(front, radius=radius, outline=255, width=stroke)
+    line = (ox + int(size * 0.44), oy + int(size * 0.56),
+            ox + int(size * 0.80), oy + int(size * 0.62))
+    draw.rounded_rectangle(line, radius=max(1, stroke // 2), fill=255)
+
+
+# Tabs whose source art carries no icon of its own, and the glyph each is stamped with after the
+# recolour. Leaf's system.png is a plain frame - which is why the old Themes tab shipped as a blank
+# tile - and it is the source of both Aether-added tabs, so their glyphs are drawn here, through the
+# same pipeline that writes every other texture: no hand-edited PNGs and no runtime stand-in.
+TAB_GLYPHS = {
+    "button/appearance.png": _paint_appearance,
+    "button/profiles.png": _paint_profiles,
+}
+
 
 # Source name -> the alpha plateau measured by --analyze, for the --analyze report only. Kept out of
 # the conversion path: the plateau is measured per file, never assumed.
@@ -235,6 +271,26 @@ def body_luminance(image, mask):
         return 0.0
     best = max(histogram.items(), key=lambda item: item[1])[0]
     return (best + 0.5) * 4.0
+
+
+def stamp_tab_glyph(image, painter):
+    """Composites a programmatic white glyph over a converted tab's art.
+
+    The glyph is drawn 4x and downsampled, so the edges land anti-aliased like the rest of the art.
+    The box is a centred square at 60% of the tile height - the same visual weight Leaf's own tile
+    glyphs have (mod.png's icon spans about 65% of the tile height).
+    """
+    width, height = image.size
+    box = int(round(height * 0.60))
+    supersample = 4
+    layer = Image.new("L", (width * supersample, height * supersample), 0)
+    draw = ImageDraw.Draw(layer)
+    origin_x = (width * supersample - box * supersample) // 2
+    origin_y = (height * supersample - box * supersample) // 2
+    painter(draw, origin_x, origin_y, box * supersample)
+    layer = layer.resize((width, height), Image.LANCZOS)
+    image.paste(Image.new("RGBA", (width, height), (255, 255, 255, 255)), (0, 0), layer)
+    return image
 
 
 def convert_image(image, rule, a1, a2, a3, a4=1.0):
@@ -387,6 +443,9 @@ def convert():
         high = params[2] if len(params) > 2 else 0.0
         gain = params[3] if len(params) > 3 else 1.0
         result = convert_image(image, rule, strength, low, high, gain)
+        painter = TAB_GLYPHS.get(name)
+        if painter is not None:
+            result = stamp_tab_glyph(result, painter)
         destination = os.path.join(OUT, name.replace("/", os.sep))
         os.makedirs(os.path.dirname(destination), exist_ok=True)
         result.save(destination)

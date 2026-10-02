@@ -14,8 +14,8 @@ import dev.aether.ui.GuiSection;
 /**
  * The client settings screen, ported from Leaf Client's {@code ClientSettings}
  * (GPLv3, see docs/GUI_REBUILD.md): a column of state tiles at Leaf's position
- * (x = 1090, starting y = 310, 100 pitch, 100x60 each, row labels 410 to the left),
- * paged five rows at a time by the scrollbar at (1230, 310, 32, 460) when the list is
+ * (x = 1090, starting y = 410, 100 pitch, 100x60 each, row labels 410 to the left),
+ * paged five rows at a time by the PageBar at (1230, 410, 32, 400) when the list is
  * longer. Aether's rows are its own real settings - the persisted preferences and the
  * data actions - presented with Leaf's geometry. The profile manager lives on the
  * Profiles destination and the palettes on Appearance; neither belongs here.
@@ -25,8 +25,8 @@ public final class AetherClientSettingsScreen extends AetherGuiScreen {
     private static final int ROW_X = 1090;
     /**
      * Leaf's ClientSettings starts its rows at y = 310, but Leaf's screen has no
-     * navigation row - Aether's does (y = 250..356), so the rows start one pitch
-     * lower to keep the composition clear of it.
+     * navigation row - Aether's does (tiles y = 222..328, captions 334..346), so the
+     * rows start one pitch lower to keep the composition clear of it.
      */
     private static final int ROW_TOP = 410;
     private static final int ROW_PITCH = 100;
@@ -138,8 +138,11 @@ public final class AetherClientSettingsScreen extends AetherGuiScreen {
             pageBar.render();
         }
         if (status != null && System.currentTimeMillis() - statusAtMillis < 6000L) {
+            // y 366 is the free strip under the nav captions (which end at 346) and above the
+            // first row (410): the flash used to be drawn at y 250, inside the nav tile band,
+            // where it landed on top of the Appearance tile.
             dev.aether.gui.AetherFont.draw(dev.aether.gui.AetherFont.Size.SMALL, status,
-                dev.aether.gui.GuiScale.x(ROW_X), dev.aether.gui.GuiScale.y(250),
+                dev.aether.gui.GuiScale.x(ROW_X), dev.aether.gui.GuiScale.y(366),
                 dev.aether.forge189.AetherUi.TEXT_SECONDARY);
         }
     }

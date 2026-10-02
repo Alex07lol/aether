@@ -153,8 +153,10 @@ public final class AetherProfilesScreen extends AetherGuiScreen {
             pageBar.render();
         }
         if (status != null && System.currentTimeMillis() - statusAtMillis < 6000L) {
+            // The free strip under the nav captions (346) and above the first row (410);
+            // y 250 would put the flash inside the navigation tile band.
             AetherFont.draw(AetherFont.Size.SMALL, status,
-                GuiScale.x(FIELD_X), GuiScale.y(250), AetherUi.TEXT_SECONDARY);
+                GuiScale.x(FIELD_X), GuiScale.y(366), AetherUi.TEXT_SECONDARY);
         }
     }
 

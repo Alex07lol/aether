@@ -319,6 +319,18 @@ public final class AetherModScreen extends AetherGuiScreen {
         }
     }
 
+    /**
+     * Toggles the first module inside the current viewport. The walker scrolls the list before it
+     * proves a toggle, and the first module in the *list* is off-screen by then, so its change
+     * would not appear in the shot.
+     */
+    public void debugToggleVisible() {
+        int first = (int) Math.floor(scroll.offset() / (double) ModuleRow.ROW_PITCH);
+        if (first >= 0 && first < visible.size()) {
+            toggle(visible.get(first));
+        }
+    }
+
     public void debugOpenFirstModuleSettings() {
         if (!visible.isEmpty()) {
             Mc189Compat.displayGuiScreen(

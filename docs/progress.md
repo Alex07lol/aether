@@ -15,12 +15,14 @@ Rules this tracker enforces (from the task brief):
 
 ## CURRENT PHASE
 
-**GUI/cosmetics overhaul in progress (uncommitted): themes-as-config refactor + new screens** (the
-Leaf UI copy, Phases 1-6, and the Themes/scroll/wordmark follow-up are complete; see below). The
-refactor is code-complete and green; screenshot verification exposed a `ModuleRow` unit bug plus
-nav/caption defects that are diagnosed with fixes identified but not yet applied. Next exact tasks
-are recorded in `docs/stop.md` (CURRENT PROBLEM → NEXT EXACT STEPS 1-4); Phase 7 — Block Info comes
-after.
+**GUI/cosmetics overhaul: themes-as-config refactor + new screens + the screenshot-driven
+correction pass** (the Leaf UI copy, Phases 1-6, and the Themes/scroll/wordmark follow-up are
+complete; see below). The refactor is committed as `1fcb5b1`; the correction pass over the defects
+that verification exposed (`ModuleRow`/`ChipBar`/`SearchBox` mixed units, the glyph helpers
+ignoring their size, blank nav art, the nav caption/content collision, the Appearance
+caption/`PageBar` overlap, the walker's mid-walk state reset) is applied, green, and measured away
+in fresh 1920x1080 and 1280x720 walks. It is **not committed** yet. Next exact tasks are recorded
+in `docs/stop.md` (CURRENT PROBLEM → NEXT EXACT STEPS); Phase 7 — Block Info comes after.
 
 ---
 
@@ -290,13 +292,61 @@ Profiles/Settings); nav layout is the responsive `navX(index,count)` + `navArt()
       `:makeStart` on source level 6) completed; all 19 walker screenshots written
       (`appearance-equipped` proves end-to-end selection). Old pre-refactor shots kept at
       `$env:TEMP\aether-old-shots` for comparison
-- [ ] **Diagnosed, fixes identified, not yet applied** (see `docs/stop.md` CURRENT PROBLEM):
-      `ModuleRow` mixes design-unit constants into GUI coordinates (name +126px, 84px icon tiles,
-      misplaced switch; smaller instances in `ChipBar`/`SearchBox`); blank Appearance/Profiles nav
-      tiles (programmatic glyphs to add in `leaf_assets.py`); nav caption/content collision (nav row
-      up ~28px); Appearance caption/`PageBar` overlap; walker `resetThemes()` belongs at walk start.
-      Prior sessions never screenshot-verified the row redesign (15:24 shots show the old card grid).
-- [ ] Re-run `compileJava` + `coreSelfTests` + `verify.sh` + `runClient` screenshots after the fixes
+- [x] **Applied — the coordinate-space correction pass.** The root defect was that drawing
+      primitives take GUI pixels while components stored design units; every design constant that
+      reaches a primitive now passes through `GuiScale.w()/h()`, and hit testing stays in design
+      units. `ModuleRow` (radius, slide, 28-unit icon tile, text offsets, trim widths, 34x18 switch
+      with a r=7 knob, 24-unit gear), `ChipBar` (render height/radius/padding, `indexAt`) and
+      `SearchBox` (radius, padding, 11-unit magnifier) are converted.
+- [x] **The deeper bug behind it:** `AetherUi`'s glyph helpers (`drawSearchGlyph`,
+      `drawModuleGlyph`, `drawGearGlyph`) ignored their `size` parameter and always drew fixed
+      pixels, so `ModuleRow`'s tile could not be fixed at the call site. `drawSearchGlyph` gained a
+      scaled `size`; the other two now scale through a private `Glyph` helper. `AetherUi.drawBadge`
+      used `stringWidth(null,...)+10`-tall fixed pixels (the oversized EQUIPPED pill); it now
+      measures through `AetherFont`/`GuiScale`, and `CosmeticCard` computes the matching size.
+- [x] Nav geometry: `NAV_Y` 250 -> **222** (captions end by y 351, content starts at 386, no
+      collision); `AetherAppearanceScreen`'s caption moved to `LIST_X+520` so it clears the PageBar
+      at design x 945..977.
+- [x] Nav art: `scripts/leaf_assets.py` gained `_paint_appearance` (the half-filled contrast ring),
+      `_paint_profiles` (two stacked cards, back card knocked out) and `stamp_tab_glyph`
+      (4x supersampled, 60% of the tile height, LANCZOS, pasted through its alpha mask) applied to
+      `button/appearance.png` + `button/profiles.png`; `--convert` rewrote the 31 assets and both
+      tiles now carry a white glyph (verified by per-tile pixel counts).
+- [x] Walker: `resetThemes()` + new `resetCosmetics()` (clears every `CosmeticType` slot) moved into
+      the `RESIZE` step, i.e. the start of the walk, instead of mid-walk; new
+      `COSMETICS_SEARCH`/`SHOOT_COSMETICS_SEARCH` steps and a `debug-aether-cosmetics-search` shot;
+      `TOGGLE_MODULE` now calls `AetherModScreen.debugToggleVisible()` (toggling the first row inside
+      the current viewport - `debugToggleFirst` toggled an off-screen row after scrolling, so the
+      shot was byte-identical to the scrolled one); `AetherCosmeticScreen.debugSearch(String)` wired
+      to `SearchBox.setText`.
+- [x] Re-verified: `compileJava` + `coreSelfTests` **35/35** + `scripts/verify.sh` green with the jar
+      proof; `runClient -PaetherDebugShots=1920x1080` wrote 20 shots (the new cosmetics-search state
+      included) and every documented defect was measured away in the PNGs - e.g. the 28-unit icon
+      tile is 28 px with a 16 px glyph at 1080p, the EQUIPPED badge is 16 design units tall, and
+      `debug-aether-modules-scrolled` vs `-toggled` now differ in the row box (436,444)-(1404,468)
+      that previously matched byte for byte. A `1280x720` walk then re-measured the same layout at
+      the 2/3 framebuffer scale (nav tile 0 at px 287, icon glyph at px 294..305, captions clear of
+      content). Shots kept in `run/screenshots/1080p/` and `run/screenshots/720p/`.
+- [x] `graphics.item_physics` / `graphics.motion_blur` (brief §56): **already deleted, not
+      registered** - `docs/MODULE_AUDIT.md` records the six modules whose switches could not be
+      backed by a hook (`item_physics`, `motion_blur`, `crosshair_editor`, `gui_tweaks`,
+      `screenshot_manager`, `scroll_tooltips`); `graphics.custom_crosshair` covers the crosshair case.
+      No such class remains in `src/`, and `ARCHITECTURE.md`'s comparison table no longer claims the
+      classes exist.
+- [x] **2560x1440 responsive check (brief §38):** the third walk measured the same design layout at
+      the 4/3 framebuffer scale - nav tile 0 frame at design x 432 y 222, row text at 450..480,
+      captions/content clear, gallery card columns at their design positions. All three requested
+      resolutions (720p/1080p/1440p) now have a walked, measured screenshot set.
+- [x] **Walker module-state determinism:** the walker restored themes/cosmetics but not module
+      switches, so one run's toggle leaked into the next run's images (and the user's config). It
+      now snapshots every switch at launch and restores at walk start *and* walk end - proven by
+      two back-to-back 1080p walks (10/20 shots byte-identical, switch state pixel-identical in all
+      four module shots).
+- [x] **Status-flash collision:** the Settings and Profiles "saved" flashes drew at design y 250,
+      inside the nav tile band; moved to y 366 (free strip under the captions, above the rows).
+- [x] **Dead code:** `ModuleCard` and `CosmeticEntry` (the components the row list and the gallery
+      replaced) deleted; `ARCHITECTURE.md` and `GUI_REBUILD.md` re-synced to the six-section layout,
+      the coordinate-space rule, `ThemeManager` ownership and the deleted module list.
 
 ## Phases 7-19 (planned)
 
@@ -337,6 +387,7 @@ Profiles/Settings); nav layout is the responsive `navX(index,count)` + `navArt()
 | 2026-10-01 | Leaf UI follow-up | Themes section, wheel direction + `invert_scroll`, wordmark: `coreSelfTests` **30/30**, **62 modules / 214 settings / 56 ranges / 26 choice lists**, `scripts/verify.sh` green end to end, jar carries all 30 `assets/aether/leaf/**` textures |
 | 2026-10-01 | Leaf UI follow-up (live) | `runClient -PaetherDebugShots=1920x1080` walked 11 screens (three new themes shots); the nav row's order/brightness, the pill selection, paging and the scrollbar thumb were measured out of the PNGs. The walker now forces the framebuffer to the requested size, so shots are 1:1 design units (see `docs/stop.md` TEST STATUS 0) |
 | 2026-10-02 | Themes-as-config refactor | `compileJava` green, `coreSelfTests` **35/35** (`ThemeManagerTest` added), `scripts/verify.sh` green end to end, jar proven clean; `runClient -PaetherDebugShots=1920x1080` (JDK 8) wrote 19 screenshots — verification exposed the `ModuleRow` mixed-unit bug + nav/caption defects (see `docs/stop.md` CURRENT PROBLEM), fixes identified but not yet applied |
+| 2026-10-02 | Correction pass (uncommitted) | `compileJava` green, `coreSelfTests` **35/35**, `scripts/verify.sh` green end to end incl. the jar proof; `runClient -PaetherDebugShots=1920x1080` wrote 20 shots (new cosmetics-search state) and a `runClient -PaetherDebugShots=1280x720` walk re-measured the same design layout at the 2/3 framebuffer scale. Every defect the previous row lists was measured away in the PNGs: 28 px icon tile with a 16 px glyph, the switch/gear at their design positions, the `EQUIPPED` badge 16 units tall, nav captions clear of content, the Appearance caption right of the PageBar, and `modules-scrolled` vs `modules-toggled` now differing in the toggled row |
 
 Proof that the new mixin binds in production as well as dev: `build/tmp/compileJava/compileJava-refmap.json`
 contains `dev/aether/forge189/mixin/MouseHelperMixin → mouseXYChange -> Lnet/minecraft/util/MouseHelper;func_74374_c()V`.
@@ -352,14 +403,22 @@ are preserved in §13b.
 
 ## Remaining work (this pass)
 
-- Apply the `ModuleRow`/nav/caption/walker fixes in `docs/stop.md` CURRENT PROBLEM, then re-run
-  `compileJava` + `coreSelfTests` + `verify.sh` + `runClient` screenshots before anything else.
+- Commit the correction-pass changeset (13 files: `ModuleRow`, `ChipBar`, `SearchBox`, `CosmeticCard`,
+  `AetherUi`, `AetherGuiScreen`, `AetherModScreen`, `AetherAppearanceScreen`, `AetherCosmeticScreen`,
+  `AetherVisualDebugHook`, `scripts/leaf_assets.py`, the two regenerated nav tiles) once the user asks;
+  `docs/stop.md` and this file are updated with it.
+- Responsive check at `2560x1440` (brief §38 asks for all three of 1280x720 / 1920x1080 / 2560x1440;
+  16:9 keeps the design canvas at 1920x1080, so the check is that everything scales by 4/3 framebuffer
+  px per design unit and nothing clips).
 - Live verification in `runClient`: freelook smoothness, keystrokes animation, Target Info
-  enter/flash/exit and Mouse Display drift/recentre still need hands-on feel (the screens are
-  screenshot-verified with measurements, modulo the fixes above).
+  enter/flash/exit, Mouse Display drift/recentre, the wheel direction on every screen, and the
+  cosmetics import/equip/clear path with a user-supplied PNG still need hands-on feel (the screens
+  themselves are screenshot-verified with measurements).
+- Known cosmetic issue, deliberately not papered over: `AetherFont.height(Size)` has an 8 px floor,
+  so at the smallest GUI scales text can be a pixel taller than the row box assumes.
 - Phases 7-19 above.
 
 ## Exact next task
 
-**`ModuleRow` mixed-unit fix + nav/caption/walker fixes** (`docs/stop.md` NEXT EXACT STEPS 1-4),
-then **Phase 7 — Block Info transition** (spec in `docs/stop.md`).
+**Commit the correction pass** (when the user asks), then **Phase 7 — Block Info transition**
+(spec in `docs/stop.md`).

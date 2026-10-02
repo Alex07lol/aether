@@ -2,6 +2,8 @@ package dev.aether.forge189;
 
 import dev.aether.AetherClient;
 import dev.aether.forge189.font.GlyphPageFontRenderer;
+import dev.aether.gui.AetherFont;
+import dev.aether.gui.GuiScale;
 import dev.aether.theme.AetherTheme;
 import dev.aether.theme.ColorRgb;
 import dev.aether.theme.ThemePalette;
@@ -306,17 +308,38 @@ public final class AetherUi {
         Mc189Compat.drawRect(right - 1, top, right, bottom, color);
     }
 
-    public static void drawSearchGlyph(int x, int y, int color) {
-        drawCircle(x + 4, y + 4, 3, color);
-        Mc189Compat.drawRect(x + 3, y + 4, x + 5, y + 5, SEARCH); // Clear inside of magnifying glass
-        Mc189Compat.drawRect(x + 7, y + 7, x + 9, y + 8, color);
-        Mc189Compat.drawRect(x + 8, y + 8, x + 10, y + 9, color);
+    /**
+     * The search field's magnifier. The size parameter is the glyph's edge length in GUI pixels
+     * (convert the design size with {@code GuiScale}); the 11-unit design is scaled to it, so the
+     * field keeps its density at any window scale instead of drawing a fixed pixel glyph.
+     */
+    public static void drawSearchGlyph(int x, int y, int size, int color) {
+        float scale = Math.max(0.05F, size / 11.0F);
+        drawCircle(x + Math.round(4 * scale), y + Math.round(4 * scale),
+            Math.max(1, Math.round(3 * scale)), color);
+        // Clear inside of magnifying glass
+        int lensX = x + Math.round(3 * scale);
+        int lensY = y + Math.round(4 * scale);
+        Mc189Compat.drawRect(lensX, lensY,
+            lensX + Math.max(1, Math.round(2 * scale)), lensY + Math.max(1, Math.round(1 * scale)), SEARCH);
+        Mc189Compat.drawRect(x + Math.round(7 * scale), y + Math.round(7 * scale),
+            x + Math.round(9 * scale), y + Math.round(8 * scale), color);
+        Mc189Compat.drawRect(x + Math.round(8 * scale), y + Math.round(8 * scale),
+            x + Math.round(10 * scale), y + Math.round(9 * scale), color);
     }
 
+    /**
+     * A small pill label (the gallery's EQUIPPED/CLEARED badge). The pill is measured through
+     * {@link GuiScale} and {@link AetherFont}, so it keeps its size relative to the card at every
+     * window scale instead of being a fixed pixel count that overflows small layouts.
+     */
     public static void drawBadge(String label, int x, int y, int color) {
-        int w = Mc189Compat.stringWidth(null, label) + 10;
-        roundRect(x, y, x + w, y + 12, 6, withAlpha(color, 0x44));
-        text(null, label, x + 5, y + 1, color);
+        int textHeight = AetherFont.height(AetherFont.Size.CAPTION);
+        int height = textHeight + GuiScale.h(6);
+        int padding = GuiScale.w(5);
+        int width = AetherFont.width(AetherFont.Size.CAPTION, label) + padding * 2;
+        roundRect(x, y, x + width, y + height, Math.max(1, height / 2), withAlpha(color, 0x44));
+        AetherFont.draw(AetherFont.Size.CAPTION, label, x + padding, y + (height - textHeight) / 2, color);
     }
 
     public static void drawStar(int x, int y, int color) {
@@ -340,111 +363,163 @@ public final class AetherUi {
      * Modules carry no artwork of their own, and shipping one texture per module would mean an art
      * pipeline for fifty little pictures. A glyph per category is enough to tell rows apart at a
      * glance, is drawn from the same primitives as the rest of the UI, and costs nothing to recolour
-     * with the palette. The size parameter scales the 16-unit design.
+     * with the palette. The size parameter is the glyph's edge length in GUI pixels (convert the
+     * design size with {@code GuiScale}); the 16-unit design is scaled to it, so the same glyph is
+     * the same shape at every window scale instead of a fixed pixel size.
      */
     public static void drawModuleGlyph(dev.aether.module.ClientModule.ModuleCategory category, int x, int y,
                                        int size, int color) {
+        Glyph glyph = new Glyph(x, y, size);
         if (category == null) {
-            bar(x + 4, y + 4, 8, 8, color);
+            glyph.bar(4, 4, 8, 8, color);
             return;
         }
         switch (category) {
             case HUD:
                 // A panel with two readout lines.
-                bar(x + 1, y + 3, 14, 2, color);
-                bar(x + 1, y + 7, 9, 2, color);
-                bar(x + 1, y + 11, 12, 2, color);
+                glyph.bar(1, 3, 14, 2, color);
+                glyph.bar(1, 7, 9, 2, color);
+                glyph.bar(1, 11, 12, 2, color);
                 break;
             case PVP:
                 // A target: a ring with a centre dot and four ticks.
-                drawCircle(x + 8, y + 8, 5, color);
-                bar(x + 7, y + 7, 3, 3, color);
-                bar(x + 7, y, 2, 3, color);
-                bar(x + 7, y + 13, 2, 3, color);
-                bar(x, y + 7, 3, 2, color);
-                bar(x + 13, y + 7, 3, 2, color);
+                glyph.circle(8, 8, 5, color);
+                glyph.bar(7, 7, 3, 3, color);
+                glyph.bar(7, 0, 2, 3, color);
+                glyph.bar(7, 13, 2, 3, color);
+                glyph.bar(0, 7, 3, 2, color);
+                glyph.bar(13, 7, 3, 2, color);
                 break;
             case GRAPHICS:
                 // A picture: frame, horizon, sun.
-                outline(x, y + 2, x + 16, y + 14, color);
-                bar(x + 3, y + 9, 10, 2, color);
-                drawCircle(x + 6, y + 6, 2, color);
+                glyph.outline(0, 2, 16, 14, color);
+                glyph.bar(3, 9, 10, 2, color);
+                glyph.circle(6, 6, 2, color);
                 break;
             case RENDER:
                 // Two stacked layers.
-                outline(x + 1, y + 3, x + 15, y + 9, color);
-                bar(x + 3, y + 11, 10, 2, color);
+                glyph.outline(1, 3, 15, 9, color);
+                glyph.bar(3, 11, 10, 2, color);
                 break;
             case INTERFACE:
                 // A window with a title bar and one row.
-                outline(x, y + 2, x + 16, y + 14, color);
-                bar(x + 1, y + 4, 14, 2, color);
-                bar(x + 3, y + 9, 7, 2, color);
+                glyph.outline(0, 2, 16, 14, color);
+                glyph.bar(1, 4, 14, 2, color);
+                glyph.bar(3, 9, 7, 2, color);
                 break;
             case MOVEMENT:
                 // A double chevron.
                 for (int i = 0; i < 5; i++) {
-                    bar(x + 3 + i, y + 6 - i, 2, 2, color);
-                    bar(x + 3 + i, y + 10 + i, 2, 2, color);
-                    bar(x + 9 + i, y + 6 - i, 2, 2, color);
-                    bar(x + 9 + i, y + 10 + i, 2, 2, color);
+                    glyph.bar(3 + i, 6 - i, 2, 2, color);
+                    glyph.bar(3 + i, 10 + i, 2, 2, color);
+                    glyph.bar(9 + i, 6 - i, 2, 2, color);
+                    glyph.bar(9 + i, 10 + i, 2, 2, color);
                 }
                 break;
             case AUDIO:
                 // A speaker: cone plus one wave.
-                bar(x + 2, y + 6, 4, 5, color);
-                bar(x + 5, y + 4, 3, 9, color);
-                bar(x + 8, y + 6, 2, 5, color);
-                bar(x + 12, y + 5, 2, 7, color);
+                glyph.bar(2, 6, 4, 5, color);
+                glyph.bar(5, 4, 3, 9, color);
+                glyph.bar(8, 6, 2, 5, color);
+                glyph.bar(12, 5, 2, 7, color);
                 break;
             case PERFORMANCE:
                 // A rising bar chart.
-                bar(x + 2, y + 10, 3, 4, color);
-                bar(x + 6, y + 7, 3, 7, color);
-                bar(x + 10, y + 4, 3, 10, color);
+                glyph.bar(2, 10, 3, 4, color);
+                glyph.bar(6, 7, 3, 7, color);
+                glyph.bar(10, 4, 3, 10, color);
                 break;
             case ACCESSIBILITY:
                 // A figure: head and shoulders.
-                drawCircle(x + 8, y + 4, 3, color);
-                bar(x + 4, y + 8, 9, 6, color);
-                bar(x + 6, y + 8, 5, 8, color);
+                glyph.circle(8, 4, 3, color);
+                glyph.bar(4, 8, 9, 6, color);
+                glyph.bar(6, 8, 5, 8, color);
                 break;
             case COSMETICS:
-                drawStar(x + 3, y + 3, color);
+                glyph.star(3, 3, color);
                 break;
             case THEMES:
                 // A split swatch: half filled, half outlined.
-                bar(x + 2, y + 3, 6, 10, color);
-                outline(x + 8, y + 3, x + 15, y + 13, color);
+                glyph.bar(2, 3, 6, 10, color);
+                glyph.outline(8, 3, 15, 13, color);
                 break;
             case GENERAL:
             default:
                 // Four dots: a plain, honest "misc".
-                bar(x + 2, y + 2, 5, 5, color);
-                bar(x + 9, y + 2, 5, 5, color);
-                bar(x + 2, y + 9, 5, 5, color);
-                bar(x + 9, y + 9, 5, 5, color);
+                glyph.bar(2, 2, 5, 5, color);
+                glyph.bar(9, 2, 5, 5, color);
+                glyph.bar(2, 9, 5, 5, color);
+                glyph.bar(9, 9, 5, 5, color);
                 break;
         }
     }
 
     /**
-     * The settings control a module row shows when a module has settings: two rails with knobs -
-     * a fade-in of the sliders a player is about to see, and legible at twelve units where a real
-     * gear turns into a blob.
+     * A 16-unit glyph design scaled to the pixel size the caller asked for. Every glyph above is
+     * authored in that 16-unit box - drawing it through this class is what keeps the icon the same
+     * shape whatever {@code GuiScale} converts the size to.
      */
-    public static void drawGearGlyph(int x, int y, int size, int color) {
-        int top = y + size / 4;
-        int bottom = y + (size * 3) / 4;
-        bar(x, top, size, 1, color);
-        bar(x, bottom, size, 1, color);
-        bar(x + size / 3, top - 2, 2, 5, color);
-        bar(x + (size * 2) / 3 - 2, bottom - 2, 2, 5, color);
+    private static final class Glyph {
+        private final int originX;
+        private final int originY;
+        private final float scale;
+
+        Glyph(int x, int y, int size) {
+            this.originX = x;
+            this.originY = y;
+            this.scale = Math.max(0.05F, size / 16.0F);
+        }
+
+        void bar(int dx, int dy, int width, int height, int color) {
+            int x0 = this.originX + Math.round(dx * this.scale);
+            int y0 = this.originY + Math.round(dy * this.scale);
+            int x1 = x0 + Math.max(1, Math.round(width * this.scale));
+            int y1 = y0 + Math.max(1, Math.round(height * this.scale));
+            Mc189Compat.drawRect(x0, y0, x1, y1, color);
+        }
+
+        void circle(int cx, int cy, int radius, int color) {
+            drawCircle(this.originX + Math.round(cx * this.scale),
+                this.originY + Math.round(cy * this.scale),
+                Math.max(1, Math.round(radius * this.scale)), color);
+        }
+
+        void outline(int left, int top, int right, int bottom, int color) {
+            int x0 = this.originX + Math.round(left * this.scale);
+            int y0 = this.originY + Math.round(top * this.scale);
+            int x1 = this.originX + Math.round(right * this.scale);
+            int y1 = this.originY + Math.round(bottom * this.scale);
+            int thickness = Math.max(1, Math.round(this.scale));
+            Mc189Compat.drawRect(x0, y0, x1, y0 + thickness, color);
+            Mc189Compat.drawRect(x0, y1 - thickness, x1, y1, color);
+            Mc189Compat.drawRect(x0, y0, x0 + thickness, y1, color);
+            Mc189Compat.drawRect(x1 - thickness, y0, x1, y1, color);
+        }
+
+        void star(int dx, int dy, int color) {
+            bar(dx + 4, dy, 1, 8, color);
+            bar(dx, dy + 2, 9, 2, color);
+            bar(dx + 1, dy + 4, 8, 2, color);
+            bar(dx + 2, dy + 6, 7, 2, color);
+        }
     }
 
-    /** One solid rectangle in design units; the glyphs above are written in terms of it. */
-    private static void bar(int x, int y, int width, int height, int color) {
-        Mc189Compat.drawRect(x, y, x + width, y + height, color);
+    /**
+     * The settings control a module row shows when a module has settings: two rails with knobs.
+     * The size parameter is the control's edge length in GUI pixels; the rails and knobs are scaled
+     * to it together, so the glyph does not collapse into fixed-width bars at small sizes.
+     */
+    public static void drawGearGlyph(int x, int y, int size, int color) {
+        float scale = Math.max(0.05F, size / 12.0F);
+        int rail = Math.max(1, Math.round(scale));
+        int top = y + Math.round(3 * scale);
+        int bottom = y + Math.round(9 * scale);
+        Mc189Compat.drawRect(x, top, x + size, top + rail, color);
+        Mc189Compat.drawRect(x, bottom, x + size, bottom + rail, color);
+        int lift = Math.max(1, Math.round(2 * scale));
+        Mc189Compat.drawRect(x + Math.round(3 * scale), top - lift, x + Math.round(5 * scale), top + rail, color);
+        Mc189Compat.drawRect(x + Math.round(7 * scale), bottom, x + Math.round(9 * scale),
+            bottom + rail + lift, color);
     }
 
     public static void drawMark(int x, int y, int color) {

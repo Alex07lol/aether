@@ -43,7 +43,9 @@ store; `AetherClient.save()` merges every store back into one document and write
 
 - `ClientModule` (interface) — `metadata()`, `state()`, `enable()`, `disable()`, `settings()`.
   Nested `ModuleState {ENABLED, DISABLED}`, `ModuleCategory {GENERAL, PERFORMANCE, GRAPHICS,
-  RENDER, INTERFACE, MOVEMENT, AUDIO, HUD, PVP, COSMETICS, ACCESSIBILITY, THEMES}` and
+  RENDER, INTERFACE, MOVEMENT, AUDIO, HUD, PVP, COSMETICS, ACCESSIBILITY, THEMES}` (`THEMES` is
+  retired: the constant survives only so `ModuleVisibilityTest` can prove no module uses it, and
+  it never appears in the category filter) and
   `ModuleMetadata` (+ builder: id, name, category, description, favoriteByDefault, group).
 - `AbstractModule` — the base every real module extends. Holds the state, the settings list and
   the fluent setting factories: `addBool`, `addNumber(id,label,default)`,
@@ -56,8 +58,9 @@ store; `AetherClient.save()` merges every store back into one document and write
   active). `toConfig`/`applyConfig` persist `module.<id>.enabled` and
   `module.<id>.setting.<settingId>`.
 - `builtin/*` — the registration lists (`HudModules`, `GraphicsModules`, `PvpModules`,
-  `InterfaceModules`, `PerformanceModules`, `CosmeticModules`, `ThemeModules`) called from
-  `BuiltInModules.registerAll`.
+  `InterfaceModules`, `PerformanceModules`, `CosmeticModules`) called from
+  `BuiltInModules.registerAll`. There is no theme list: themes are configuration owned by
+  `ThemeManager` (§11), registered nowhere.
 
 **Lifecycle of a module activation:** `registry.setEnabled(id, true)` → group exclusivity →
 `module.enable()` → `onEnable()`. Nothing polls module state to decide whether to enable; the
@@ -199,36 +202,50 @@ Aether's registry (see `docs/GUI_REBUILD.md` for the decision record, the art pi
 short list of things that stay Aether's).
 
 - Shell: `dev.aether.gui.screens.AetherGuiScreen` (design-space canvas via `GuiScale`, Leaf's
-  backdrop art per screen, the navigation row, render/mouse lifecycle). The row is Leaf's four
-  rectangles plus Aether's own fifth tile: `GuiSection`'s **declaration order is the navigation
-  order** and pairs with `NAV_X = {430, 650, 860, 1100, 1320}` - Leaf's modules / cosmetics / HUD
-  (`location`) / settings keep its x positions and the Themes tile takes the free middle slot.
-  Reordering the enum moves the tabs, so the enum and that list move together.
+  backdrop art per screen, the navigation row, render/mouse lifecycle). Six destinations live in
+  `dev.aether.ui.GuiSection` (Modules, Cosmetics, HUD Editor, Appearance, Profiles, Settings):
+  **the enum's declaration order is the navigation order**, and the row's x positions are computed
+  from it by `navX(index, count)` - Leaf's outer pair (430 / 1320) anchors the row and the tiles
+  between are pitched evenly (178 units at six). Every tile carries a caption below it at y 334,
+  and `navArt(section)` supplies each tile's artwork, so the two Aether-added tiles (Appearance,
+  Profiles) are stamped, not blank. Reordering the enum moves the tiles, the captions and the
+  screen map together.
 - Wheel handling once, in the shell: `scrollDelta(-wheel / 24)` normalises vanilla's sign (positive =
   forward/down) and applies `preference.invert_scroll`, so screens read one sign and never negate it
   again. That replaced a double negation that ran every paged list backwards.
-- Sections: `AetherModScreen` (modules), `AetherModuleSettingsScreen` (one module, Leaf's
-  `ModDetailSettings` role), `AetherCosmeticScreen`, `AetherThemesScreen` (the palette picker -
-  Aether's own destination, built in the Cosmetics idiom from the registry's `ThemeModule`s),
-  `AetherHudEditorScreen`, `AetherClientSettingsScreen`, `AetherMainMenuScreen`.
-- Components: `dev.aether.gui.leaf.*` (`ModuleCard`, `NavButton`, `PageBar`, `LeafToggle`,
-  `LeafBar`, `SelectButton`, `LeafTextBox`, `ColorChart`, `CosmeticEntry`) on
-  `dev.aether.gui.core.UiComponent`; every one of them draws Leaf art through `LeafArt`, so a state
-  (enabled, hovered, dimmed, selected) is a brightness of one texture.
+- Sections: `AetherModScreen` (modules, a `ModuleRow` list), `AetherModuleSettingsScreen` (one
+  module, Leaf's `ModDetailSettings` role), `AetherCosmeticScreen` (the gallery),
+  `AetherAppearanceScreen` (the theme picker over `ThemeManager`), `AetherProfilesScreen`
+  (save / apply / delete), `AetherHudEditorScreen`, `AetherClientSettingsScreen`,
+  `AetherMainMenuScreen` (the entry screen, in `forge189`).
+- Components: `dev.aether.gui.leaf.*` (`NavButton`, `PageBar`, `LeafToggle`, `LeafBar`,
+  `SelectButton`, `LeafTextBox`, `ColorChart`) plus Aether's own
+  `dev.aether.gui.components.*` (`ModuleRow`, `ChipBar`, `SearchBox`, `CosmeticCard`,
+  `ScrollView`) on `dev.aether.gui.core.UiComponent`. Every component converts its design
+  rectangles through `GuiScale` at the draw call and hit-tests in design units — the rule the
+  earlier `ModuleRow` mixed-unit bug violated, and what `docs/stop.md` records as fixed; the
+  Leaf-art components draw through `LeafArt`, so a state (enabled, hovered, dimmed, selected) is a
+  brightness of one texture.
 - Art: `assets/aether/leaf/**` = Leaf's textures recoloured to translucent black + white by
   `scripts/leaf_assets.py` (build-time, Pillow; the client never processes images);
-  `Mc189Compat.drawTextureTinted` is the primitive, `NOTICE.txt` the attribution. Thirty textures
-  today, all rebuildable from the Leaf checkout: `SOURCE_NAMES` maps the outputs Leaf has no art for
-  (the Themes tab) onto the source it is cut from, and the `detail` rule's optional alpha gain makes
+  `Mc189Compat.drawTextureTinted` is the primitive, `NOTICE.txt` the attribution. 31 textures
+  today, all rebuildable from the Leaf checkout: `SOURCE_NAMES` maps the outputs Leaf has no art
+  for (the Appearance and Profiles tiles, both cut from `system.png`) onto that source, and
+  `stamp_tab_glyph` paints each of them its own glyph (a half-filled contrast ring, two stacked
+  cards) so neither navigation tile can render blank; the `detail` rule's optional alpha gain makes
   a translucent original's white detail solid where a row of tiles has to read evenly.
 - `dev.aether.gui.preview.PlayerPreview` renders the real player model for cosmetics.
 - `dev.aether.gui.AetherFont` — semantic text roles (TITLE/SECTION/BODY/SMALL/CAPTION) over
   `AetherFontManager`.
-- Theme: `dev.aether.theme.*` (`AetherTheme`, `ThemePalette`, `ThemePalettes`, `ThemeModule`)
-  and the `AetherUi` tokens derived from the active theme. The default palette is
-  `ThemePalettes.mono()` — translucent black and white — and is also the *Monochrome* theme module,
-  so the default and the module share one palette; `ACCENT_ON` follows the accent, because on/off is
-  carried by the art's own shape rather than by a fixed hue.
+- Theme: `dev.aether.theme.*` (`ThemeManager`, `ThemeDefinition`, `AetherTheme`, `ThemePalette`,
+  `ThemePalettes`) and the `AetherUi` tokens derived from the active theme. Themes are
+  **configuration**, not modules: `AetherClient.themes()` owns the list, `ThemeManager.select`
+  writes `ClientPreferences`' `theme.active`, and the migration from the module era's
+  `module.theme.<id>.enabled` still reads old configs. `ThemeManager.DEFAULT_THEME_ID` is
+  `theme.monochrome` over `ThemePalettes.mono()` — translucent black and white — so the default
+  palette and the default theme are one definition; `ACCENT_ON` follows the accent, because
+  on/off is carried by the art's own shape rather than by a fixed hue. Selection happens on the
+  Appearance screen, never in Modules.
 
 ## 12. Extension points (the recipes)
 
@@ -370,8 +387,8 @@ ported, with the reason.
 | PackDisplayMod | — | MISSING → Phase 14 |
 | BreadcrumbsMod | `waypoint.WaypointManager` (core) | MISSING as a renderer → Phase 14 can build on the existing waypoint store |
 | ItemInfoMod | — | MISSING → Phase 14 |
-| ItemPhysicsMod | `graphics.item_physics` (class exists, **not registered**) | Phase 14: register with real behaviour or delete |
-| MotionBlurMod | `graphics.motion_blur` (class exists, **not registered**) | same as above |
+| ItemPhysicsMod | `graphics.item_physics` — **deleted** | No hook exists in the 1.8.9 adapter, so the switch could not work; removed rather than faked (see `docs/MODULE_AUDIT.md`) |
+| MotionBlurMod | `graphics.motion_blur` — **deleted** | same as above |
 | FovModifierMod | — | MISSING → Phase 15 |
 
 ### Player / PvP / utility

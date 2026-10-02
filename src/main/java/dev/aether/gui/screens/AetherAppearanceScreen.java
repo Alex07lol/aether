@@ -72,9 +72,11 @@ public final class AetherAppearanceScreen extends AetherGuiScreen {
         }
         pageBar.render();
 
-        // What the player is looking at, in one line: the worn palette's own name.
+        // What the player is looking at, in one line, clear of the pager: the caption sits to the
+        // right of the PageBar (x 945..977), not beside the pills where a long palette name ran
+        // under the bar.
         AetherFont.draw(AetherFont.Size.CAPTION, "Theme: " + client.theme().name(),
-            GuiScale.x(LIST_X + 340), GuiScale.y(LIST_TOP + 8), AetherUi.TEXT_SECONDARY);
+            GuiScale.x(LIST_X + 520), GuiScale.y(LIST_TOP + 8), AetherUi.TEXT_SECONDARY);
     }
 
     @Override
