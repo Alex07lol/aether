@@ -68,6 +68,8 @@ public final class ClientPreferences {
     public void applyConfig(ConfigDocument document) {
         this.saveOnClose = document.getBoolean(KEY_SAVE_ON_CLOSE, this.saveOnClose);
         this.showTooltips = document.getBoolean(KEY_SHOW_TOOLTIPS, this.showTooltips);
+        // Configs written by builds that shipped a "Themes" destination (and older four-section
+        // layouts) must still load: the remembered section folds onto the closest existing one.
         this.openSection = normalizeSection(document.get(KEY_OPEN_SECTION, this.openSection));
         this.invertScroll = document.getBoolean(KEY_INVERT_SCROLL, this.invertScroll);
     }
@@ -79,9 +81,20 @@ public final class ClientPreferences {
         builder.putBoolean(KEY_INVERT_SCROLL, this.invertScroll);
     }
 
-    /** @return the closest known section name; an unknown value falls back to Modules. */
+    /**
+     * @return the closest known section name; an unknown value falls back to Modules. A value
+     *     from an older architecture folds onto its successor first: the retired "Themes"
+     *     destination is Appearance now.
+     */
     public static String normalizeSection(String value) {
-        return GuiSection.fromLabel(value, GuiSection.MODULES).label();
+        return GuiSection.fromLabel(migrateSection(value), GuiSection.MODULES).label();
+    }
+
+    private static String migrateSection(String value) {
+        if (value != null && value.trim().equalsIgnoreCase("Themes")) {
+            return "Appearance";
+        }
+        return value;
     }
 
     /** @return the index of {@code section} in {@link #SECTIONS}, or 0 when it is unknown. */

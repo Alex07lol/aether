@@ -15,8 +15,12 @@ Rules this tracker enforces (from the task brief):
 
 ## CURRENT PHASE
 
-**Phase 7 — Block Info transition** (Phases 1-6, the Leaf UI copy and the Themes/scroll/wordmark
-follow-up are complete; see below). Next exact task is recorded in `docs/stop.md`.
+**GUI/cosmetics overhaul in progress (uncommitted): themes-as-config refactor + new screens** (the
+Leaf UI copy, Phases 1-6, and the Themes/scroll/wordmark follow-up are complete; see below). The
+refactor is code-complete and green; screenshot verification exposed a `ModuleRow` unit bug plus
+nav/caption defects that are diagnosed with fixes identified but not yet applied. Next exact tasks
+are recorded in `docs/stop.md` (CURRENT PROBLEM → NEXT EXACT STEPS 1-4); Phase 7 — Block Info comes
+after.
 
 ---
 
@@ -257,6 +261,43 @@ with the screenshot walker, at 1920x1080, and the numbers are in `docs/stop.md` 
       pill lit it, and the choice landed in the config - so selection works end to end, not just on
       screen
 
+## GUI/cosmetics overhaul — themes-as-config refactor + new screens (in progress, uncommitted)
+
+Spec §3-§7: themes are configuration, not modules — fix the registration metadata instead of
+filtering in screens. `GuiSection` is now six sections (Modules/Cosmetics/HUD Editor/Appearance/
+Profiles/Settings); nav layout is the responsive `navX(index,count)` + `navArt()`.
+
+- [x] Full theme refactor: `ThemeManager`, `ThemeDefinition`, `AetherTheme` rewrite, `AetherClient`
+      wiring (`themes()`, config load/save); deleted theme modules / `ThemeModule` /
+      `ModuleKind.THEME`, registry guard removal; `defaultTheme = AetherTheme.of(themes.active())`
+- [x] New screens: `AetherAppearanceScreen` (theme pills via `ThemePill`, `LIST_X` 480 / `LIST_TOP`
+      400 / pitch 100 / 5 per page / `PageBar` 945/400/32x400) and `AetherProfilesScreen` (field +
+      Save, Apply + Delete rows; profiles stripped from `AetherClientSettingsScreen`)
+- [x] `AetherModScreen` is a `ModuleRow` list (search `SEARCH_Y` 386, `ChipBar` filter `FILTER_Y`
+      388, list 430/442/1020x424, pitch 46) with debug hooks (`debugSearch`, `debugSelectCategory`,
+      `debugToggleFirst`); `SearchBox.setText`; walker `Step` enum, `resetThemes()`, resize,
+      heartbeat, 3600-tick safety
+- [x] Art pipeline: `button/themes.png` → `appearance.png`, `profiles.png` added
+      (`SOURCE_NAMES`/`ASSETS` updated, `--convert` run, 31 assets)
+- [x] Tests green: `ThemeManagerTest` new (manager basics, incl. `resetToDefault()` first in
+      `clientResolution`, config round trip, module-era migration); `ThemeModuleTest.java` deleted
+      (+ stale `.class` files removed from build dirs); `ModuleVisibilityTest` rewritten (no
+      `theme.*` entries, no `THEMES` category); `ClientPreferencesTest` rewritten (six sections,
+      `sectionIndex("Settings")==5`, `normalizeSection("themes")=="Appearance"` folding the old
+      `migrateSection`); `coreSelfTests` **35/35**, `scripts/verify.sh` green, jar proven clean
+      (no stale theme classes, `appearance.png`+`profiles.png` present, `themes.png` absent)
+- [x] `runClient -PaetherDebugShots=1920x1080` (JDK 8 `.gradle-dist/jdk8u504-b01` — JDK 25 fails
+      `:makeStart` on source level 6) completed; all 19 walker screenshots written
+      (`appearance-equipped` proves end-to-end selection). Old pre-refactor shots kept at
+      `$env:TEMP\aether-old-shots` for comparison
+- [ ] **Diagnosed, fixes identified, not yet applied** (see `docs/stop.md` CURRENT PROBLEM):
+      `ModuleRow` mixes design-unit constants into GUI coordinates (name +126px, 84px icon tiles,
+      misplaced switch; smaller instances in `ChipBar`/`SearchBox`); blank Appearance/Profiles nav
+      tiles (programmatic glyphs to add in `leaf_assets.py`); nav caption/content collision (nav row
+      up ~28px); Appearance caption/`PageBar` overlap; walker `resetThemes()` belongs at walk start.
+      Prior sessions never screenshot-verified the row redesign (15:24 shots show the old card grid).
+- [ ] Re-run `compileJava` + `coreSelfTests` + `verify.sh` + `runClient` screenshots after the fixes
+
 ## Phases 7-19 (planned)
 
 - [ ] Phase 7 — Block Info enter/exit transition around real block data
@@ -295,6 +336,7 @@ with the screenshot walker, at 1920x1080, and the numbers are in `docs/stop.md` 
 | 2026-09-30 | 6 | Mouse Display: `compileJava` green, `coreSelfTests` **30/30** (`MouseIndicatorTest` added), **62 modules / 214 settings**, `scripts/verify.sh` green end to end |
 | 2026-10-01 | Leaf UI follow-up | Themes section, wheel direction + `invert_scroll`, wordmark: `coreSelfTests` **30/30**, **62 modules / 214 settings / 56 ranges / 26 choice lists**, `scripts/verify.sh` green end to end, jar carries all 30 `assets/aether/leaf/**` textures |
 | 2026-10-01 | Leaf UI follow-up (live) | `runClient -PaetherDebugShots=1920x1080` walked 11 screens (three new themes shots); the nav row's order/brightness, the pill selection, paging and the scrollbar thumb were measured out of the PNGs. The walker now forces the framebuffer to the requested size, so shots are 1:1 design units (see `docs/stop.md` TEST STATUS 0) |
+| 2026-10-02 | Themes-as-config refactor | `compileJava` green, `coreSelfTests` **35/35** (`ThemeManagerTest` added), `scripts/verify.sh` green end to end, jar proven clean; `runClient -PaetherDebugShots=1920x1080` (JDK 8) wrote 19 screenshots — verification exposed the `ModuleRow` mixed-unit bug + nav/caption defects (see `docs/stop.md` CURRENT PROBLEM), fixes identified but not yet applied |
 
 Proof that the new mixin binds in production as well as dev: `build/tmp/compileJava/compileJava-refmap.json`
 contains `dev/aether/forge189/mixin/MouseHelperMixin → mouseXYChange -> Lnet/minecraft/util/MouseHelper;func_74374_c()V`.
@@ -310,11 +352,14 @@ are preserved in §13b.
 
 ## Remaining work (this pass)
 
+- Apply the `ModuleRow`/nav/caption/walker fixes in `docs/stop.md` CURRENT PROBLEM, then re-run
+  `compileJava` + `coreSelfTests` + `verify.sh` + `runClient` screenshots before anything else.
 - Live verification in `runClient`: freelook smoothness, keystrokes animation, Target Info
-  enter/flash/exit and Mouse Display drift/recentre still need hands-on feel (the screens - including
-  the Themes picker and the nav row - are screenshot-verified with measurements).
+  enter/flash/exit and Mouse Display drift/recentre still need hands-on feel (the screens are
+  screenshot-verified with measurements, modulo the fixes above).
 - Phases 7-19 above.
 
 ## Exact next task
 
-**Phase 7 — Block Info transition.** Full spec is in `docs/stop.md` under *NEXT EXACT STEPS*.
+**`ModuleRow` mixed-unit fix + nav/caption/walker fixes** (`docs/stop.md` NEXT EXACT STEPS 1-4),
+then **Phase 7 — Block Info transition** (spec in `docs/stop.md`).

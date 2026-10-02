@@ -757,6 +757,23 @@ public final class AetherCosmeticScreen extends AetherGuiScreen {
         scroll.scrollBy(LIST_H);
     }
 
+    /** Switches the chip filter to index {@code index}, as a click on the chip would. */
+    public void debugSelectFilter(int index) {
+        filter = filterAt(index);
+        filters.select(index);
+        refresh();
+    }
+
+    /** Selects card {@code index}, the same action a click on it performs (equip + sound). */
+    public void debugSelectCard(int index) {
+        if (index < 0 || index >= cards.size()) {
+            return;
+        }
+        CosmeticCard card = cards.get(index);
+        card.onMouseClick(card.getX() + card.getWidth() / 2.0,
+            card.getY() + card.getHeight() / 2.0, 0);
+    }
+
     /** Opens/closes the import popover, so a screenshot can show it. */
     public void debugToggleImportMenu() {
         popoverOpen = !popoverOpen;

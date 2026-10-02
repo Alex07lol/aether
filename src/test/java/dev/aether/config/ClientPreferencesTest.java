@@ -55,15 +55,22 @@ public final class ClientPreferencesTest {
         preferences.setOpenSection("nonsense");
         TestSupport.assertEquals("Modules", preferences.openSection(), "an unknown section falls back");
         TestSupport.assertEquals(0, ClientPreferences.sectionIndex("nonsense"), "and indexes to the first");
-        TestSupport.assertEquals(4, ClientPreferences.sectionIndex("Settings"), "known sections keep their order");
-        TestSupport.assertEquals(5, ClientPreferences.SECTIONS.length, "the GUI ships five sections");
+        TestSupport.assertEquals(5, ClientPreferences.sectionIndex("Settings"), "known sections keep their order");
+        TestSupport.assertEquals(6, ClientPreferences.SECTIONS.length, "the GUI ships six sections");
         TestSupport.assertEquals("Cosmetics", ClientPreferences.SECTIONS[1], "Cosmetics follows Modules");
-        // The order is also the navigation bar's x order, and the x positions are Leaf's own tile
-        // rectangles (430/650/1100/1320) with Aether's Themes tile in the free slot at 860 - so the
-        // HUD editor has to stay third of the four Leaf tiles, at index 3.
-        TestSupport.assertEquals("Themes", ClientPreferences.SECTIONS[2], "Themes takes the middle tile");
-        TestSupport.assertEquals("HUD Editor", ClientPreferences.SECTIONS[3], "the HUD editor keeps Leaf's inner tile");
-        TestSupport.assertEquals("Themes", ClientPreferences.normalizeSection("themes"), "the Themes section normalises");
+        // The order is the navigation order: Modules, Cosmetics, HUD Editor, Appearance,
+        // Profiles, Settings - Aether's own information architecture, not Leaf's four tiles.
+        TestSupport.assertEquals("HUD Editor", ClientPreferences.SECTIONS[2], "the HUD editor follows Cosmetics");
+        TestSupport.assertEquals("Appearance", ClientPreferences.SECTIONS[3],
+            "Appearance is where a theme is worn");
+        TestSupport.assertEquals("Profiles", ClientPreferences.SECTIONS[4], "Profiles is its own destination");
+        TestSupport.assertEquals("Settings", ClientPreferences.SECTIONS[5], "Settings closes the row");
+        // The retired Themes destination must load as Appearance rather than fall back to Modules.
+        TestSupport.assertEquals("Appearance", ClientPreferences.normalizeSection("themes"),
+            "the Themes section maps onto Appearance");
+        preferences.setOpenSection("Themes");
+        TestSupport.assertEquals("Appearance", preferences.openSection(),
+            "a config remembering Themes opens Appearance");
     }
 
     private static void invertScroll() {

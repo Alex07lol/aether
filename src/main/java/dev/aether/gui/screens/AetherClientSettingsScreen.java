@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import dev.aether.gui.leaf.LeafArt;
-import dev.aether.gui.leaf.LeafTextBox;
 import dev.aether.gui.leaf.LeafToggle;
 import dev.aether.gui.leaf.NavButton;
 import dev.aether.gui.leaf.PageBar;
@@ -17,8 +16,9 @@ import dev.aether.ui.GuiSection;
  * (GPLv3, see docs/GUI_REBUILD.md): a column of state tiles at Leaf's position
  * (x = 1090, starting y = 310, 100 pitch, 100x60 each, row labels 410 to the left),
  * paged five rows at a time by the scrollbar at (1230, 310, 32, 460) when the list is
- * longer. Aether's rows are its own real settings - the two persisted preferences,
- * the profile manager and the data actions - presented with Leaf's geometry.
+ * longer. Aether's rows are its own real settings - the persisted preferences and the
+ * data actions - presented with Leaf's geometry. The profile manager lives on the
+ * Profiles destination and the palettes on Appearance; neither belongs here.
  */
 public final class AetherClientSettingsScreen extends AetherGuiScreen {
 
@@ -100,44 +100,6 @@ public final class AetherClientSettingsScreen extends AetherGuiScreen {
             }));
         y += ROW_PITCH;
 
-        // The field carries its own caption as a placeholder, so it can sit next to the button
-        // instead of pushing a label outside Leaf's panel.
-        final LeafTextBox[] nameHolder = new LeafTextBox[1];
-        nameHolder[0] = new LeafTextBox(null, 920, y, 400, 67, "", new Runnable() {
-            public void run() {
-                // Leaf commits text on deselect; saving the profile is the button's job.
-            }
-        }).setPlaceholder("New profile");
-        rows.add(nameHolder[0]);
-        final int saveY = y;
-        rows.add(new NavButton(LeafArt.SELECT, "Save", 720, saveY, 170, 67, new Runnable() {
-            public void run() {
-                saveProfile(nameHolder[0]);
-            }
-        }));
-        y += ROW_PITCH;
-
-        List<String> names = client.profiles().names();
-        for (final String name : names) {
-            rows.add(profileRowLabel(name, y));
-            rows.add(new NavButton(LeafArt.SELECT, "Apply", 930, y, 170, 60, new Runnable() {
-                public void run() {
-                    boolean applied = client.profiles().apply(name, client.modules());
-                    flash(applied ? "Profile '" + name + "' applied." : "Could not apply the profile.");
-                    saveQuietly();
-                }
-            }));
-            rows.add(new NavButton(LeafArt.SELECT, "Delete", 1110, y, 170, 60, new Runnable() {
-                public void run() {
-                    client.profiles().delete(name);
-                    flash("Profile '" + name + "' deleted.");
-                    saveQuietly();
-                    buildRows();
-                }
-            }));
-            y += ROW_PITCH;
-        }
-
         rows.add(new NavButton(LeafArt.SELECT, "Save Config", ROW_X, y, 170, 60, new Runnable() {
             public void run() {
                 saveQuietly();
@@ -156,42 +118,6 @@ public final class AetherClientSettingsScreen extends AetherGuiScreen {
         } else {
             pageBar = null;
         }
-    }
-
-    /**
-     * Leaf's ToggleButton draws its row label 410 units left of the tile; rows that
-     * are pure buttons (apply/delete/save) get their caption inside the tile instead,
-     * so profile names are drawn as a separate small label component at that offset.
-     */
-    private UiComponent profileRowLabel(final String name, final int y) {
-        return new UiComponent() {
-            {
-                // Same 410-left caption offset Leaf uses for its rows, clipped to stop short of the
-                // Apply pill so a long profile name cannot run underneath it.
-                at(680, y).size(240, 60);
-            }
-
-            @Override
-            public void render() {
-                dev.aether.gui.AetherFont.draw(dev.aether.gui.AetherFont.Size.BODY,
-                    dev.aether.gui.AetherFont.trimTo(dev.aether.gui.AetherFont.Size.BODY, name, gw()),
-                    gx(), gy() + (gh() - dev.aether.gui.AetherFont.height(dev.aether.gui.AetherFont.Size.BODY)) / 2,
-                    dev.aether.forge189.AetherUi.TEXT_SECONDARY);
-            }
-        };
-    }
-
-    private void saveProfile(LeafTextBox field) {
-        String name = dev.aether.config.ProfileStore.sanitize(field.text());
-        if (name.isEmpty()) {
-            flash("Type a name for the profile first.");
-            return;
-        }
-        boolean saved = client.profiles().save(name, client.modules());
-        flash(saved ? "Profile '" + name + "' saved." : "Could not save the profile.");
-        field.setText("");
-        saveQuietly();
-        buildRows();
     }
 
     private void flash(String message) {

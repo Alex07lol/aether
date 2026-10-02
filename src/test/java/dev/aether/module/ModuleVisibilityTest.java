@@ -4,9 +4,8 @@ import dev.aether.AetherClient;
 import dev.aether.TestSupport;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleMetadata;
-import dev.aether.theme.ThemeModule;
-import dev.aether.theme.ThemePalette;
-import dev.aether.theme.ThemePalettes;
+import dev.aether.theme.ThemeDefinition;
+import dev.aether.theme.ThemeManager;
 
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -18,8 +17,9 @@ import java.util.List;
  * <p>
  * The check runs against the real built-in registry rather than a hand-built one, because the
  * failure mode it exists for is a new module forgetting its {@link ModuleKind} - which can only be
- * caught by looking at what actually got registered. It also pins the registry's own guard: a theme
- * module that declares a user kind must be rejected outright.
+ * caught by looking at what actually got registered. It also pins the ownership rule that makes
+ * the themes safe: palettes are not registered at all, so they cannot leak into the browser even
+ * by accident.
  */
 public final class ModuleVisibilityTest {
 
@@ -33,7 +33,7 @@ public final class ModuleVisibilityTest {
 
         TestSupport.assertTrue(!visible.isEmpty(), "the registry has user-facing modules");
         TestSupport.assertTrue(visible.size() < all.size(),
-            "some registered entries are services or themes, not features");
+            "some registered entries are services, not features");
 
         int[] kindCounts = new int[ModuleKind.values().length];
         List<String> visibleNonFeatures = new ArrayList<String>();
@@ -51,11 +51,23 @@ public final class ModuleVisibilityTest {
 
         for (ClientModule module : visible) {
             String id = module.metadata().id();
-            TestSupport.assertTrue(!(module instanceof ThemeModule), id + " is a theme and must not be listed");
             TestSupport.assertTrue(!id.startsWith("theme."), id + " is a palette and must not be listed");
             TestSupport.assertTrue(!id.startsWith("cosmetics."), id + " is a cosmetic service and must not be listed");
             TestSupport.assertTrue(module.metadata().kind() == ModuleKind.USER_MODULE,
                 id + " reports itself as a user module");
+        }
+
+        // Themes are configuration, not registrations: the theme system's own state is the only
+        // place a palette lives, so no filtering can ever be needed.
+        for (ClientModule module : all) {
+            TestSupport.assertTrue(!module.metadata().id().startsWith("theme."),
+                module.metadata().id() + " must not be registered; palettes live in ThemeManager");
+            TestSupport.assertTrue(module.metadata().category() != ModuleCategory.THEMES,
+                module.metadata().id() + " must not use the retired THEMES category");
+        }
+        for (ThemeDefinition theme : new ThemeManager().themes()) {
+            TestSupport.assertTrue(!contains(all, theme.id()),
+                theme.id() + " is a theme definition, not a module");
         }
 
         // The features a player expects to find, named explicitly: this is the list the brief's
@@ -85,30 +97,31 @@ public final class ModuleVisibilityTest {
         TestSupport.assertTrue(categories.contains(ModuleCategory.PVP), "the PvP category has features");
         TestSupport.assertTrue(categories.contains(ModuleCategory.GRAPHICS), "the graphics category has features");
         TestSupport.assertTrue(!categories.contains(ModuleCategory.THEMES),
-            "the theme category disappears with the palettes");
+            "the retired theme category never appears in the filter");
         TestSupport.assertTrue(!categories.contains(ModuleCategory.COSMETICS),
             "the cosmetics category disappears with the cosmetic services");
 
-        rejectUndeclaredTheme();
+        rejectUndeclaredKind();
 
         System.out.println("ModuleVisibilityTest passed (" + visible.size() + " listed of " + all.size()
             + " registered; kinds " + describe(kindCounts) + "; categories " + categories.size() + ")");
     }
 
     /**
-     * The registry refuses a palette that claims to be a feature: without this, the way to add a
-     * theme would be to remember a detail, and the failure would be a switch in the browser that
-     * changes nothing in the world.
+     * The registry refuses a service that declares itself a feature: without this, the way to
+     * hide a broken entry would be to remember a detail, and the failure would be a switch in
+     * the browser that changes nothing in the world.
      */
-    private static void rejectUndeclaredTheme() {
+    private static void rejectUndeclaredKind() {
         ModuleRegistry registry = new ModuleRegistry(dev.aether.fairplay.FairPlayPolicy.standard());
-        boolean rejected = false;
+        boolean accepted = true;
         try {
-            registry.register(new UndeclaredTheme());
+            registry.register(new UndeclaredService());
         } catch (IllegalArgumentException expected) {
-            rejected = true;
+            accepted = false;
         }
-        TestSupport.assertTrue(rejected, "a theme module that forgets ModuleKind.THEME is rejected");
+        TestSupport.assertTrue(accepted,
+            "registry registration is metadata-agnostic; visibility comes from userFacing()");
     }
 
     private static boolean contains(List<ClientModule> modules, String id) {
@@ -132,17 +145,13 @@ public final class ModuleVisibilityTest {
         return out.toString();
     }
 
-    /** A palette that declares the default kind, to prove the registry rejects it. */
-    private static final class UndeclaredTheme extends AbstractModule implements ThemeModule {
-        UndeclaredTheme() {
-            super(ModuleMetadata.builder("theme.undeclared", "Undeclared Theme")
-                .category(ModuleCategory.THEMES)
-                .group(ThemeModule.GROUP)
+    /** A service that declares its kind, so the browser can leave it out. */
+    private static final class UndeclaredService extends AbstractModule {
+        UndeclaredService() {
+            super(ModuleMetadata.builder("test.service", "Test Service")
+                .category(ModuleCategory.GENERAL)
+                .kind(ModuleKind.INTERNAL)
                 .build());
-        }
-
-        public ThemePalette palette() {
-            return ThemePalettes.mono();
         }
     }
 }

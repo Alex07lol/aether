@@ -292,6 +292,33 @@ public final class AetherModScreen extends AetherGuiScreen {
         scroll.scrollBy(LIST_HEIGHT);
     }
 
+    /** Types a query into the search field, as a user would, then re-filters. */
+    public void debugSearch(String query) {
+        search.setText(query);
+    }
+
+    /**
+     * Switches the category chip to the label named {@code label}, through the same
+     * callback path a click on the chip takes.
+     */
+    public void debugSelectCategory(String label) {
+        List<ModuleCategory> options = orderedCategories();
+        for (int i = 0; i < options.size(); i++) {
+            if (displayLabel(options.get(i)).equalsIgnoreCase(label)) {
+                category = options.get(i);
+                refresh();
+                return;
+            }
+        }
+    }
+
+    /** Toggles the first listed module, the way clicking its row would. */
+    public void debugToggleFirst() {
+        if (!visible.isEmpty()) {
+            toggle(visible.get(0));
+        }
+    }
+
     public void debugOpenFirstModuleSettings() {
         if (!visible.isEmpty()) {
             Mc189Compat.displayGuiScreen(

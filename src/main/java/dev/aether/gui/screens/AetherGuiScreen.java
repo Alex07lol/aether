@@ -3,6 +3,7 @@ package dev.aether.gui.screens;
 import dev.aether.AetherClient;
 import dev.aether.forge189.AetherUi;
 import dev.aether.forge189.Mc189Compat;
+import dev.aether.gui.AetherFont;
 import dev.aether.gui.GuiScale;
 import dev.aether.gui.leaf.LeafArt;
 import dev.aether.gui.leaf.NavButton;
@@ -15,16 +16,20 @@ import java.io.IOException;
 
 /**
  * Base class of the Aether GUI screens, carrying the shared Leaf 1.8.9 composition
- * (see docs/GUI_REBUILD.md): Leaf's fullscreen backdrop art with five navigation tiles at
- * Leaf's exact rectangles (170x106 at y = 250; Leaf's own x = 430, 650, 1100, 1320 pitched 220,
- * plus Aether's Themes tile at the free x = 860), each drawn from its own
- * {@code button/<name>.png} art, with the screen's content underneath.
+ * (see docs/GUI_REBUILD.md): Leaf's fullscreen backdrop art with the navigation tiles at the
+ * top, each drawn from its own {@code button/<name>.png} art, with the screen's content
+ * underneath.
  * <p>
- * The art itself carries the wording, the panel outline and the shadows, so this class no
+ * The art itself carries the tiles' icons, the panel outline and the shadows, so this class no
  * longer draws a logo or a gradient: the backdrop texture is Leaf's own screen art, recoloured
  * to translucent black and white (see {@link dev.aether.gui.leaf.LeafArt}). The one piece of
  * Aether branding the port kept is the wordmark on the entry screen, drawn by
  * {@code AetherModScreen} into the panel corner Leaf leaves empty.
+ * <p>
+ * The navigation row is laid out responsively from the section list, not from Leaf's fixed tile
+ * rectangles: Aether ships six destinations (Leaf four, plus Appearance and Profiles), so the
+ * tiles are pitched evenly across the width between Leaf's outer pair. The two Leaf tiles
+ * Aether kept whole - Modules and Cosmetics - anchor the row at Leaf's own x positions.
  * <p>
  * Kept from Aether's previous layer because they are objectively better than Leaf's
  * equivalents: the centralized {@link GuiScale} conversion, the GL-state discipline of
@@ -32,12 +37,13 @@ import java.io.IOException;
  */
 public abstract class AetherGuiScreen extends GuiScreen implements dev.aether.gui.core.AetherUiScreen {
 
-    /** Leaf's navigation tile geometry, in design units. Five tiles share the row between
-     * Leaf's outer pairs (430/1490 outer, 650/1100 inner), pitched 220 - Leaf's own pitch. */
-    protected static final int[] NAV_X = {430, 650, 860, 1100, 1320};
+    /** Navigation tile geometry, in design units, pitched responsively across the row. */
     protected static final int NAV_Y = 250;
     protected static final int NAV_W = 170;
     protected static final int NAV_H = 106;
+    /** Leaf's own outer tiles: the row is anchored here and pitched evenly between them. */
+    private static final int NAV_FIRST_X = 430;
+    private static final int NAV_LAST_X = 1320;
 
     protected final AetherClient client;
     protected final GuiScreen parent;
@@ -129,22 +135,43 @@ public abstract class AetherGuiScreen extends GuiScreen implements dev.aether.gu
         nav = new NavButton[sections.length];
         for (int i = 0; i < sections.length; i++) {
             final GuiSection target = sections[i];
-            // Leaf's tiles carry their own wording in the art, so no label is drawn over them.
-            nav[i] = new NavButton(navArt(target), NAV_X[i], NAV_Y, NAV_W, NAV_H, new Runnable() {
-                public void run() {
-                    if (target != section()) {
-                        switchSection(target);
+            // Leaf's tiles carry their own icon in the art; every tile also gets a caption below
+            // it, because the art of the tiles Aether added (Appearance, Profiles) has no
+            // distinguishable icon of its own and a row of identical glass cannot be navigated.
+            nav[i] = new NavButton(navArt(target), navX(i, sections.length), NAV_Y, NAV_W, NAV_H,
+                new Runnable() {
+                    public void run() {
+                        if (target != section()) {
+                            switchSection(target);
+                        }
                     }
-                }
-            });
+                });
         }
+    }
+
+    /**
+     * The navigation row's responsive layout: Leaf's own outer pair (430/1320) anchors the row,
+     * and the tiles between them are pitched evenly. With six sections the pitch is Leaf's own
+     * 178 units - almost exactly Leaf's original 220 - and the proportions hold at every window
+     * width because the whole row scales with the design space. At narrow widths the pitch
+     * shrinks below the tile width, but that only happens well below the smallest supported
+     * resolution, and the tiles stay clickable in order regardless.
+     */
+    private static int navX(int index, int count) {
+        if (count <= 1) {
+            return NAV_FIRST_X;
+        }
+        float step = (NAV_LAST_X - NAV_FIRST_X) / (float) (count - 1);
+        return Math.round(NAV_FIRST_X + index * step);
     }
 
     /**
      * Leaf's navigation tile for a section. Leaf names its tiles mod / cosmetic / location /
      * setting, and "location" is the same screen Aether calls the HUD editor - the place a
-     * player moves their on-screen elements - so the mapping is one to one. The Themes tile is
-     * Aether's own (Leaf's system tab recoloured), because Leaf has no theme picker.
+     * player moves their on-screen elements - so the mapping is one to one. Appearance and
+     * Profiles are Aether's own destinations (Leaf has neither): Appearance reuses Leaf's
+     * system-tab art recoloured like the rest of the set, and Profiles reuses the same set's
+     * home art, which reads as "your things". Both are disambiguated by their caption below.
      */
     private static String navArt(GuiSection section) {
         switch (section) {
@@ -152,8 +179,10 @@ public abstract class AetherGuiScreen extends GuiScreen implements dev.aether.gu
                 return LeafArt.NAV_COSMETICS;
             case HUD:
                 return LeafArt.NAV_HUD;
-            case THEMES:
-                return LeafArt.NAV_THEMES;
+            case APPEARANCE:
+                return LeafArt.NAV_APPEARANCE;
+            case PROFILES:
+                return LeafArt.NAV_PROFILES;
             case SETTINGS:
                 return LeafArt.NAV_SETTINGS;
             case MODULES:
@@ -183,8 +212,16 @@ public abstract class AetherGuiScreen extends GuiScreen implements dev.aether.gu
         }
         if (showsNav()) {
             for (int i = 0; i < nav.length; i++) {
-                nav[i].setActive(GuiSection.ordered()[i] == section());
+                boolean active = GuiSection.ordered()[i] == section();
+                nav[i].setActive(active);
                 nav[i].render();
+                // Caption under the tile: the art carries the icon, the caption carries the name,
+                // which is what makes the two Aether-added tiles (Appearance, Profiles) navigable.
+                int captionX = GuiScale.x(navX(i, nav.length));
+                int captionW = GuiScale.w(NAV_W);
+                AetherFont.drawCentered(AetherFont.Size.CAPTION, GuiSection.ordered()[i].label(),
+                    captionX, GuiScale.y(NAV_Y + NAV_H + 6), captionW,
+                    active ? AetherUi.TEXT_PRIMARY : AetherUi.TEXT_SECONDARY);
             }
         }
         renderContent(mouseX, mouseY);

@@ -55,8 +55,10 @@ public final class LeafArt {
     public static final String NAV_MODULES = "leaf/button/mod.png";
     public static final String NAV_COSMETICS = "leaf/button/cosmetic.png";
     public static final String NAV_HUD = "leaf/button/location.png";
-    /** Aether's own addition: Leaf's system.png tab recoloured like the rest of the set. */
-    public static final String NAV_THEMES = "leaf/button/themes.png";
+    /** Aether's Appearance destination: Leaf's system.png tab recoloured like the rest of the set. */
+    public static final String NAV_APPEARANCE = "leaf/button/appearance.png";
+    /** Aether's Profiles destination: Leaf's home tab recoloured, reading as "your things". */
+    public static final String NAV_PROFILES = "leaf/button/profiles.png";
     public static final String NAV_SETTINGS = "leaf/button/setting.png";
     public static final String HOME = "leaf/button/home.png";
     public static final String CLOSE = "leaf/button/close.png";

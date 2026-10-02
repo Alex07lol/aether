@@ -2,11 +2,12 @@ package dev.aether.forge189;
 
 import dev.aether.AetherClient;
 import dev.aether.gui.AetherGui;
+import dev.aether.gui.screens.AetherAppearanceScreen;
 import dev.aether.gui.screens.AetherCosmeticScreen;
 import dev.aether.gui.screens.AetherHudEditorScreen;
 import dev.aether.gui.screens.AetherModScreen;
-import dev.aether.gui.screens.AetherThemesScreen;
 import dev.aether.gui.screens.AetherClientSettingsScreen;
+import dev.aether.gui.screens.AetherProfilesScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.ScreenShotHelper;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
@@ -23,22 +24,28 @@ import java.io.File;
  * The value is either {@code true} (window keeps its current size) or a
  * {@code WIDTHxHEIGHT} pair such as {@code 1920x1080}: the hook then resizes the
  * window on the first tick, which is how the GUI is verified at several resolutions.
- * It drives the client through every new screen and saves real screenshots into
- * {@code run/screenshots}:
+ * It drives the client through every screen and every interaction that changes a
+ * screen's state, and saves real screenshots into {@code run/screenshots}:
  * <ol>
  *   <li>{@code debug-aether-mainmenu};</li>
  *   <li>{@code debug-aether-modules} - the Modules screen;</li>
- *   <li>{@code debug-aether-modules-scrolled} - after scrolling the card list;</li>
+ *   <li>{@code debug-aether-modules-search} - after typing into the search field;</li>
+ *   <li>{@code debug-aether-modules-category} - after switching the category chip;</li>
+ *   <li>{@code debug-aether-modules-scrolled} - after scrolling the list;</li>
+ *   <li>{@code debug-aether-modules-toggled} - after toggling the first module;</li>
  *   <li>{@code debug-aether-module-settings} - one module's configuration panel;</li>
- *   <li>{@code debug-aether-cosmetics} - the cosmetics gallery: filters, search, cards, preview;</li>
+ *   <li>{@code debug-aether-cosmetics} - the gallery: filters, search, cards, preview;</li>
+ *   <li>{@code debug-aether-cosmetics-category} - after switching the chip filter;</li>
  *   <li>{@code debug-aether-cosmetics-scrolled} - the gallery after one scroll;</li>
+ *   <li>{@code debug-aether-cosmetics-selected} - after selecting a cosmetic;</li>
  *   <li>{@code debug-aether-cosmetics-import} - the import popover open;</li>
- *   <li>{@code debug-aether-themes} - the theme picker as it opens, no palette equipped;</li>
- *   <li>{@code debug-aether-themes-equipped} - after selecting a theme, so the equipped pill and
- *       the palette it applies are in the shot;</li>
- *   <li>{@code debug-aether-themes-scrolled} - the same screen on its second page;</li>
+ *   <li>{@code debug-aether-appearance} - the Appearance screen, default palette;</li>
+ *   <li>{@code debug-aether-appearance-equipped} - after wearing a theme;</li>
+ *   <li>{@code debug-aether-appearance-scrolled} - the same screen on its second page;</li>
  *   <li>{@code debug-aether-hud} - the HUD editor;</li>
- *   <li>{@code debug-aether-settings} - the client settings screen.</li>
+ *   <li>{@code debug-aether-settings} - the client settings screen;</li>
+ *   <li>{@code debug-aether-profiles} - the profile manager;</li>
+ *   <li>{@code debug-aether-preview} - cosmetics with a live player in world.</li>
  * </ol>
  * Each step fires the moment its screen is visible (after a settle delay), and the
  * sequence finishes with a marker file so an outside observer can pick the images up.
@@ -47,11 +54,24 @@ import java.io.File;
 public final class AetherVisualDebugHook {
 
     private enum Step {
-        RESIZE, WAIT_MENU, SHOOT_MENU, OPEN_MODULES, SHOOT_MODULES, SCROLL_MODULES,
-        SHOOT_SCROLLED, OPEN_SETTINGS_PANEL, SHOOT_MODULE_SETTINGS, OPEN_COSMETICS,
-        SHOOT_COSMETICS, SCROLL_COSMETICS, SHOOT_COSMETICS_SCROLLED, SHOOT_COSMETICS_IMPORT,
-        SHOOT_THEMES_PAGE, SELECT_THEME, SHOOT_THEMES_EQUIPPED, SCROLL_THEMES,
-        SHOOT_THEMES_SCROLLED, OPEN_HUD, SHOOT_HUD, OPEN_CLIENT_SETTINGS, SHOOT_CLIENT_SETTINGS,
+        RESIZE, WAIT_MENU, SHOOT_MENU,
+        OPEN_MODULES, SHOOT_MODULES,
+        MODULES_SEARCH, SHOOT_MODULES_SEARCH,
+        MODULES_CATEGORY, SHOOT_MODULES_CATEGORY,
+        SCROLL_MODULES, SHOOT_MODULES_SCROLLED,
+        TOGGLE_MODULE, SHOOT_MODULES_TOGGLED,
+        OPEN_SETTINGS_PANEL, SHOOT_MODULE_SETTINGS,
+        OPEN_COSMETICS, SHOOT_COSMETICS,
+        COSMETICS_CATEGORY, SHOOT_COSMETICS_CATEGORY,
+        SCROLL_COSMETICS, SHOOT_COSMETICS_SCROLLED,
+        SELECT_COSMETIC, SHOOT_COSMETICS_SELECTED,
+        IMPORT_MENU, SHOOT_COSMETICS_IMPORT,
+        OPEN_APPEARANCE, SHOOT_APPEARANCE_PAGE,
+        SELECT_THEME, SHOOT_APPEARANCE_EQUIPPED,
+        SCROLL_APPEARANCE, SHOOT_APPEARANCE_SCROLLED,
+        OPEN_HUD, SHOOT_HUD,
+        OPEN_CLIENT_SETTINGS, SHOOT_CLIENT_SETTINGS,
+        OPEN_PROFILES, SHOOT_PROFILES,
         LOAD_WORLD, WAIT_WORLD, SHOOT_PREVIEW, DONE
     }
 
@@ -135,6 +155,42 @@ public final class AetherVisualDebugHook {
             case SHOOT_MODULES:
                 if (--settleTicks <= 0 && mc.currentScreen instanceof AetherModScreen) {
                     shoot(mc, "debug-aether-modules");
+                    step = Step.MODULES_SEARCH;
+                    settleTicks = 10;
+                }
+                break;
+
+            case MODULES_SEARCH:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherModScreen) {
+                    ((AetherModScreen) mc.currentScreen).debugSearch("zoom");
+                    step = Step.SHOOT_MODULES_SEARCH;
+                    settleTicks = 15;
+                }
+                break;
+
+            case SHOOT_MODULES_SEARCH:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherModScreen) {
+                    shoot(mc, "debug-aether-modules-search");
+                    step = Step.MODULES_CATEGORY;
+                    settleTicks = 10;
+                }
+                break;
+
+            case MODULES_CATEGORY:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherModScreen) {
+                    // Clears the query and lands on a real category, so the chip bar and the
+                    // list are both exercised.
+                    ((AetherModScreen) mc.currentScreen).debugSearch("");
+                    ((AetherModScreen) mc.currentScreen).debugSelectCategory("HUD");
+                    step = Step.SHOOT_MODULES_CATEGORY;
+                    settleTicks = 15;
+                }
+                break;
+
+            case SHOOT_MODULES_CATEGORY:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherModScreen) {
+                    shoot(mc, "debug-aether-modules-category");
+                    ((AetherModScreen) mc.currentScreen).debugSelectCategory("All");
                     step = Step.SCROLL_MODULES;
                     settleTicks = 10;
                 }
@@ -143,14 +199,30 @@ public final class AetherVisualDebugHook {
             case SCROLL_MODULES:
                 if (--settleTicks <= 0 && mc.currentScreen instanceof AetherModScreen) {
                     ((AetherModScreen) mc.currentScreen).debugNextPage();
-                    step = Step.SHOOT_SCROLLED;
+                    step = Step.SHOOT_MODULES_SCROLLED;
                     settleTicks = 15;
                 }
                 break;
 
-            case SHOOT_SCROLLED:
+            case SHOOT_MODULES_SCROLLED:
                 if (--settleTicks <= 0 && mc.currentScreen instanceof AetherModScreen) {
                     shoot(mc, "debug-aether-modules-scrolled");
+                    step = Step.TOGGLE_MODULE;
+                    settleTicks = 10;
+                }
+                break;
+
+            case TOGGLE_MODULE:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherModScreen) {
+                    ((AetherModScreen) mc.currentScreen).debugToggleFirst();
+                    step = Step.SHOOT_MODULES_TOGGLED;
+                    settleTicks = 15;
+                }
+                break;
+
+            case SHOOT_MODULES_TOGGLED:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherModScreen) {
+                    shoot(mc, "debug-aether-modules-toggled");
                     ((AetherModScreen) mc.currentScreen).debugOpenFirstModuleSettings();
                     step = Step.SHOOT_MODULE_SETTINGS;
                     settleTicks = 20;
@@ -167,6 +239,23 @@ public final class AetherVisualDebugHook {
             case SHOOT_COSMETICS:
                 if (--settleTicks <= 0 && mc.currentScreen instanceof AetherCosmeticScreen) {
                     shoot(mc, "debug-aether-cosmetics");
+                    step = Step.COSMETICS_CATEGORY;
+                    settleTicks = 10;
+                }
+                break;
+
+            case COSMETICS_CATEGORY:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherCosmeticScreen) {
+                    ((AetherCosmeticScreen) mc.currentScreen).debugSelectFilter(3); // Wings
+                    step = Step.SHOOT_COSMETICS_CATEGORY;
+                    settleTicks = 15;
+                }
+                break;
+
+            case SHOOT_COSMETICS_CATEGORY:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherCosmeticScreen) {
+                    shoot(mc, "debug-aether-cosmetics-category");
+                    ((AetherCosmeticScreen) mc.currentScreen).debugSelectFilter(0); // All
                     step = Step.SCROLL_COSMETICS;
                     settleTicks = 10;
                 }
@@ -184,6 +273,16 @@ public final class AetherVisualDebugHook {
                 // One viewport down: proves the gallery scrolls and the thumb moves.
                 if (--settleTicks <= 0 && mc.currentScreen instanceof AetherCosmeticScreen) {
                     shoot(mc, "debug-aether-cosmetics-scrolled");
+                    ((AetherCosmeticScreen) mc.currentScreen).debugSelectCard(1);
+                    step = Step.SHOOT_COSMETICS_SELECTED;
+                    settleTicks = 15;
+                }
+                break;
+
+            case SHOOT_COSMETICS_SELECTED:
+                // A selected card carries the EQUIPPED badge and updates the preview.
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherCosmeticScreen) {
+                    shoot(mc, "debug-aether-cosmetics-selected");
                     ((AetherCosmeticScreen) mc.currentScreen).debugToggleImportMenu();
                     step = Step.SHOOT_COSMETICS_IMPORT;
                     settleTicks = 15;
@@ -196,46 +295,46 @@ public final class AetherVisualDebugHook {
                     shoot(mc, "debug-aether-cosmetics-import");
                     ((AetherCosmeticScreen) mc.currentScreen).debugToggleImportMenu();
                     resetThemes();
-                    open(mc, AetherGui.themes(client), Step.SHOOT_THEMES_PAGE);
+                    open(mc, AetherGui.appearance(client), Step.SHOOT_APPEARANCE_PAGE);
                 }
                 break;
 
-            case SHOOT_THEMES_PAGE:
-                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherThemesScreen) {
-                    shoot(mc, "debug-aether-themes");
+            case SHOOT_APPEARANCE_PAGE:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherAppearanceScreen) {
+                    shoot(mc, "debug-aether-appearance");
                     step = Step.SELECT_THEME;
                     settleTicks = 10;
                 }
                 break;
 
             case SELECT_THEME:
-                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherThemesScreen) {
-                    ((AetherThemesScreen) mc.currentScreen).debugSelect(0);
-                    step = Step.SHOOT_THEMES_EQUIPPED;
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherAppearanceScreen) {
+                    ((AetherAppearanceScreen) mc.currentScreen).debugSelect(1);
+                    step = Step.SHOOT_APPEARANCE_EQUIPPED;
                     settleTicks = 15;
                 }
                 break;
 
-            case SHOOT_THEMES_EQUIPPED:
-                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherThemesScreen) {
-                    shoot(mc, "debug-aether-themes-equipped");
-                    step = Step.SCROLL_THEMES;
+            case SHOOT_APPEARANCE_EQUIPPED:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherAppearanceScreen) {
+                    shoot(mc, "debug-aether-appearance-equipped");
+                    step = Step.SCROLL_APPEARANCE;
                     settleTicks = 10;
                 }
                 break;
 
-            case SCROLL_THEMES:
-                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherThemesScreen) {
-                    ((AetherThemesScreen) mc.currentScreen).debugNextPage();
-                    step = Step.SHOOT_THEMES_SCROLLED;
+            case SCROLL_APPEARANCE:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherAppearanceScreen) {
+                    ((AetherAppearanceScreen) mc.currentScreen).debugNextPage();
+                    step = Step.SHOOT_APPEARANCE_SCROLLED;
                     settleTicks = 15;
                 }
                 break;
 
-            case SHOOT_THEMES_SCROLLED:
+            case SHOOT_APPEARANCE_SCROLLED:
                 // Page two: proves the pager works and moves the scrollbar thumb down its track.
-                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherThemesScreen) {
-                    shoot(mc, "debug-aether-themes-scrolled");
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherAppearanceScreen) {
+                    shoot(mc, "debug-aether-appearance-scrolled");
                     open(mc, AetherGui.hudEditor(client), Step.SHOOT_HUD);
                 }
                 break;
@@ -250,6 +349,13 @@ public final class AetherVisualDebugHook {
             case SHOOT_CLIENT_SETTINGS:
                 if (--settleTicks <= 0 && mc.currentScreen instanceof AetherClientSettingsScreen) {
                     shoot(mc, "debug-aether-settings");
+                    open(mc, AetherGui.profiles(client), Step.SHOOT_PROFILES);
+                }
+                break;
+
+            case SHOOT_PROFILES:
+                if (--settleTicks <= 0 && mc.currentScreen instanceof AetherProfilesScreen) {
+                    shoot(mc, "debug-aether-profiles");
                     step = Step.LOAD_WORLD;
                     settleTicks = 10;
                 }
@@ -332,27 +438,20 @@ public final class AetherVisualDebugHook {
 
         // Safety: give up after ~2.5 minutes of nothing so a blocked step cannot spin forever.
         idleTicks++;
-        if (idleTicks > 3000) {
+        if (idleTicks > 3600) {
             step = Step.DONE;
             finish(mc);
         }
     }
 
     /**
-     * Puts the theme picker back on the default palette before its shots. The client saves its
-     * configuration, so without this the picker's "before" and "after" images would depend on what
-     * the previous run happened to select.
+     * Puts the client back on the default palette before the Appearance shots. The client saves
+     * its configuration, so without this the screen's "before" and "after" images would depend
+     * on what the previous run happened to wear.
      */
     private void resetThemes() {
-        int reset = 0;
-        for (dev.aether.module.ClientModule module : client.modules().all()) {
-            if (module instanceof dev.aether.theme.ThemeModule
-                && module.state() == dev.aether.module.ClientModule.ModuleState.ENABLED) {
-                client.modules().setEnabled(module.metadata().id(), false);
-                reset++;
-            }
-        }
-        System.out.println("[AetherVisualDebug] reset " + reset + " theme(s) to the default palette");
+        client.themes().resetToDefault();
+        System.out.println("[AetherVisualDebug] reset the theme to the default palette");
     }
 
     private void open(Minecraft mc, net.minecraft.client.gui.GuiScreen screen, Step next) {

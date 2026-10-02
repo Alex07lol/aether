@@ -18,7 +18,8 @@ import dev.aether.runtime.PlatformInfo;
 import dev.aether.screenshot.ScreenshotManager;
 import dev.aether.screenshot.ScreenshotStore;
 import dev.aether.theme.AetherTheme;
-import dev.aether.theme.ThemeModule;
+import dev.aether.theme.ThemeDefinition;
+import dev.aether.theme.ThemeManager;
 import dev.aether.waypoint.WaypointManager;
 
 import java.io.IOException;
@@ -30,8 +31,8 @@ public final class AetherClient {
     private final ModuleRegistry modules;
     private final HudLayout hudLayout;
     private final AetherTheme defaultTheme;
-    private ThemeModule cachedThemeModule;
     private AetherTheme cachedTheme;
+    private final ThemeManager themes = new ThemeManager();
     private final JsonConfigStore configStore;
     private final PlatformInfo platform;
     private final CosmeticLibrary cosmetics;
@@ -46,7 +47,7 @@ public final class AetherClient {
         this.eventBus = new EventBus();
         this.modules = new ModuleRegistry(FairPlayPolicy.standard());
         this.hudLayout = new HudLayout(4);
-        this.defaultTheme = AetherTheme.defaultTheme();
+        this.defaultTheme = AetherTheme.of(themes.active());
         this.configStore = new JsonConfigStore(configFile);
         this.platform = PlatformDetector.detect();
         Path baseDirectory = configFile.getParent() == null ? configFile.toAbsolutePath().getParent() : configFile.getParent();
@@ -60,6 +61,7 @@ public final class AetherClient {
         cosmetics.load();
         cosmetics.applyConfig(config);
         modules.applyConfig(config);
+        themes.applyConfig(config);
         preferences.applyConfig(config);
         profiles.applyConfig(config);
         hudLayout.applyConfig(config);
@@ -71,6 +73,7 @@ public final class AetherClient {
         builder.putAll(modules.toConfig().values());
         builder.putAll(hudLayout.toConfig().values());
         cosmetics.writeConfig(builder);
+        themes.writeConfig(builder);
         preferences.writeConfig(builder);
         profiles.writeConfig(builder);
         waypoints.writeConfig(builder);
@@ -103,37 +106,28 @@ public final class AetherClient {
     }
 
     /**
-     * @return the palette of the enabled {@link ThemeModule}, or the built-in default
-     *     palette when no theme module is active. Adapters render from this so the
-     *     theme switches change the actual UI instead of only storing a flag.
+     * @return the palette of the theme the player chose on the Appearance screen, or the built-in
+     *     default palette when the default is active. Adapters render from this so a theme
+     *     switch changes the actual UI instead of only storing a flag.
      *     <p>
-     *     The result is cached and the same instance is handed out while the active
-     *     theme does not change, because renderers call this every frame and comparing
-     *     identity is the cheapest way for a screen to notice a theme switch.
+     *     The result is cached and the same instance is handed out while the active theme does
+     *     not change, because renderers call this every frame and comparing identity is the
+     *     cheapest way for a screen to notice a theme switch.
      */
     public AetherTheme theme() {
-        ThemeModule active = activeThemeModule();
+        ThemeDefinition active = themes.active();
         if (active == null) {
-            this.cachedThemeModule = null;
-            this.cachedTheme = defaultTheme;
             return defaultTheme;
         }
-        if (active != this.cachedThemeModule) {
-            this.cachedThemeModule = active;
-            this.cachedTheme = AetherTheme.of(active.metadata().name(), active.palette());
+        if (cachedTheme == null || !active.id().equals(cachedTheme.id())) {
+            this.cachedTheme = AetherTheme.of(active);
         }
         return cachedTheme;
     }
 
-    private ThemeModule activeThemeModule() {
-        // Theme modules share a registry group, so at most one can be enabled at a time and
-        // the first match is the answer.
-        for (ClientModule module : modules.all()) {
-            if (module instanceof ThemeModule && module.state() == ClientModule.ModuleState.ENABLED) {
-                return (ThemeModule) module;
-            }
-        }
-        return null;
+    /** The theme system's own state, outside the module registry. See {@link ThemeManager}. */
+    public ThemeManager themes() {
+        return themes;
     }
 
     public PlatformInfo platform() {

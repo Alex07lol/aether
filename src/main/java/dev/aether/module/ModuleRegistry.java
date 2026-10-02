@@ -5,7 +5,6 @@ import dev.aether.fairplay.FairPlayPolicy;
 import dev.aether.module.ClientModule.ModuleCategory;
 import dev.aether.module.ClientModule.ModuleState;
 import dev.aether.module.setting.Setting;
-import dev.aether.theme.ThemeModule;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,12 +25,6 @@ public final class ModuleRegistry {
         String id = module.metadata().id();
         if (modules.containsKey(id)) {
             throw new IllegalArgumentException("Duplicate module id: " + id);
-        }
-        // A palette cannot be listed as a feature. The registry is where that rule is enforced, so a
-        // new theme module that forgets its kind fails the build's tests instead of appearing in the
-        // module browser as a switch that changes nothing a player can point at.
-        if (module instanceof ThemeModule && module.metadata().kind() != ModuleKind.THEME) {
-            throw new IllegalArgumentException("Theme module " + id + " must declare ModuleKind.THEME.");
         }
         modules.put(id, module);
     }

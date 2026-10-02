@@ -74,10 +74,11 @@ OUT = os.path.join("src", "main", "resources", "assets", "aether", "leaf")
 SHEET = os.path.join("build", "leaf-sheet.html")
 
 # Output name -> the Leaf source it is cloned from, for the assets Leaf does not have. Aether's own
-# themes tile is Leaf's system.png tab run through the same rule, so the pipeline stays the single
-# source of truth for every file the mod ships and --convert can rebuild it from scratch.
+# appearance and profiles tiles are Leaf tabs run through the same rule, so the pipeline stays the
+# single source of truth for every file the mod ships and --convert can rebuild it from scratch.
 SOURCE_NAMES = {
-    "button/themes.png": "system.png",
+    "button/appearance.png": "system.png",
+    "button/profiles.png": "system.png",
 }
 
 # name -> (rule, a, b, c). Read the rules in convert_image() before changing a row.
@@ -108,12 +109,14 @@ ASSETS = {
     "button/cosmetic.png":     ("detail", 1.00, 34.0, 78.0),
     "button/location.png":     ("detail", 1.00, 34.0, 78.0),
     "button/setting.png":      ("detail", 1.00, 34.0, 78.0),
-    # Aether's own Themes tab: Leaf's system.png art under our name, so the five navigation tiles
-    # are all cut from Leaf's set and nothing in the bar is drawn by hand. system.png is the one tab
-    # Leaf painted at half alpha (a 128 plateau against the others' 255), which in Leaf sat on a
-    # bright panel but here would make the tile read dimmer than its neighbours even when it is the
-    # current screen - so the alpha is gained to opaque, which is what the other four tabs are.
-    "button/themes.png":       ("detail", 1.00, 34.0, 78.0, 2.00),
+    # Aether's own Appearance and Profiles tabs: Leaf's system.png art under our names, so the
+    # navigation tiles are all cut from Leaf's set and nothing in the bar is drawn by hand.
+    # system.png is the one tab Leaf painted at half alpha (a 128 plateau against the others' 255),
+    # which in Leaf sat on a bright panel but here would make the tile read dimmer than its
+    # neighbours even when it is the current screen - so the alpha is gained to opaque, which is
+    # what the other four tabs are.
+    "button/appearance.png":   ("detail", 1.00, 34.0, 78.0, 2.00),
+    "button/profiles.png":     ("detail", 1.00, 34.0, 78.0, 2.00),
     "button/home.png":         ("detail", 1.00, 34.0, 78.0),
     "button/close.png":        ("detail", 1.00, 34.0, 78.0),
     "button/arrow_left.png":   ("detail", 1.00, 34.0, 78.0),
@@ -169,7 +172,8 @@ def smoothstep(edge0, edge1, value):
 
 def load(name, root=None):
     """Loads an asset by its Aether (output) name. Source reads follow SOURCE_NAMES, so an asset
-    with no Leaf original of its own - button/themes.png - resolves to the art it was cloned from."""
+    with no Leaf original of its own (the appearance/profiles tiles) resolves to the art it was
+    cloned from."""
     if root is None:
         name = SOURCE_NAMES.get(name, name)
     path = os.path.join(root or SRC, name.replace("/", os.sep))

@@ -15,6 +15,13 @@ wheel-direction fix with an `Invert Scroll` preference, and the Aether wordmark 
 It is green and screenshot-verified with measurements - see *Leaf UI follow-up* below and TEST
 STATUS 0. **Next phase is still Phase 7 — Block Info.**
 
+**Superseded since:** a spec-driven GUI/cosmetics overhaul is in progress on top of `f696fee`
+("Overhaul GUI and cosmetics: typed modules, Glide rows, gallery, generic library"). It replaces
+the follow-up's Themes-as-modules design (see CURRENT PROBLEM / NEXT EXACT STEPS): themes are now
+config owned by `ThemeManager`, there are six nav sections, the Modules screen is a `ModuleRow`
+list, and `AetherProfilesScreen` exists. The old "five tiles / `NAV_X` / `GRID_X` / `AetherThemesScreen`"
+claims below are historical, not current.
+
 Outstanding: freelook/keystrokes/Target-Info feel and the Mouse Display need hands-on `runClient`
 time (the screens themselves are measured from the screenshots, not eyeballed).
 
@@ -216,8 +223,19 @@ is **not** committed yet - `git status` is the authority.
 
 ## FILES CURRENTLY BEING WORKED ON
 
-None — the tree is buildable and the full verification gate is green; the Leaf UI follow-up is
-complete and waiting for a commit.
+The theme refactor + new screens (uncommitted; `git status` is the authority):
+
+Modified: `scripts/leaf_assets.py`, `AetherClient.java`, `ClientPreferences.java`,
+`AetherVisualDebugHook.java`, `AetherGui.java`, `SearchBox.java`, `LeafArt.java`,
+`AetherClientSettingsScreen.java`, `AetherCosmeticScreen.java`, `AetherGuiScreen.java`,
+`AetherModScreen.java`, `ModuleKind.java`, `ModuleRegistry.java`, `BuiltInModules.java`,
+`AetherTheme.java`, `GuiSection.java`, `ClientPreferencesTest.java`, `ModuleVisibilityTest.java`.
+Deleted: `AetherThemesScreen.java`, `ThemeModules.java`, all six `module/impl/themes/*`,
+`ThemeModule.java`, `assets/.../button/themes.png`, `ThemeModuleTest.java` (incl. stale
+`.class` files under `build/`).
+New: `AetherAppearanceScreen.java`, `AetherProfilesScreen.java`, `ThemePill.java`
+(all under `gui/screens/`), `theme/ThemeDefinition.java`, `theme/ThemeManager.java`,
+`assets/.../button/appearance.png` + `profiles.png`, `theme/ThemeManagerTest.java`.
 
 ---
 
@@ -272,39 +290,51 @@ None. Keystrokes settings keep their ids, labels, defaults and ranges.
 
 ## BUILD STATUS
 
-Green. `scripts/verify.sh` passed end to end after the Leaf UI follow-up:
-`compileJava` → `coreSelfTests` (30/30, incl. `MouseIndicatorTest`) → `build` → jar proof, and the
-jar contains all 30 `assets/aether/leaf/**` textures plus `NOTICE.txt` (34 entries with the
-directories), including the new `button/themes.png`.
-`AetherSettingsMetadataTest` reports **62 modules, 214 settings, 56 ranges, 26 choice lists**; it
-validates that every new numeric setting carries its own range and every choice carries its options,
-which is the guard against guessed slider bounds.
+Green. `scripts/verify.sh` passed end to end after the theme refactor:
+`compileJava` → `coreSelfTests` (35/35: `ThemeManagerTest` added, `ThemeModuleTest` deleted,
+`ModuleVisibilityTest` + `ClientPreferencesTest` rewritten) → `build` → jar proof, and the jar
+contains no stale `ThemeModule*` classes, the new screens/manager, and `appearance.png` +
+`profiles.png` (no `themes.png`). Gradle's own `test` task is SKIPPED — always use `coreSelfTests`.
+`runClient -PaetherDebugShots=1920x1080` (JDK 8 from `.gradle-dist/jdk8u504-b01`; the default JDK 25
+fails `:makeStart`) completes and writes 19 screenshots. A re-run is still owed after the
+`ModuleRow`/nav/caption fixes in CURRENT PROBLEM.
 
 ## TEST STATUS
 
-- `coreSelfTests`: **30 test classes**, all passing, including `AnimationTest` (frame-rate
+- `coreSelfTests`: **35 test classes**, all passing, including `AnimationTest` (frame-rate
   independence at 30 vs 240 FPS, no double-step per frame, snap at duration 0, interrupt/resume),
   `TargetHealthTextTest` (the three health modes, unknown-health handling, bar fractions),
-  `MouseIndicatorTest` (rim convergence, diagonal clamp, spring-back, 100 ms ≈ 20×5 ms) and
-  `ClientPreferencesTest` (defaults, round trip, invert-scroll, and the section order that the
-  navigation tiles follow).
+  `MouseIndicatorTest` (rim convergence, diagonal clamp, spring-back, 100 ms ≈ 20×5 ms),
+  `ThemeManagerTest` (manager basics, client resolution, config round trip, module-era migration)
+  and `ClientPreferencesTest` (defaults, round trip, invert-scroll, and the SIX-section order the
+  navigation tiles follow: Modules/Cosmetics/HUD Editor/Appearance/Profiles/Settings).
+  `ModuleVisibilityTest` asserts no `theme.*` registry entries and no `ModuleCategory.THEMES` exist.
+  Theme ids: `theme.monochrome` (default), `theme.aether_blue`, `theme.midnight`, `theme.aurora`,
+  `theme.frost`, `theme.light`; config key `theme.active` with migration from
+  `module.theme.<id>.enabled`.
 - Verified from the refmap that `MouseHelperMixin` binds:
   `mouseXYChange -> Lnet/minecraft/util/MouseHelper;func_74374_c()V`.
 - **Still needs hands-on `runClient` (feel only - the geometry is measured):**
-  0. **The Leaf screens, first and most important:** the walker now covers them and the shots are
+  0. **The screens, first and most important:** the walker covers 19 screens and the shots are
      measured, so what remains is judgement: the backdrop panel and the scrollbars line up (all
-     inside Leaf's panel rectangles, computed not eyeballed), the tiles show their white glyphs (not
-     an empty black rectangle - that is what a stale unconverted asset looks like), clicking a
-     card's top half toggles and its bottom half opens settings, nothing was lost off a panel edge on
-     the settings screens, and the five-tile nav row reads as one row (Leaf's own tabs keep their x;
-     the Themes tile is the brightest one *on the Themes screen*).
-  0a. **Wheel direction, on every paged screen** (modules grid, cosmetics, themes, module settings,
-     client settings) and the HUD editor: wheel down should move forward through the list. Then flip
+     inside Leaf's panel rectangles, computed not eyeballed), nothing was lost off a panel edge,
+     and the six-tile nav row reads as one row (responsive `navX(index,count)`, captions drawn at
+     y~366-380 — currently colliding with content, see CURRENT PROBLEM). **Known bad in the latest
+     shots:** the Modules `ModuleRow` list (mixed-unit bug), and the Appearance/Profiles nav tiles
+     show no glyph (Leaf's `system.png` is a blank tile — programmatic glyphs still to land). The old
+     "five-tile nav row / tiles show their white glyphs / module card grid / Themes picker" claims
+     from earlier runs describe the pre-refactor UI, not the current tree.
+  0a. **Wheel direction, on every paged screen** (module rows, cosmetics, appearance, module settings,
+     client settings, profiles) and the HUD editor: wheel down should move forward through the list. Then flip
      `Invert Scroll` on the client settings screen and confirm all of them flip together - the sign
      is normalised once in `AetherGuiScreen.scrollDelta`, so a screen that still feels backwards is
      a screen that negated it a second time (that was the bug).
-     Measured already: the themes scrollbar thumb sits in the upper half of its track on page one and
-     the lower half on page two, and the module grid's scrollbar column is clear of cards.
+     Measured already: the appearance list pages (PageBar 945/400/32x400, entries pitch 100, 5 per
+     page; `appearance-equipped` shows Aether Blue worn with a correct caption), and the modules list
+     geometry (`SEARCH_Y` 386, `FILTER_Y` 388, list 430/442/1020x424) — but the rows themselves render
+     wrong until the CURRENT PROBLEM fix lands. `AetherModScreen` exposes `debugSearch`,
+     `debugSelectCategory`, `debugToggleFirst`; `AetherCosmeticScreen` exposes `debugSelectFilter`,
+     `debugSelectCard`; `SearchBox.setText` drives queries.
   1. Freelook feel (must be visibly smoother than before; attack/use/hotbar scroll must keep working
      while the key is held), at 60 and at 240 FPS.
   2. Keystrokes press/release animation; change `fade_time` and watch the release actually change.
@@ -320,35 +350,76 @@ which is the guard against guessed slider bounds.
 
 ## CURRENT PROBLEM
 
-Nothing blocking.
+**`ModuleRow` mixes design-unit constants into GUI coordinates — the Modules list renders broken.**
+`gx()`/`gy()`/`gw()`/`gh()` return GUI pixels (`GuiScale` unit is 1/3 at the walker's 1920x1080 /
+MC GUI scale 3, so screen px == design units), and the drawing primitives (`AetherUi.drawRoundRect`,
+`AetherFont.draw`, glyph draws) all take GUI pixels. `CosmeticCard`/`ChipBar` convert every design
+constant with `GuiScale.w()/h()`; `ModuleRow` does not. Measured from the 19 walker shots
+(`run/screenshots/debug-aether-*.png`, 21:18 run): the module name sits +126 screen px right of its
+design position (`left + 42` raw), the 28-unit icon tile draws 84x84 screen (`ICON_SIZE` raw), the
+accent bar is 9 screen px wide (`left + 4..7` raw), the switch sits at `top + 11` raw, and a 4px
+dark bar spans each row at the switch's top edge. `ChipBar`/`SearchBox` have smaller instances of
+the same mistake (raw `CHIP_HEIGHT` in render/hit-test, raw `PADDING`/`RADIUS`/`11`).
+
+Screenshot defect list from the same run (fixes identified, not yet applied):
+1. Appearance & Profiles nav tiles are blank — Leaf's `system.png` has no glyph (confirmed by
+   ASCII/pixel analysis) and the old `themes.png` was blank too. Fix: draw glyphs programmatically
+   in `scripts/leaf_assets.py --convert` after the recolour rules (paintbrush/half-contrast-circle
+   for Appearance, stacked cards for Profiles), composited into the 187x117 tile.
+2. Nav captions (screen y ~366-380) collide with content starting y ~375 (search box, Import
+   buttons) — shift the nav row up ~28px in `AetherGuiScreen`.
+3. Appearance screen: the "Theme: X" caption at `LIST_X=480, LIST_TOP+8` overlaps the `PageBar` at
+   x=945 — reposition (e.g. right of the bar at x~1010, or bottom of the list). A right-side preview
+   card (x 1010..1440, y 400..800) is optional.
+4. Walker determinism: `resetThemes()` runs at the APPEARANCE step (`AetherVisualDebugHook` ~line 297),
+   so pre-appearance shots show the persisted theme (Aether Blue). Move the reset to walker start.
+5. Not bugs: the "ghost boxes" on settings/profiles are backdrop art (pre-existing); the grey circles
+   are the walker's cursor rendering; the profiles screen is correctly empty (no saved profiles).
 
 ## NEXT EXACT STEPS
 
-1. **Phase 7 — Block Info transition.** One `Anim` (EASE_OUT_CUBIC) on `hud.block_info`'s
+1. Fix `ModuleRow` mixed units: convert every design constant added to `gx()/gy()` results through
+   `GuiScale.w()/h()` (name `+42`, title `+5`, desc `+23`, icon `+6`/`ICON_SIZE`/`ICON_RADIUS`,
+   accent bar, switch `GEAR_SIZE+22`/`SWITCH_WIDTH`/`SWITCH_HEIGHT`/knob radius/travel, gear
+   `-8`/`GEAR_SIZE`/radius, slide `8`; trim widths already partly converted). Same pass:
+   `ChipBar` raw `CHIP_HEIGHT`/`CHIP_PADDING`/`CHIP_RADIUS` in render + `indexAt`, `SearchBox` raw
+   `PADDING`/`RADIUS`/`11`. `gearRect()` hit-testing stays in design units (correct as-is).
+2. Glyph compositing for `button/appearance.png` and `button/profiles.png` in `scripts/leaf_assets.py`,
+   then rerun `--convert`; shift the nav row up ~28px in `AetherGuiScreen`; fix the Appearance
+   caption/`PageBar` overlap; move walker `resetThemes()` to the start of the walk.
+3. Re-run `.\gradlew.bat compileJava`, `.\gradlew.bat coreSelfTests`, `bash scripts/verify.sh`,
+   then `runClient -PaetherDebugShots=1920x1080` (JDK 8:
+   `$env:JAVA_HOME = (Resolve-Path .gradle-dist/jdk8u504-b01).Path`) and re-inspect screenshots
+   (mainmenu, modules, appearance, profiles).
+4. Update `docs/progress.md`, `docs/GUI_REBUILD.md` for the new nav geometry (responsive
+   `navX(index,count)`, not `NAV_X`), the six-section IA, and the `ModuleRow` list.
+5. **Then Phase 7 — Block Info transition** (spec below, unchanged). One `Anim` (EASE_OUT_CUBIC) on
+   `hud.block_info`'s
    visibility, driven by whether a block is looked at, exactly like `targetEnter` in
    `renderTargetInfo`: fade *and keep drawing the last block while closing* so losing a block reads
    as an exit, not a pop. The cached name/meta lookup stays as it is; only the visibility animates.
    Add the `Anim` field next to `targetEnter`, set its duration from nothing (this widget has no
    time setting — use a constant ~160 ms) and fade `background_color`/text alpha by
    `element.opacity() * visibility` in `renderBlockInfo`, plus the editor preview (always visible).
-2. **Phase 8** — Damage Tint: new `graphics.damage_tint` module, animated overlay intensity
+6. **Phase 8** — Damage Tint: new `graphics.damage_tint` module, animated overlay intensity
    (`Anim` driving alpha), health threshold preserved as a setting.
-3. **Phase 9** — Smooth zoom: per-frame clock instead of per-call `nanoTime`, scroll target
+7. **Phase 9** — Smooth zoom: per-frame clock instead of per-call `nanoTime`, scroll target
    smoothing (`docs/progress.md` Phase 9 note).
-4. Then Phases 10-19 in order (`docs/progress.md` has the full list, `docs/architecture.md` §15 has
+8. Then Phases 10-19 in order (`docs/progress.md` has the full list, `docs/architecture.md` §15 has
    the module-by-module plan).
-5. After **every** phase: `gradle compileJava coreSelfTests`, then update all three docs.
-6. When the user says "run the game", relaunch with
-   `export JAVA_HOME="$(pwd)/.gradle-dist/jdk8u504-b01"` and
-   `"$(pwd)/.gradle-dist/gradle-4.10.3/bin/gradle" --no-daemon runClient`
-   (`-PaetherUsername=<name>` for an offline/cracked account, `-PaetherDebugShots=<true|WxH>` for the
-   screenshot walker — never both at once), then read `build/runClient-*.log` and
-   `run/logs/latest.log`. `runClient` re-jars the mod (`installModJar`) itself, so no `--rerun-tasks`
-   is needed. The walker forces the framebuffer to the requested size (a windowed LWJGL
-   `setDisplayMode` can be ignored, and Minecraft only adopts Display's size when `wasResized()` is
-   set), so at 1920x1080 **one screenshot pixel is one design unit** and the images can be measured;
-   it writes `run/screenshots/debug-aether-*.png` and covers 11 screens (themes,
-   themes-equipped, themes-scrolled included).
+9. After **every** phase: `gradle compileJava coreSelfTests`, then update all three docs.
+10. When the user says "run the game", relaunch with
+    `export JAVA_HOME="$(pwd)/.gradle-dist/jdk8u504-b01"` and
+    `"$(pwd)/.gradle-dist/gradle-4.10.3/bin/gradle" --no-daemon runClient`
+    (`-PaetherUsername=<name>` for an offline/cracked account, `-PaetherDebugShots=<true|WxH>` for the
+    screenshot walker — never both at once), then read `build/runClient-*.log` and
+    `run/logs/latest.log`. `runClient` re-jars the mod (`installModJar`) itself, so no `--rerun-tasks`
+    is needed. The walker forces the framebuffer to the requested size (a windowed LWJGL
+    `setDisplayMode` can be ignored, and Minecraft only adopts Display's size when `wasResized()` is
+    set), so at 1920x1080 **one screenshot pixel is one design unit** and the images can be measured;
+    it writes `run/screenshots/debug-aether-*.png` and covers 19 screens (modules search/category/
+    scrolled/toggled, module settings, cosmetics category/scrolled/selected/import, appearance
+    equipped/scrolled, HUD, settings, profiles, preview).
 
 ### Mouse Display — how it landed (for future changes)
 

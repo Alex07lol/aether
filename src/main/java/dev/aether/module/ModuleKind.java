@@ -5,10 +5,14 @@ package dev.aether.module;
  * switch on and nothing else.
  * <p>
  * Aether's registry is a single lookup table for everything the client can enable, which was fine
- * while every entry was a feature. It is not fine any more: a theme is a palette, a "current cape"
+ * while every entry was a feature. It is not fine any more: a "current cape"
  * is the cosmetic slot the world renderer reads, and the screens themselves need switches that are
  * set by a button and immediately cleared. Exposing those as modules made the browser list things a
  * player cannot use, and left the classification to be rediscovered by every screen.
+ * <p>
+ * Themes are not classified here at all: a palette is configuration, owned by
+ * {@code dev.aether.theme.ThemeManager} and chosen on the Appearance screen, never registered in
+ * the module system in the first place.
  * <p>
  * The kind is declared once, next to the module's own metadata, and {@link ModuleRegistry} turns it
  * into the browser's list - so nothing in the GUI has to recognise a module by name.
@@ -32,13 +36,6 @@ public enum ModuleKind {
      * is registered and configurable; it is not a feature. Never listed.
      */
     UI_CONTROLLER,
-
-    /**
-     * A palette. Enabling one is how a theme is worn, and the registry's group rule makes the
-     * palettes exclusive, but a theme is a look, not a module - it is chosen on the Appearance
-     * screen. Never listed.
-     */
-    THEME,
 
     /**
      * One slot of the cosmetics system: the "current cape / wings / halo / hat / trail" switches

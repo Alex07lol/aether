@@ -1,26 +1,29 @@
 package dev.aether.theme;
 
+/**
+ * The theme the client is wearing right now: a name plus the palette every adapter renders from.
+ * <p>
+ * Instances come from {@link ThemeManager} (which owns which theme is active) and are cached in
+ * the client, because renderers call for the palette every frame and comparing identity is the
+ * cheapest way for a screen to notice a switch.
+ */
 public final class AetherTheme {
     private final String name;
     private final ThemePalette palette;
+    private final String id;
 
-    private AetherTheme(String name, ThemePalette palette) {
+    AetherTheme(String id, String name, ThemePalette palette) {
+        this.id = id;
         this.name = name;
         this.palette = palette;
     }
 
-    public static AetherTheme of(String name, ThemePalette palette) {
-        return new AetherTheme(name == null ? "Custom" : name, palette);
+    public static AetherTheme of(ThemeDefinition definition) {
+        return new AetherTheme(definition.id(), definition.name(), definition.palette());
     }
 
-    /**
-     * The palette the client starts on, before any theme module is enabled: translucent black and
-     * white, so the default UI is the Leaf composition in those two colours. See
-     * {@link ThemePalettes#mono()} - the palette is shared with the Monochrome theme module so the
-     * default and the module can never drift apart.
-     */
-    public static AetherTheme defaultTheme() {
-        return new AetherTheme("Monochrome", ThemePalettes.mono());
+    public String id() {
+        return id;
     }
 
     public String name() {
@@ -31,4 +34,3 @@ public final class AetherTheme {
         return palette;
     }
 }
-

@@ -13,7 +13,6 @@ public final class BuiltInModules {
         PerformanceModules.register(modules);
         GraphicsModules.register(modules);
         InterfaceModules.register(modules);
-        ThemeModules.register(modules);
         CosmeticModules.register(modules);
         registerHudLayout(hudLayout);
     }

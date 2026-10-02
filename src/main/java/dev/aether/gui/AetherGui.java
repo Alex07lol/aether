@@ -3,12 +3,13 @@ package dev.aether.gui;
 import dev.aether.AetherClient;
 import dev.aether.ui.GuiSection;
 import dev.aether.forge189.Mc189Compat;
+import dev.aether.gui.screens.AetherAppearanceScreen;
 import dev.aether.gui.screens.AetherClientSettingsScreen;
 import dev.aether.gui.screens.AetherCosmeticScreen;
 import dev.aether.gui.screens.AetherHudEditorScreen;
 import dev.aether.gui.screens.AetherModScreen;
 import dev.aether.gui.screens.AetherModuleSettingsScreen;
-import dev.aether.gui.screens.AetherThemesScreen;
+import dev.aether.gui.screens.AetherProfilesScreen;
 
 /**
  * Entry points of the Aether GUI: the factory that opens a section and the one place
@@ -46,9 +47,14 @@ public final class AetherGui {
         return new AetherClientSettingsScreen(client);
     }
 
-    /** The theme picker (Aether's own section; Leaf has no theme picker). */
-    public static AetherThemesScreen themes(AetherClient client) {
-        return new AetherThemesScreen(client);
+    /** The theme picker: Aether's appearance configuration (see {@code ThemeManager}). */
+    public static AetherAppearanceScreen appearance(AetherClient client) {
+        return new AetherAppearanceScreen(client);
+    }
+
+    /** The profile manager, Aether's own destination (Leaf has no profile system). */
+    public static AetherProfilesScreen profiles(AetherClient client) {
+        return new AetherProfilesScreen(client);
     }
 
     /** One module's configuration screen (Leaf's ModDetailSettings role). */
@@ -62,8 +68,10 @@ public final class AetherGui {
                 return cosmetics(client);
             case HUD:
                 return hudEditor(client);
-            case THEMES:
-                return themes(client);
+            case APPEARANCE:
+                return appearance(client);
+            case PROFILES:
+                return profiles(client);
             case SETTINGS:
                 return settings(client);
             case MODULES:

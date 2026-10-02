@@ -116,6 +116,15 @@ public final class SearchBox extends UiComponent {
         notifyChange();
     }
 
+    /** Replaces the whole query at once, firing the change callback exactly once. */
+    public void setText(String value) {
+        this.text.setLength(0);
+        if (value != null && !value.isEmpty()) {
+            this.text.append(value);
+        }
+        notifyChange();
+    }
+
     @Override
     public boolean onKeyTyped(char typedChar, int keyCode) {
         if (!this.focused) {
