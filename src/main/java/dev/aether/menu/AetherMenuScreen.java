@@ -373,8 +373,10 @@ public final class AetherMenuScreen extends GuiScreen implements AetherUiScreen 
 
     @Override
     protected void mouseClicked(int rawX, int rawY, int button) throws IOException {
-        double mx = rawX;
-        double my = rawY;
+        // Same conversion as the draw path: events arrive in GUI-scale space, the
+        // menu works in menu units - without it every hit-test reads the wrong spot.
+        double mx = UiScale.menuFromGui(rawX);
+        double my = UiScale.menuFromGui(rawY);
 
         // Click outside the window closes, with a small tolerance like the reference.
         if (mx < windowX() - 5.0F || mx > windowX() + WINDOW_W + 5.0F
@@ -418,7 +420,7 @@ public final class AetherMenuScreen extends GuiScreen implements AetherUiScreen 
 
     @Override
     protected void mouseReleased(int rawX, int rawY, int button) {
-        active().release(rawX, rawY, button);
+        active().release(UiScale.menuFromGui(rawX), UiScale.menuFromGui(rawY), button);
     }
 
     @Override
